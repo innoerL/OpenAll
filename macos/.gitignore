@@ -1,0 +1,4 @@
+.build/
+comparison-editor/node_modules/
+comparison-editor/.npm-cache/
+.DS_Store

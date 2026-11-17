@@ -1,0 +1,8 @@
+node_modules/
+dist/
+artifacts/
+.ci-smoke/
+.DS_Store
+*.log
+.env
+.env.*

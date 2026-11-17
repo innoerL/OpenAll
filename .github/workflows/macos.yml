@@ -1,0 +1,89 @@
+name: macOS 构建与模型回归
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'macos/**'
+      - '.github/workflows/macos.yml'
+  pull_request:
+    paths:
+      - 'macos/**'
+      - '.github/workflows/macos.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      OPENALL_REVIEW: '0'
+      OPENALL_STRESS: '0'
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: 安装 Node.js 并缓存编辑器依赖
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: macos/comparison-editor/package-lock.json
+      - name: 重建离线文本对比编辑器
+        run: |
+          npm --prefix macos/comparison-editor ci --ignore-scripts --no-audit --no-fund
+          npm --prefix macos/comparison-editor run build
+      - name: 检查 Swift 与构建脚本语法
+        run: |
+          mkdir -p macos/.build/ci-logs
+          find macos/Sources -name '*.swift' -print0 | while IFS= read -r -d '' source; do
+            xcrun swiftc -frontend -parse "$source"
+          done
+          find macos/scripts -name '*.sh' -print0 | while IFS= read -r -d '' script; do
+            zsh -n "$script"
+          done
+      - name: 运行纯模型回归
+        run: zsh macos/scripts/test.sh 2>&1 | tee macos/.build/ci-logs/models.log
+      - name: 构建 macOS Universal 应用
+        run: zsh macos/scripts/build.sh 2>&1 | tee macos/.build/ci-logs/build.log
+      - name: 检查双架构与本地签名
+        run: |
+          xcrun lipo -verify_arch x86_64 arm64 macos/.build/OpenAll.app/Contents/MacOS/OpenAll
+          xcrun lipo -info macos/.build/OpenAll.app/Contents/MacOS/OpenAll | tee macos/.build/ci-logs/architectures.log
+          codesign --verify --deep --strict --verbose=2 macos/.build/OpenAll.app 2>&1 | tee macos/.build/ci-logs/signature.log
+          plutil -lint macos/.build/OpenAll.app/Contents/Info.plist
+      - name: 打包并生成校验值
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent macos/.build/OpenAll.app macos/.build/OpenAll-macOS-Universal.zip
+          (cd macos/.build && shasum -a 256 OpenAll-macOS-Universal.zip > SHA256SUMS.txt)
+          printf '## macOS 云端构建通过\n已验证：Swift 语法、纯模型回归、Intel 与 Apple Silicon 双架构、本地签名完整性。\n产物未经过 Apple 公证；图形界面与系统授权需本地验收。\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: 保存构建与检查日志
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-checks-${{ github.sha }}
+          path: macos/.build/ci-logs/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+      - name: 保存通过检查的 Universal 应用
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: OpenAll-macOS-Universal
+          path: |
+            macos/.build/OpenAll-macOS-Universal.zip
+            macos/.build/SHA256SUMS.txt
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

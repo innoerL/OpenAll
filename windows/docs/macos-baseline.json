@@ -1,0 +1,28 @@
+{
+  "version": "0.25.6",
+  "build": "75",
+  "package_sha256": "26ff1651f0af62176f111750076d2e5a80225f46fec291b0de66202af9fe2240",
+  "search": {
+    "width": 720,
+    "idleHeight": 76,
+    "rowHeight": 56,
+    "sizeSetting": false
+  },
+  "clipboard": {
+    "layout": "底部通栏、大卡片、彩色类型栏"
+  },
+  "source_hashes": {
+    "QuickLaunch.swift": "0d46b026cb505f0a1798f031920e5492cd6cef393f297d2b73195bc84bded8e1",
+    "WindowChrome.swift": "d89763c9e94f3802c4c4d6f502c53fc51abdde210c91e5fa063733b0c53986a8",
+    "ClipboardShelf.swift": "9d4d7c5394c3961324069ef130351bb1ab7df57a4ce4ec8bf39a342b2b5838ca",
+    "JSONTool.swift": "9b1212d188b66fcdc7e3aa3cddb7d7913338f54bafe11558e9282675f3483813",
+    "JSONFolding.swift": "847f20c3ac8fb717c22279c8820b9c78796eafbb93832547f65a092af83b776f",
+    "TextCompareV2.swift": "f35e4247690e845e49b3d0a6d88b5f63ff8c0f27e5a7df01cf93609e7c606bc2",
+    "diff-v2.html": "c8b25ce88340b967270323190facb4a6e1b708d1596be71a5b8f7538c2577f75",
+    "diff-v2.js": "ea2ff87772260e50eaaef9f7605aa079c3c49d6f7b8da99434e6d9def591cdf6",
+    "diff-core.js": "b35d05ac7333024a3e50e8c8b6558d9e7f14ebdcf9fefb3452f186dae13fc671",
+    "comparison-editor.js": "cedef25dad4e78afe2b790f80f7338ffd644972c0adc9d595c38e5a3dbcd9122",
+    "CommandCenter.swift": "345f3994da512b82a6596c7caa1ca9d20ea6a2a54fed061383a452428c4be161",
+    "build.sh": "dceb8d0dcf1b43be2ce0c5f2b74c9698b129529d4b9dcf1eae82ad938bc26cd9"
+  }
+}

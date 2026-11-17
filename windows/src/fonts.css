@@ -1,0 +1,4 @@
+/* 随应用附带中文无衬线字体，英文 Windows 也保持相同字形；不安装系统字体。 */
+@font-face{font-family:'OpenAll CJK';src:url('../assets/fonts/NotoSansSC.ttf') format('truetype');font-style:normal;font-weight:100 900;font-display:swap;unicode-range:U+2E80-9FFF,U+F900-FAFF,U+FE10-FE6F,U+FF00-FFEF}
+:root{font-family:'Segoe UI','OpenAll CJK','Microsoft YaHei UI',system-ui,sans-serif}
+:root .cm-editor .cm-scroller,:root .cm-editor .cm-gutters,textarea,pre,code{font-family:Consolas,'Cascadia Code','OpenAll CJK','Microsoft YaHei UI',monospace}

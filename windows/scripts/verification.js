@@ -1,0 +1,15 @@
+const fs = require('node:fs');
+const { execFileSync } = require('node:child_process');
+const read = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+const installed = read('artifacts/installer-report.json');
+const tools = read('artifacts/screens/report.json');
+const indexing = read('artifacts/native-file-search/report.json');
+if (!installed.installed || !installed.checksPassed || !installed.uninstalled || !tools.passed || tools.platform !== 'win32' || !indexing.passed || !indexing.systemIndex?.available) throw Error('完整 Windows 验收尚未通过');
+const status = read('docs/parity-status.json');
+status.parityComplete = true;
+status.note = '已实现 macOS 0.25.6 的功能、布局、配色与交互，并通过真实 Windows 安装包回归。系统接口按 Windows 规则适配；字体光栅化、系统弹窗及 Quick Look 替代方式仍受平台影响。';
+status.features = status.features.map(feature => ({ ...feature, status: 'verified_windows' }));
+status.remaining = [];
+status.verification = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), run: process.env.GITHUB_RUN_ID, checks: tools.checks.length, screenshots: tools.screenshots.length, performance: tools.performance, systemIndex: indexing.systemIndex, installed: true, uninstalled: true };
+status.platformBoundaries = ['Ctrl 对应 Cmd，资源管理器对应访达；文件快速预览使用默认应用。', '系统文件索引仅覆盖已索引位置，另有 KnownFolders 目录扫描回退。', 'OCR 依赖已安装语言包；自动粘贴受目标应用权限级别限制。', '有道翻译依赖网络；加载失败保留重试与浏览器打开。', '安装器未代码签名；更新源默认空，下载校验 SHA-256。'];
+fs.writeFileSync('docs/parity-status.json', JSON.stringify(status, null, 2) + '\n');

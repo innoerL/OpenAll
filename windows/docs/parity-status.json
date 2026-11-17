@@ -1,0 +1,137 @@
+{
+  "baseline": "0.25.6",
+  "parityComplete": false,
+  "note": "从已交付的 0.25.9 整理为统一公开仓库；本仓库首次 Windows 安装包回归待完成。",
+  "features": [
+    {
+      "id": "translate",
+      "title": "翻译",
+      "status": "verified_windows"
+    },
+    {
+      "id": "comparison",
+      "title": "文本对比",
+      "status": "verified_windows"
+    },
+    {
+      "id": "json",
+      "title": "JSON 工具",
+      "status": "verified_windows"
+    },
+    {
+      "id": "unicode",
+      "title": "Unicode 转换",
+      "status": "verified_windows"
+    },
+    {
+      "id": "markdown",
+      "title": "Markdown 编辑器",
+      "status": "verified_windows"
+    },
+    {
+      "id": "id",
+      "title": "身份证测试号",
+      "status": "verified_windows"
+    },
+    {
+      "id": "manual",
+      "title": "Shell 与 Java 命令手册",
+      "status": "verified_windows"
+    },
+    {
+      "id": "image",
+      "title": "图片处理",
+      "status": "verified_windows"
+    },
+    {
+      "id": "converter",
+      "title": "开发者转换",
+      "status": "verified_windows"
+    },
+    {
+      "id": "configDiff",
+      "title": "结构化配置对比",
+      "status": "verified_windows"
+    },
+    {
+      "id": "explain",
+      "title": "SQL 执行计划",
+      "status": "verified_windows"
+    },
+    {
+      "id": "logTimeline",
+      "title": "日志时间线",
+      "status": "verified_windows"
+    },
+    {
+      "id": "sqlRestore",
+      "title": "SQL 参数还原",
+      "status": "verified_windows"
+    },
+    {
+      "id": "configFormat",
+      "title": "配置格式化",
+      "status": "verified_windows"
+    },
+    {
+      "id": "sqlFormat",
+      "title": "SQL 格式化",
+      "status": "verified_windows"
+    },
+    {
+      "id": "clipboard",
+      "title": "剪贴板历史",
+      "status": "verified_windows"
+    },
+    {
+      "id": "stack",
+      "title": "复制堆栈",
+      "status": "verified_windows"
+    },
+    {
+      "id": "selection",
+      "title": "对选中内容操作",
+      "status": "verified_windows"
+    },
+    {
+      "id": "settings",
+      "title": "设置",
+      "status": "verified_windows"
+    },
+    {
+      "id": "permissions",
+      "title": "权限与隐私",
+      "status": "verified_windows"
+    },
+    {
+      "id": "diagnostics",
+      "title": "诊断",
+      "status": "verified_windows"
+    },
+    {
+      "id": "snippets",
+      "title": "常用片段",
+      "status": "verified_windows"
+    },
+    {
+      "id": "linkAliases",
+      "title": "网址别名",
+      "status": "verified_windows"
+    },
+    {
+      "id": "commandAliases",
+      "title": "功能别名",
+      "status": "verified_windows"
+    }
+  ],
+  "remaining": [
+    "统一公开仓库首次 Windows 构建与安装验收"
+  ],
+  "platformBoundaries": [
+    "Ctrl 对应 Cmd，资源管理器对应访达；文件快速预览使用默认应用。",
+    "系统文件索引仅覆盖已索引位置，另有 KnownFolders 目录扫描回退。",
+    "OCR 依赖已安装语言包；自动粘贴受目标应用权限级别限制。",
+    "有道翻译依赖网络；加载失败保留重试与浏览器打开。",
+    "安装器未代码签名；更新源默认空，下载校验 SHA-256。"
+  ]
+}

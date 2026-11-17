@@ -1,0 +1,14 @@
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
+*.ttf binary
+**/mermaid.min.js linguist-vendored -whitespace
+**/marked.umd.js linguist-vendored
+**/comparison-editor.js linguist-generated
+windows/assets/editor-comparison.js linguist-generated
+windows/assets/editor-json.js linguist-generated
+windows/assets/editor-core.js linguist-generated
+windows/assets/fonts/* linguist-vendored -whitespace
+windows/assets/id-regions.js linguist-generated
+macos/Resources/id-regions.json linguist-generated

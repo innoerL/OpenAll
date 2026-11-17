@@ -1,0 +1,6 @@
+{
+  "version": "0.25.9",
+  "status": "pending",
+  "note": "统一公开仓库首次构建后更新此报告；安装包以通过回归的 Actions 产物为准。",
+  "workflow": "https://github.com/innoerL/OpenAll/actions/workflows/windows.yml"
+}

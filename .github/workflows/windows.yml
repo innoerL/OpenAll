@@ -1,0 +1,138 @@
+name: Windows 构建与完整回归
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'windows/src/**'
+      - 'windows/assets/**'
+      - 'windows/data/administrative-regions/**'
+      - 'windows/test/**'
+      - 'windows/scripts/**'
+      - 'windows/package*.json'
+      - 'macos/comparison-editor/**'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    paths:
+      - 'windows/src/**'
+      - 'windows/assets/**'
+      - 'windows/data/administrative-regions/**'
+      - 'windows/test/**'
+      - 'windows/scripts/**'
+      - 'windows/package*.json'
+      - 'macos/comparison-editor/**'
+      - '.github/workflows/windows.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: windows
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: 安装 Node.js 并缓存依赖
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+      - name: 安装锁定依赖
+        run: npm ci --no-audit --no-fund
+      - name: 校验离线编辑器构建产物
+        run: |
+          npm --prefix ../macos/comparison-editor ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build:editors -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 语法与功能样例检查
+        run: |
+          npm run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 编辑器功能、压力与跨窗口粘贴
+        run: |
+          $env:OPENALL_EDITOR_TEST_OUTPUT = Join-Path $PWD 'artifacts/editor-ui'
+          npx electron test/editor-ui.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:OPENALL_EDITOR_TEST_OUTPUT = Join-Path $PWD 'artifacts/editor-integration'
+          npx electron test/editor-integration.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 内嵌翻译隔离与内容回填
+        run: |
+          npx electron test/editor-translation.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 准备 Windows 系统索引测试服务
+        run: |
+          $service = Get-Service WSearch -ErrorAction SilentlyContinue
+          if (-not $service) {
+            $feature = Get-WindowsFeature Search-Service
+            if ($feature -and -not $feature.Installed) {
+              $result = Install-WindowsFeature Search-Service
+              if (-not $result.Success) { throw 'Windows Search 测试组件安装失败' }
+            }
+          }
+          $service = Get-Service WSearch -ErrorAction SilentlyContinue
+          if ($service) {
+            Set-Service WSearch -StartupType Manual
+            Start-Service WSearch
+            $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+          }
+      - name: 辅助工具页面与原生 Windows 接口
+        run: |
+          $env:OPENALL_TOOL_SCREEN_DIR = Join-Path $PWD 'artifacts/tools'
+          npx electron test/tool-ui.test.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node test/native-windows.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node test/native-file-search-windows.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 构建 Windows x64 安装包
+        run: npm run dist -- --publish never
+      - name: 安装、启动、全页面截图与卸载检查
+        run: ./scripts/installer-smoke.ps1
+      - name: 生成安装包校验值
+        run: |
+          node scripts/verification.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $file = Get-ChildItem dist/*-setup.exe | Select-Object -First 1
+          if (-not $file) { throw '未生成安装包' }
+          $hash = (Get-FileHash -Algorithm SHA256 -Path $file.FullName).Hash.ToLowerInvariant()
+          "$hash  $($file.Name)" | Set-Content -Encoding utf8 dist/SHA256SUMS.txt
+          "## Windows 云端构建通过`n已验证：完整工具功能、原生接口、大文本压力、独立窗口粘贴、安装与卸载。`n页面截图与详细检查报告见 windows-checks artifact。" >> $env:GITHUB_STEP_SUMMARY
+      - name: 保存截图与检查报告
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-checks-${{ github.sha }}
+          path: windows/artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: 保存通过检查的安装包
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: OpenAll-Windows-x64
+          path: |
+            windows/dist/*-setup.exe
+            windows/dist/SHA256SUMS.txt
+            windows/README.md
+            windows/docs/macos-baseline.json
+            windows/docs/parity-status.json
+          if-no-files-found: error
+          retention-days: 14

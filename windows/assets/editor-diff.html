@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'none'; connect-src 'none'">
+  <title>文本对比</title>
+  <style>
+    :root { color-scheme: dark; --canvas:#1b1c1d; --surface:#202425; --raised:#30332f; --ink:#efeee6; --muted:#a2a69e; --secondary:#b8b7b2; --rule:rgba(255,255,255,.065); --accent:#cfb58d; --removed:rgba(197,92,105,.22); --added:rgba(65,164,112,.22); --changed-left:rgba(197,92,105,.12); --changed-right:rgba(65,164,112,.12); --removed-token:rgba(197,92,105,.50); --added-token:rgba(65,164,112,.50); --removed-ink:#d99b9e; --added-ink:#8dbea1; font:13px "Microsoft YaHei UI",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; height:100vh; display:flex; flex-direction:column; background:var(--canvas); color:var(--ink); overflow:hidden; }
+    .toolbar { height:44px; flex:none; display:flex; align-items:center; gap:12px; padding:0 20px; }
+    .comparison-status { display:flex; align-items:center; gap:12px; flex:1; min-width:0; }
+    #summary { display:flex; align-items:baseline; gap:12px; flex:0 1 auto; min-width:0; color:var(--ink); white-space:nowrap; overflow:hidden; }
+    .summary-primary { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:13px; font-weight:500; }
+    .summary-details { flex:none; color:var(--secondary); font-size:12px; }
+    .summary-primary .changed { color:var(--accent); }
+    .summary-primary .added { color:var(--added-ink); }
+    .summary-primary .removed { color:var(--removed-ink); }
+    .options,.navigation { display:flex; align-items:center; gap:4px; flex:none; }
+    .options { gap:16px; border-left:1px solid var(--rule); padding-left:18px; }
+    label { color:var(--muted); font-size:13px; white-space:nowrap; cursor:pointer; }
+    input[type=checkbox] { appearance:none; -webkit-appearance:none; position:relative; width:14px; height:14px; border:1px solid var(--muted); border-radius:3px; background:transparent; vertical-align:-2px; margin:0 6px 0 0; cursor:pointer; }
+    input[type=checkbox]:checked { border-color:var(--accent); background:var(--accent); }
+    input[type=checkbox]:checked::after { content:""; position:absolute; left:4px; top:1px; width:3px; height:7px; border:solid var(--canvas); border-width:0 1.5px 1.5px 0; transform:rotate(45deg); }
+    input[type=checkbox]:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    button { height:28px; border:.5px solid var(--rule); border-radius:6px; background:transparent; color:var(--ink); padding:4px 9px; font:400 13px -apple-system,BlinkMacSystemFont,sans-serif; cursor:pointer; }
+    button:hover { background:var(--raised); }
+    .navigation { height:28px; gap:0; border:.5px solid var(--rule); border-radius:6px; overflow:hidden; }
+    .nav-label { color:var(--muted); padding:0 6px 0 10px; font-size:11px; }
+    .navigation button { flex:none; width:28px; height:100%; padding:0; border:0; border-radius:0; }
+    #navigation-count { min-width:44px; padding:0 7px; color:var(--secondary); text-align:center; font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .navigation button:focus-visible { outline-offset:-2px; }
+    button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    button:disabled { opacity:.35; cursor:default; }
+    .editors { flex:1; min-height:0; margin:0 20px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); border:.5px solid var(--rule); border-radius:6px; overflow:hidden; background:var(--surface); }
+    .pane { min-width:0; min-height:0; display:flex; flex-direction:column; }
+    .pane + .pane { border-left:.5px solid var(--rule); }
+    .heading { flex:none; height:34px; padding:0 14px; display:flex; align-items:center; gap:10px; border-bottom:.5px solid var(--rule); background:transparent; }
+    .heading strong { font-size:13px; font-weight:500; }
+    .count { color:var(--secondary); font-size:12px; font-variant-numeric:tabular-nums; }
+    .natural-sort { margin-left:auto; height:26px; padding:2px 8px; font-size:12px; white-space:nowrap; }
+    .copy { height:28px; padding:2px 4px; border:0; background:transparent; color:var(--secondary); font-size:13px; }
+    .copy:hover { background:transparent; color:var(--ink); }
+    #open-search { color:var(--secondary); white-space:nowrap; }
+    .findbar { flex:none; height:36px; margin:0 20px; display:flex; align-items:center; gap:10px; }
+    .findbar[hidden] { display:none; }
+    #find-query { flex:1; min-width:100px; height:28px; border:.5px solid var(--rule); border-radius:6px; background:var(--surface); color:var(--ink); padding:0 10px; font:13px "Microsoft YaHei UI",-apple-system,BlinkMacSystemFont,sans-serif; outline:none; }
+    #find-query:focus { border-color:var(--accent); }
+    #find-count { flex:none; min-width:96px; font-size:12px; font-variant-numeric:tabular-nums; color:var(--secondary); }
+    #find-scope { width:88px; height:28px; border:.5px solid var(--rule); border-radius:6px; background:var(--canvas); color:var(--ink); font-size:12px; }
+    #find-scope { appearance:none; width:98px; padding:0 22px 0 9px; background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%); background-position:calc(100% - 13px) 12px,calc(100% - 8px) 12px; background-size:5px 5px; background-repeat:no-repeat; }
+    .findbar label { color:var(--secondary); font-size:12px; }
+    .findbar button { flex:none; width:30px; padding:0; }
+    .cm-contentMatch { background:rgba(86,153,218,.18); outline:1px solid rgba(86,153,218,.35); outline-offset:-1px; border-radius:2px; }
+    .cm-contentMatch.active { background:rgba(86,153,218,.32); outline:2px solid #7bb2e5; outline-offset:-1px; }
+    .cm-contentMatch .cm-diffToken { outline:1px solid #7bb2e5; outline-offset:1px; }
+    .editor { position:relative; flex:1; min-height:0; overflow:hidden; }
+    .editor .cm-editor { height:100%; background:transparent; color:var(--ink); }
+    .editor .cm-editor.cm-focused { outline:none; }
+    .editor .cm-scroller { overflow:auto; font:400 14px/22px ui-monospace,"SFMono-Regular",Menlo,Monaco,"Microsoft YaHei UI", "PingFang SC",monospace; font-synthesis:none; -webkit-font-smoothing:antialiased; font-variant-ligatures:none; font-kerning:none; letter-spacing:0; word-spacing:0; tab-size:4; }
+    .editor .cm-content { padding:12px 0; caret-color:var(--accent); }
+    .editor .cm-line { padding:0 12px; line-height:22px; }
+    .editor .cm-gutters { background:transparent; border:0; color:var(--secondary); font-size:12.5px; line-height:22px; }
+    .editor .cm-changeGutter { width:19px; }
+    .editor .cm-changeGutter .cm-gutterElement { padding:0 0 0 7px; text-align:center; }
+    .editor .cm-lineNumbers .cm-gutterElement { min-width:35px; padding:0 8px 0 0; }
+    .cm-changeMark { font-weight:500; }
+    .cm-changeMark.added { color:var(--added-ink); }
+    .cm-changeMark.removed { color:var(--removed-ink); }
+    .cm-changeMark.changed-left,.cm-changeMark.changed-right,.cm-changeMark.current { color:var(--accent); }
+    .cm-diffLine.added { background:var(--added); }
+    .cm-diffLine.removed { background:var(--removed); }
+    .cm-diffLine.changed-left { background:var(--changed-left); }
+    .cm-diffLine.changed-right { background:var(--changed-right); }
+    .cm-diffLine.current { box-shadow:inset 3px 0 var(--accent); }
+    .cm-diffToken { border-radius:2px; }
+    .cm-diffToken.removed { background:var(--removed-token); box-shadow:inset 0 -2px var(--removed-ink); }
+    .cm-diffToken.added { background:var(--added-token); box-shadow:inset 0 -2px var(--added-ink); }
+    .cm-diffGap { position:relative; display:inline-block; width:0; height:1em; vertical-align:-.1em; }
+    .cm-diffGap::after { content:""; position:absolute; inset:0 auto 0 -1px; width:2px; border-radius:1px; }
+    .cm-diffGap.removed::after { background:var(--removed-ink); }
+    .cm-diffGap.added::after { background:var(--added-ink); }
+    .cm-diffSpacer { pointer-events:auto; }
+    .editor .cm-cursor { border-left-color:var(--accent); }
+    .editor .cm-selectionBackground,.editor .cm-focused .cm-selectionBackground { background:rgba(160,146,108,.35); }
+    .editor .cm-placeholder { color:var(--muted); }
+    footer { flex:none; height:30px; padding:0 20px; display:flex; align-items:center; color:var(--secondary); font-size:12px; }
+    #hint { margin-left:auto; text-align:right; }
+    @media (max-width:850px) { .toolbar,.comparison-status,#summary { gap:8px; } .options { gap:12px; } #hint { max-width:40%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; } }
+  </style>
+  <link rel="stylesheet" href="../src/fonts.css">
+</head>
+<body>
+  <div class="toolbar">
+    <div class="comparison-status"><div id="summary" role="status" aria-live="polite" aria-atomic="true"><span class="summary-primary notice">在左右两侧输入文本，差异会直接标出</span></div>
+    <div class="navigation" role="group" aria-label="差异组导航"><span class="nav-label">差异</span><button id="previous" title="上一个差异组" aria-label="上一个差异组">↑</button><span id="navigation-count" role="status" aria-live="polite" aria-atomic="true">0 / 0</span><button id="next" title="下一个差异组" aria-label="下一个差异组">↓</button></div></div>
+    <div class="options"><button id="open-search" title="搜索内容（Ctrl+F）">搜索 Ctrl+F</button><label><input id="sync-scroll" type="checkbox" checked>同步滚动</label><label><input id="ignore-space" type="checkbox">忽略行尾空格</label></div>
+  </div>
+  <div class="findbar" id="findbar" role="search" aria-label="搜索对比内容" hidden><span class="nav-label">匹配</span>
+    <input id="find-query" type="search" placeholder="搜索内容" aria-label="搜索内容" autocomplete="off" spellcheck="false">
+    <span id="find-count" role="status" aria-live="polite">输入搜索内容</span>
+    <select id="find-scope" aria-label="搜索范围"><option value="both">左右两侧</option><option value="0">仅左侧</option><option value="1">仅右侧</option></select>
+    <label><input id="find-case" type="checkbox">区分大小写</label>
+    <button id="find-previous" title="上一处（⇧↵ / ⇧Ctrl+G）" aria-label="上一个搜索结果">↑</button>
+    <button id="find-next" title="下一处（↵ / Ctrl+G）" aria-label="下一个搜索结果">↓</button>
+    <button id="find-close" title="关闭搜索（Esc）" aria-label="关闭搜索">×</button>
+  </div>
+  <div class="editors">
+    <section class="pane">
+      <div class="heading"><strong>左侧</strong><span class="count" id="left-count">0 行</span><button class="natural-sort" data-side="0" title="左侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="左侧按行自然升序">自然排序</button><button class="copy" data-side="0" title="复制左侧全文" aria-label="复制左侧全文">复制</button></div>
+      <div class="editor" id="left"></div>
+    </section>
+    <section class="pane">
+      <div class="heading"><strong>右侧</strong><span class="count" id="right-count">0 行</span><button class="natural-sort" data-side="1" title="右侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="右侧按行自然升序">自然排序</button><button class="copy" data-side="1" title="复制右侧全文" aria-label="复制右侧全文">复制</button></div>
+      <div class="editor" id="right"></div>
+    </section>
+  </div>
+  <footer><span id="footer-status" role="status" aria-live="polite">已对齐</span><span id="hint">Ctrl+1 / Ctrl+2 切换左右</span></footer>
+  <script src="editor-diff-core.js"></script>
+  <script src="editor-comparison.js"></script>
+  <script src="editor-diff.js"></script>
+  <script src="editor-diff-bridge.js"></script>
+</body>
+</html>
