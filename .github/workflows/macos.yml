@@ -59,7 +59,7 @@ jobs:
         run: zsh macos/scripts/build.sh 2>&1 | tee macos/.build/ci-logs/build.log
       - name: 检查双架构与本地签名
         run: |
-          xcrun lipo -verify_arch x86_64 arm64 macos/.build/OpenAll.app/Contents/MacOS/OpenAll
+          xcrun lipo macos/.build/OpenAll.app/Contents/MacOS/OpenAll -verify_arch x86_64 arm64
           xcrun lipo -info macos/.build/OpenAll.app/Contents/MacOS/OpenAll | tee macos/.build/ci-logs/architectures.log
           codesign --verify --deep --strict --verbose=2 macos/.build/OpenAll.app 2>&1 | tee macos/.build/ci-logs/signature.log
           plutil -lint macos/.build/OpenAll.app/Contents/Info.plist
