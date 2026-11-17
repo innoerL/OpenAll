@@ -1,6 +1,350 @@
 {
   "version": "0.25.9",
-  "status": "pending",
-  "note": "统一公开仓库首次构建后更新此报告；安装包以通过回归的 Actions 产物为准。",
-  "workflow": "https://github.com/innoerL/OpenAll/actions/workflows/windows.yml"
+  "status": "passed",
+  "repository": "innoerL/OpenAll",
+  "workflow": "https://github.com/innoerL/OpenAll/actions/workflows/windows.yml",
+  "run": "https://github.com/innoerL/OpenAll/actions/runs/44039291533",
+  "runId": "44039291533",
+  "commit": "2b017c9a7ec282f960658e0d0df789699d01db91",
+  "artifacts": {
+    "installer": "OpenAll-Windows-x64",
+    "checks": "windows-checks-2b017c9a7ec282f960658e0d0df789699d01db91",
+    "totalScreenshots": 65
+  },
+  "installer": {
+    "file": "OpenAll-Windows-0.25.9-x64-setup.exe",
+    "sha256": "808dda21795a85d81a4e88c102f5e8590fe6a503fb7c686cb83f8f4d4c131297",
+    "bytes": 118020588,
+    "checksumVerified": true
+  },
+  "installation": {
+    "installed": true,
+    "launched": true,
+    "checksPassed": true,
+    "uninstalled": true
+  },
+  "regression": {
+    "checks": 114,
+    "screenshots": 38,
+    "performance": {
+      "search": {
+        "queries": 50,
+        "elapsedMS": 248.60000000009313
+      },
+      "json": {
+        "bytes": 6564891,
+        "elapsedMS": 782.7999999998137,
+        "heartbeats": 65,
+        "renderedLines": 43,
+        "valid": true
+      },
+      "comparison": {
+        "passed": true,
+        "ticks": 10,
+        "loadMilliseconds": 399.39999999990687,
+        "compareMilliseconds": 519.2999999998137,
+        "workerMilliseconds": 62.09999999962747,
+        "searchMilliseconds": 11.200000000186265,
+        "sortMilliseconds": 196.6999999997206,
+        "sortWorkerMilliseconds": 58.89999999990687,
+        "sortTicks": 14
+      }
+    },
+    "comparisonChecks": 68
+  },
+  "editors": {
+    "passed": true,
+    "checks": 19,
+    "jsonPerformance": {
+      "bytes": 5026001,
+      "milliseconds": 612.7999999998137,
+      "ticks": 55,
+      "formatted": true,
+      "revision": 11,
+      "valid": true,
+      "regions": 14001,
+      "folded": false,
+      "matches": 0,
+      "limited": false,
+      "busy": false,
+      "pendingMetadata": false,
+      "renderedLines": 42
+    },
+    "comparisonChecks": 68,
+    "comparisonPerformance": {
+      "passed": true,
+      "ticks": 8,
+      "loadMilliseconds": 382.89999999990687,
+      "compareMilliseconds": 471.89999999990687,
+      "workerMilliseconds": 53.800000000046566,
+      "searchMilliseconds": 10.199999999953434,
+      "sortMilliseconds": 249.70000000018626,
+      "sortWorkerMilliseconds": 69.69999999995343,
+      "sortTicks": 14
+    }
+  },
+  "crossWindowPaste": {
+    "passed": true,
+    "checks": [
+      "跨两个折叠块首次退格仅展开，二次删除及撤销重做保真",
+      "独立剪贴板窗口粘贴回 JSON 原选区",
+      "JSON 查找框聚焦时跨窗粘贴仅替换查询",
+      "编辑区按 Escape 只关闭 JSON 查找",
+      "独立剪贴板窗口保持对比右侧光标与选区",
+      "对比查找框聚焦时跨窗粘贴不覆盖正文",
+      "JSON 浅色主题语法配色响应设置广播",
+      "对比 iframe 浅色主题、编辑表面与辅助文字响应设置广播"
+    ]
+  },
+  "appearance": {
+    "passed": true,
+    "checks": [
+      "dark：标题栏跟随背景",
+      "dark：JSON 与对比编辑区使用同一主题表面色",
+      "dark：外观切换保留剪贴板输入及光标",
+      "dark：剪贴板文字及光标清晰可见",
+      "blue：标题栏跟随背景",
+      "blue：JSON 与对比编辑区使用同一主题表面色",
+      "自定义深色改变编辑区底色",
+      "blue：外观切换保留剪贴板输入及光标",
+      "blue：剪贴板文字及光标清晰可见",
+      "light：标题栏跟随背景",
+      "light：JSON 与对比编辑区使用同一主题表面色",
+      "light：外观切换保留剪贴板输入及光标",
+      "light：剪贴板文字及光标清晰可见",
+      "blue-again：标题栏跟随背景",
+      "blue-again：JSON 与对比编辑区使用同一主题表面色",
+      "blue-again：外观切换保留剪贴板输入及光标",
+      "blue-again：剪贴板文字及光标清晰可见",
+      "dark-again：标题栏跟随背景",
+      "dark-again：JSON 与对比编辑区使用同一主题表面色",
+      "dark-again：外观切换保留剪贴板输入及光标",
+      "dark-again：剪贴板文字及光标清晰可见",
+      "外观往返后真实输入继续正常",
+      "主题切换保留 JSON 文档",
+      "主题切换保留对比文档",
+      "窗口按钮在右侧，按最小化、最大化、关闭排列",
+      "双击窗口按钮不会额外切换标题栏状态",
+      "最大化及还原按钮与实际窗口状态一致",
+      "最小化按钮实际生效",
+      "关闭按钮实际生效"
+    ],
+    "screenshots": [
+      "appearance-blue-json.png",
+      "appearance-blue-comparison.png",
+      "appearance-blue-clipboard.png",
+      "appearance-light-json.png",
+      "appearance-light-comparison.png",
+      "appearance-light-clipboard.png",
+      "appearance-dark-again-json.png",
+      "appearance-dark-again-comparison.png",
+      "appearance-dark-again-clipboard.png"
+    ],
+    "palettes": [
+      {
+        "name": "dark",
+        "json": {
+          "canvas": "#242626",
+          "surface": "#1e2020",
+          "title": "rgb(36, 38, 38)",
+          "editor": "rgb(30, 32, 32)"
+        },
+        "comparison": {
+          "surface": "#1e2020",
+          "editor": "rgb(30, 32, 32)"
+        },
+        "input": {
+          "value": "保留",
+          "focused": true,
+          "start": 2,
+          "end": 2,
+          "color": "rgb(243, 241, 235)",
+          "background": "rgb(47, 49, 49)",
+          "caret": "rgb(216, 193, 158)",
+          "contrast": 11.587529723908455
+        }
+      },
+      {
+        "name": "blue",
+        "json": {
+          "canvas": "#192b3a",
+          "surface": "#152431",
+          "title": "rgb(25, 43, 58)",
+          "editor": "rgb(21, 36, 49)"
+        },
+        "comparison": {
+          "surface": "#152431",
+          "editor": "rgb(21, 36, 49)"
+        },
+        "input": {
+          "value": "保留",
+          "focused": true,
+          "start": 2,
+          "end": 2,
+          "color": "rgb(243, 241, 235)",
+          "background": "rgb(37, 54, 68)",
+          "caret": "rgb(216, 193, 158)",
+          "contrast": 11.002888106777018
+        }
+      },
+      {
+        "name": "light",
+        "json": {
+          "canvas": "#f2f1ed",
+          "surface": "#f8f7f5",
+          "title": "rgb(242, 241, 237)",
+          "editor": "rgb(248, 247, 245)"
+        },
+        "comparison": {
+          "surface": "#f8f7f5",
+          "editor": "rgb(248, 247, 245)"
+        },
+        "input": {
+          "value": "保留",
+          "focused": true,
+          "start": 2,
+          "end": 2,
+          "color": "rgb(30, 30, 30)",
+          "background": "rgb(229, 228, 225)",
+          "caret": "rgb(117, 104, 85)",
+          "contrast": 13.111636298866571
+        }
+      },
+      {
+        "name": "blue-again",
+        "json": {
+          "canvas": "#192b3a",
+          "surface": "#152431",
+          "title": "rgb(25, 43, 58)",
+          "editor": "rgb(21, 36, 49)"
+        },
+        "comparison": {
+          "surface": "#152431",
+          "editor": "rgb(21, 36, 49)"
+        },
+        "input": {
+          "value": "保留",
+          "focused": true,
+          "start": 2,
+          "end": 2,
+          "color": "rgb(243, 241, 235)",
+          "background": "rgb(37, 54, 68)",
+          "caret": "rgb(216, 193, 158)",
+          "contrast": 11.002888106777018
+        }
+      },
+      {
+        "name": "dark-again",
+        "json": {
+          "canvas": "#242626",
+          "surface": "#1e2020",
+          "title": "rgb(36, 38, 38)",
+          "editor": "rgb(30, 32, 32)"
+        },
+        "comparison": {
+          "surface": "#1e2020",
+          "editor": "rgb(30, 32, 32)"
+        },
+        "input": {
+          "value": "保留",
+          "focused": true,
+          "start": 2,
+          "end": 2,
+          "color": "rgb(243, 241, 235)",
+          "background": "rgb(47, 49, 49)",
+          "caret": "rgb(216, 193, 158)",
+          "contrast": 11.587529723908455
+        }
+      }
+    ]
+  },
+  "idGenerator": {
+    "provinces": 31,
+    "regions": 2851,
+    "expectedPrefix": "33010620011117"
+  },
+  "native": {
+    "passed": true,
+    "startedAt": "2026-11-17T07:32:22.546Z",
+    "stages": [
+      {
+        "stage": "powershell",
+        "elapsedMS": 5412,
+        "pid": 8096,
+        "helperElapsedMS": 1
+      },
+      {
+        "stage": "winforms",
+        "elapsedMS": 5538,
+        "pid": 8096,
+        "helperElapsedMS": 1695
+      },
+      {
+        "stage": "interop",
+        "elapsedMS": 6921,
+        "pid": 8096,
+        "helperElapsedMS": 3078
+      }
+    ],
+    "checks": [
+      "paste",
+      "selection",
+      "files",
+      "image",
+      "ocr"
+    ],
+    "ready": {
+      "stage": "ready",
+      "elapsedMS": 7084,
+      "pid": 8096,
+      "helperElapsedMS": 3241
+    },
+    "startup": {
+      "stage": "ready",
+      "elapsedMS": 7084,
+      "pid": 8096,
+      "helperElapsedMS": 3241
+    },
+    "stderr": ""
+  },
+  "systemIndex": {
+    "platform": "win32",
+    "knownFolders": true,
+    "systemIndex": {
+      "available": true,
+      "code": "ready",
+      "reason": "当前用户可访问的 Windows Search 文件索引",
+      "indexedOnly": true
+    },
+    "checks": [
+      "真实 Shell KnownFolders API，包含当前重定向路径",
+      "真实 SystemIndex 查询：精确、包含、通配符转义、中文、文档、图片、复合后缀与目录范围",
+      "索引空/不可用时保留本地 fallback 结果"
+    ],
+    "knownFolderNames": [
+      "Desktop",
+      "Documents",
+      "Downloads",
+      "Pictures",
+      "Videos",
+      "Music"
+    ],
+    "passed": true
+  },
+  "translationFixture": {
+    "passed": true,
+    "checks": [
+      "仅允许有道 HTTPS 顶层地址",
+      "测试模式不会连接网络或创建外部页面",
+      "自动填入原文并触发输入事件，特殊字符不执行",
+      "远端页没有 Node 或 OpenAll 预加载桥接",
+      "读取内嵌翻译当前选区",
+      "剪贴板粘贴替换翻译页当前选区",
+      "内嵌区域随窗口缩放且保留本地标题栏",
+      "关闭翻译时销毁远端内容"
+    ],
+    "note": "本次使用隔离的本地测试页面验证；不表示本次云端访问了真实有道服务。"
+  },
+  "createdAt": "2026-11-17T07:30:56Z",
+  "updatedAt": "2026-11-17T07:34:30Z"
 }

@@ -1,7 +1,7 @@
 {
   "baseline": "0.25.6",
-  "parityComplete": false,
-  "note": "从已交付的 0.25.9 整理为统一公开仓库；本仓库首次 Windows 安装包回归待完成。",
+  "parityComplete": true,
+  "note": "已实现 macOS 0.25.6 的功能、布局、配色与交互，并通过真实 Windows 安装包回归。系统接口按 Windows 规则适配；字体光栅化、系统弹窗及 Quick Look 替代方式仍受平台影响。",
   "features": [
     {
       "id": "translate",
@@ -124,14 +124,50 @@
       "status": "verified_windows"
     }
   ],
-  "remaining": [
-    "统一公开仓库首次 Windows 构建与安装验收"
-  ],
+  "remaining": [],
   "platformBoundaries": [
     "Ctrl 对应 Cmd，资源管理器对应访达；文件快速预览使用默认应用。",
     "系统文件索引仅覆盖已索引位置，另有 KnownFolders 目录扫描回退。",
     "OCR 依赖已安装语言包；自动粘贴受目标应用权限级别限制。",
     "有道翻译依赖网络；加载失败保留重试与浏览器打开。",
     "安装器未代码签名；更新源默认空，下载校验 SHA-256。"
-  ]
+  ],
+  "verification": {
+    "commit": "2b017c9a7ec282f960658e0d0df789699d01db91",
+    "run": "44039291533",
+    "checks": 114,
+    "screenshots": 38,
+    "performance": {
+      "search": {
+        "queries": 50,
+        "elapsedMS": 248.60000000009313
+      },
+      "json": {
+        "bytes": 6564891,
+        "elapsedMS": 782.7999999998137,
+        "heartbeats": 65,
+        "renderedLines": 43,
+        "valid": true
+      },
+      "comparison": {
+        "passed": true,
+        "ticks": 10,
+        "loadMilliseconds": 399.39999999990687,
+        "compareMilliseconds": 519.2999999998137,
+        "workerMilliseconds": 62.09999999962747,
+        "searchMilliseconds": 11.200000000186265,
+        "sortMilliseconds": 196.6999999997206,
+        "sortWorkerMilliseconds": 58.89999999990687,
+        "sortTicks": 14
+      }
+    },
+    "systemIndex": {
+      "available": true,
+      "code": "ready",
+      "reason": "当前用户可访问的 Windows Search 文件索引",
+      "indexedOnly": true
+    },
+    "installed": true,
+    "uninstalled": true
+  }
 }

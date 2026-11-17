@@ -91,7 +91,7 @@ npm start
 npm run dist -- --publish never
 ```
 
-更多检查命令与云端构建说明见 [开发指南](docs/development.md)。
+更多检查命令与云端构建说明见 [开发指南](docs/development.md)，本次发布的实际验收记录见 [发布验证](docs/verification.md)。
 
 ## 反馈与贡献
 
