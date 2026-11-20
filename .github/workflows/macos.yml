@@ -79,11 +79,14 @@ jobs:
           OPENALL_GOLD_CHECK=1 \
           macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot 2>&1 | tee macos/.build/ci-logs/gold-ui.log
       - name: JSON 折叠删除与大文本验收
+        timeout-minutes: 5
+        env:
+          NSUnbufferedIO: 'YES'
         run: |
           OPENALL_PREVIEW_ROOT="$RUNNER_TEMP/openall-json-preview" \
           OPENALL_PREVIEW_OUTPUT="$PWD/macos/.build/ci-logs/json-ui" \
           OPENALL_JSON_CHECK=1 \
-          macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot 2>&1 | tee macos/.build/ci-logs/json-ui.log
+          macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot -NSApplicationCrashOnExceptions YES 2>&1 | tee macos/.build/ci-logs/json-ui.log
       - name: 打包并生成校验值
         run: |
           ditto -c -k --sequesterRsrc --keepParent macos/.build/OpenAll.app macos/.build/OpenAll-macOS-Universal.zip

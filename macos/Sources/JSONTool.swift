@@ -1383,9 +1383,10 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         renderingEditor = true
         if let documentLength, documentLength > 200000 { configureDocumentLength(documentLength) }
         let storage = editor.textStorage
-        // 正文、基础字体与全部折叠标签一次提交，避免每个节点都触发布局和字形更新。
-        storage?.beginEditing()
+        // NSTextView.string 会同步请求布局，不能置于 NSTextStorage 尚未完成的编辑事务中。
         editor.string = projection.text
+        // 基础字体与全部折叠标签一次提交，避免每个节点都触发布局和字形更新。
+        storage?.beginEditing()
         let full = NSRange(location: 0, length: (projection.text as NSString).length)
         storage?.removeAttribute(.backgroundColor, range: full)
         storage?.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), range: full)
