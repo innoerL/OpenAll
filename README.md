@@ -58,6 +58,15 @@ Windows 使用右上角窗口按钮；标题栏、内容区和输入框跟随主
 
 截图使用示例内容，来自实际应用。
 
+<details>
+<summary>查看金价工具</summary>
+
+输入“金价”打开。以下为离线验收样例，包含合并曲线和独立深色模式。
+
+<img src="docs/assets/gold.png" alt="OpenAll 金价工具：合并曲线与三币种" width="462">
+
+</details>
+
 ## 从源码运行
 
 ```sh

@@ -1,0 +1,37 @@
+{
+  "passed": true,
+  "platform": "darwin",
+  "architecture": "arm64",
+  "electron": "45.4.1",
+  "checks": [
+    "双品种报价与近一年曲线",
+    "双品种七日预测",
+    "国际事件与三个日历来源",
+    "渲染器沙箱隔离",
+    "重复打开复用窗口",
+    "曲线键盘查值",
+    "EUR每克报价与历史换算",
+    "CNY每克报价与历史换算",
+    "USD每克报价与历史换算",
+    "工具主题不改宿主全局主题",
+    "置顶状态与原生窗口一致",
+    "七日展望及实际命中统计",
+    "切换周大福展望",
+    "宏观因素、国际新闻与财经日历渲染",
+    "其他窗口不能调用金价 IPC",
+    "独立透明贴边条",
+    "最小化后可通过搜索恢复",
+    "关闭时清理贴边窗口",
+    "关闭窗口后后台快照与预测继续可用",
+    "重新打开保留偏好与行情"
+  ],
+  "screenshots": [
+    "gold-quotes.png",
+    "gold-combined.png",
+    "gold-outlook.png"
+  ],
+  "errors": [],
+  "workflow": "https://github.com/innoerL/OpenAll/actions/runs/44701011601",
+  "sourceCommit": "6261e419c9586ddac20dfc5198e482b57d4b9b03",
+  "version": "0.26.0"
+}

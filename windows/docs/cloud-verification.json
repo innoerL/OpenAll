@@ -1,20 +1,22 @@
 {
-  "version": "0.25.9",
+  "version": "0.26.0",
   "status": "passed",
   "repository": "innoerL/OpenAll",
   "workflow": "https://github.com/innoerL/OpenAll/actions/workflows/windows.yml",
-  "run": "https://github.com/innoerL/OpenAll/actions/runs/44039291533",
-  "runId": "44039291533",
-  "commit": "2b017c9a7ec282f960658e0d0df789699d01db91",
+  "run": "https://github.com/innoerL/OpenAll/actions/runs/44701176415",
+  "runId": "44701176415",
+  "commit": "b2812b72d5906fb9913f74d554d062cb8f7a02d9",
   "artifacts": {
     "installer": "OpenAll-Windows-x64",
-    "checks": "windows-checks-2b017c9a7ec282f960658e0d0df789699d01db91",
-    "totalScreenshots": 65
+    "checks": "windows-checks-b2812b72d5906fb9913f74d554d062cb8f7a02d9",
+    "totalScreenshots": 71,
+    "installerId": 14612274934,
+    "checksId": 14613242201
   },
   "installer": {
-    "file": "OpenAll-Windows-0.25.9-x64-setup.exe",
-    "sha256": "808dda21795a85d81a4e88c102f5e8590fe6a503fb7c686cb83f8f4d4c131297",
-    "bytes": 118020588,
+    "file": "OpenAll-Windows-0.26.0-x64-setup.exe",
+    "sha256": "d6c736758f9a7e431b41f4e516e6c6c29083cde0aab28f60cf9bbc0a1b21b21d",
+    "bytes": 118072777,
     "checksumVerified": true
   },
   "installation": {
@@ -24,30 +26,30 @@
     "uninstalled": true
   },
   "regression": {
-    "checks": 114,
-    "screenshots": 38,
+    "checks": 135,
+    "screenshots": 41,
     "performance": {
       "search": {
         "queries": 50,
-        "elapsedMS": 248.60000000009313
+        "elapsedMS": 110.90000000002328
       },
       "json": {
         "bytes": 6564891,
-        "elapsedMS": 782.7999999998137,
-        "heartbeats": 65,
+        "elapsedMS": 630.3000000000466,
+        "heartbeats": 57,
         "renderedLines": 43,
         "valid": true
       },
       "comparison": {
         "passed": true,
-        "ticks": 10,
-        "loadMilliseconds": 399.39999999990687,
-        "compareMilliseconds": 519.2999999998137,
-        "workerMilliseconds": 62.09999999962747,
-        "searchMilliseconds": 11.200000000186265,
-        "sortMilliseconds": 196.6999999997206,
-        "sortWorkerMilliseconds": 58.89999999990687,
-        "sortTicks": 14
+        "ticks": 7,
+        "loadMilliseconds": 238.89999999996508,
+        "compareMilliseconds": 317.29999999998836,
+        "workerMilliseconds": 36.90000000002328,
+        "searchMilliseconds": 5.300000000046566,
+        "sortMilliseconds": 121.90000000002328,
+        "sortWorkerMilliseconds": 29.099999999976717,
+        "sortTicks": 9
       }
     },
     "comparisonChecks": 68
@@ -57,8 +59,8 @@
     "checks": 19,
     "jsonPerformance": {
       "bytes": 5026001,
-      "milliseconds": 612.7999999998137,
-      "ticks": 55,
+      "milliseconds": 474.80000000004657,
+      "ticks": 45,
       "formatted": true,
       "revision": 11,
       "valid": true,
@@ -73,14 +75,14 @@
     "comparisonChecks": 68,
     "comparisonPerformance": {
       "passed": true,
-      "ticks": 8,
-      "loadMilliseconds": 382.89999999990687,
-      "compareMilliseconds": 471.89999999990687,
-      "workerMilliseconds": 53.800000000046566,
-      "searchMilliseconds": 10.199999999953434,
-      "sortMilliseconds": 249.70000000018626,
-      "sortWorkerMilliseconds": 69.69999999995343,
-      "sortTicks": 14
+      "ticks": 6,
+      "loadMilliseconds": 222.70000000001164,
+      "compareMilliseconds": 276.20000000001164,
+      "workerMilliseconds": 29.100000000034925,
+      "searchMilliseconds": 5.699999999953434,
+      "sortMilliseconds": 111,
+      "sortWorkerMilliseconds": 28,
+      "sortTicks": 8
     }
   },
   "crossWindowPaste": {
@@ -261,29 +263,29 @@
   "idGenerator": {
     "provinces": 31,
     "regions": 2851,
-    "expectedPrefix": "33010620011117"
+    "expectedPrefix": "33010620011120"
   },
   "native": {
     "passed": true,
-    "startedAt": "2026-11-17T07:32:22.546Z",
+    "startedAt": "2026-11-20T08:17:09.367Z",
     "stages": [
       {
         "stage": "powershell",
-        "elapsedMS": 5412,
-        "pid": 8096,
+        "elapsedMS": 3685,
+        "pid": 1532,
         "helperElapsedMS": 1
       },
       {
         "stage": "winforms",
-        "elapsedMS": 5538,
-        "pid": 8096,
-        "helperElapsedMS": 1695
+        "elapsedMS": 3777,
+        "pid": 1532,
+        "helperElapsedMS": 1132
       },
       {
         "stage": "interop",
-        "elapsedMS": 6921,
-        "pid": 8096,
-        "helperElapsedMS": 3078
+        "elapsedMS": 4560,
+        "pid": 1532,
+        "helperElapsedMS": 1915
       }
     ],
     "checks": [
@@ -295,15 +297,15 @@
     ],
     "ready": {
       "stage": "ready",
-      "elapsedMS": 7084,
-      "pid": 8096,
-      "helperElapsedMS": 3241
+      "elapsedMS": 4698,
+      "pid": 1532,
+      "helperElapsedMS": 2052
     },
     "startup": {
       "stage": "ready",
-      "elapsedMS": 7084,
-      "pid": 8096,
-      "helperElapsedMS": 3241
+      "elapsedMS": 4698,
+      "pid": 1532,
+      "helperElapsedMS": 2052
     },
     "stderr": ""
   },
@@ -345,6 +347,45 @@
     ],
     "note": "本次使用隔离的本地测试页面验证；不表示本次云端访问了真实有道服务。"
   },
-  "createdAt": "2026-11-17T07:30:56Z",
-  "updatedAt": "2026-11-17T07:34:30Z"
+  "createdAt": "2026-11-20T08:16:05Z",
+  "updatedAt": "2026-11-20T08:18:42Z",
+  "gold": {
+    "passed": true,
+    "platform": "win32",
+    "electron": "35.7.5",
+    "checks": [
+      "金价搜索返回内置工具",
+      "两品种近一年历史完整加载",
+      "国际金价、周大福牌价与日周涨跌已渲染",
+      "金价渲染器只暴露自身隔离桥接",
+      "连续打开金价复用同一窗口",
+      "走势图支持键盘查看历史点",
+      "合并报价卡和双轴走势图",
+      "美元、欧元、人民币报价及历史换算",
+      "金价独立主题不改变宿主系统主题",
+      "宿主主题切换保留金价独立主题",
+      "置顶设置同步原生窗口",
+      "两品种七日展望切换",
+      "报价验证、市场因素、国际事件与财经日历",
+      "报价与新闻来源链接保留",
+      "其他窗口不能读取或修改金价 IPC",
+      "其他窗口不能关闭或最小化金价",
+      "贴边浮条创建并保留展开入口",
+      "关闭金价只销毁工具与浮条，宿主继续运行",
+      "关闭金价后宿主搜索仍可用",
+      "重新打开金价保留设置与后台调度数据",
+      "金价数据保存在宿主隔离子目录"
+    ],
+    "screenshots": [
+      "gold-quotes.png",
+      "gold-outlook.png",
+      "gold-combined-dark.png"
+    ],
+    "installed": {
+      "passed": true,
+      "checks": 21,
+      "screenshots": 3
+    },
+    "note": "独立集成测试和真实安装包均使用隔离的离线行情样例；已验证完整界面、窗口生命周期及 IPC 隔离，不代表本次云端访问了真实行情、新闻或财经日历服务。"
+  }
 }

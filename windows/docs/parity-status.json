@@ -1,8 +1,15 @@
 {
   "baseline": "0.25.6",
   "parityComplete": true,
-  "note": "已实现 macOS 0.25.6 的功能、布局、配色与交互，并通过真实 Windows 安装包回归。系统接口按 Windows 规则适配；字体光栅化、系统弹窗及 Quick Look 替代方式仍受平台影响。",
+  "note": "保留 macOS 0.25.6 的原有功能对齐基线；v0.26.0 新增完整 GoldDesk 1.4.0 金价工具，并通过真实 Windows 安装、启动、功能回归与卸载。系统接口按 Windows 规则适配；字体光栅化、系统弹窗及 Quick Look 替代方式仍受平台影响。",
   "features": [
+    {
+      "id": "gold",
+      "title": "金价桌台",
+      "status": "verified_windows",
+      "introducedIn": "0.26.0",
+      "sourceVersion": "GoldDesk 1.4.0"
+    },
     {
       "id": "translate",
       "title": "翻译",
@@ -130,35 +137,36 @@
     "系统文件索引仅覆盖已索引位置，另有 KnownFolders 目录扫描回退。",
     "OCR 依赖已安装语言包；自动粘贴受目标应用权限级别限制。",
     "有道翻译依赖网络；加载失败保留重试与浏览器打开。",
-    "安装器未代码签名；更新源默认空，下载校验 SHA-256。"
+    "安装器未代码签名；更新源默认空，下载校验 SHA-256。",
+    "金价 CI 使用隔离离线样例验证功能；实时行情、新闻及财经日历服务可用性依赖网络。"
   ],
   "verification": {
-    "commit": "2b017c9a7ec282f960658e0d0df789699d01db91",
-    "run": "44039291533",
-    "checks": 114,
-    "screenshots": 38,
+    "commit": "b2812b72d5906fb9913f74d554d062cb8f7a02d9",
+    "run": "44701176415",
+    "checks": 135,
+    "screenshots": 41,
     "performance": {
       "search": {
         "queries": 50,
-        "elapsedMS": 248.60000000009313
+        "elapsedMS": 110.90000000002328
       },
       "json": {
         "bytes": 6564891,
-        "elapsedMS": 782.7999999998137,
-        "heartbeats": 65,
+        "elapsedMS": 630.3000000000466,
+        "heartbeats": 57,
         "renderedLines": 43,
         "valid": true
       },
       "comparison": {
         "passed": true,
-        "ticks": 10,
-        "loadMilliseconds": 399.39999999990687,
-        "compareMilliseconds": 519.2999999998137,
-        "workerMilliseconds": 62.09999999962747,
-        "searchMilliseconds": 11.200000000186265,
-        "sortMilliseconds": 196.6999999997206,
-        "sortWorkerMilliseconds": 58.89999999990687,
-        "sortTicks": 14
+        "ticks": 7,
+        "loadMilliseconds": 238.89999999996508,
+        "compareMilliseconds": 317.29999999998836,
+        "workerMilliseconds": 36.90000000002328,
+        "searchMilliseconds": 5.300000000046566,
+        "sortMilliseconds": 121.90000000002328,
+        "sortWorkerMilliseconds": 29.099999999976717,
+        "sortTicks": 9
       }
     },
     "systemIndex": {
@@ -168,6 +176,14 @@
       "indexedOnly": true
     },
     "installed": true,
-    "uninstalled": true
-  }
+    "uninstalled": true,
+    "gold": {
+      "checks": 21,
+      "screenshots": 3,
+      "standaloneChecks": 21,
+      "standaloneScreenshots": 3
+    },
+    "totalScreenshots": 71
+  },
+  "verifiedVersion": "0.26.0"
 }
