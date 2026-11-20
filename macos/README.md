@@ -1,6 +1,6 @@
 # OpenAll macOS
 
-此目录包含 OpenAll **0.26.0（78）** 的 macOS 源码和离线资源，最低运行系统为 **macOS 13**。默认构建同时包含 Intel `x86_64` 与 Apple Silicon `arm64`。
+此目录包含 OpenAll **0.26.1（79）** 的 macOS 源码和离线资源，最低运行系统为 **macOS 13**。默认构建同时包含 Intel `x86_64` 与 Apple Silicon `arm64`。
 
 ## 构建前置条件
 
@@ -8,7 +8,7 @@
 - 系统自带的 `zsh`、`sips`，以及 `python3`。
 - 重建文本对比编辑器时需要 Node.js 18 或更新版本与 npm；直接构建应用使用仓库中已经打包的离线 JavaScript，无需安装 Node.js 依赖。
 
-项目使用 AppKit、WebKit、Carbon、ApplicationServices、Vision、ImageIO、UniformTypeIdentifiers 和系统 SQLite。没有 CocoaPods 或 SwiftPM。金价工具使用随应用内置的 Electron 45.4.1；首次构建会从官方发行地址下载对应架构 ZIP 并校验固定 SHA-256。通用包包含两个架构的组件，因此体积比之前的纯原生版本增大。
+项目使用 AppKit、WebKit、Carbon、ApplicationServices、Vision、ImageIO、UniformTypeIdentifiers、JavaScriptCore、Network 和系统 SQLite。没有 CocoaPods 或 SwiftPM。金价模型在 OpenAll 内通过系统 JavaScriptCore 执行，原生 URLSession 取价，WebKit 展示，不附带 Electron 或独立金价应用。
 
 ## 构建应用
 
@@ -83,4 +83,4 @@ zsh macos/scripts/release.sh
 
 ## 金价组件
 
-源码位于 [shared/gold-desk](../shared/gold-desk/README.md)，无需另装 Node.js 或金价桌台。可通过 `OPENALL_ELECTRON_CACHE` 指向已有官方 ZIP 的缓存目录；缓存仍会核对固定摘要。`OPENALL_GOLD_CHECK=1` 配合 `--design-snapshot` 验证搜索路由和真实窗口，使用自动生成的隔离样例目录。
+源码位于 [shared/gold-core](../shared/gold-core/README.md) 与 `shared/gold-ui`，无需另装 Node.js 或金价桌台。`zsh macos/scripts/check-gold-native.sh` 验证原生数据库和 Node 模型快照一致性。`OPENALL_GOLD_CHECK=1` 配合 `--design-snapshot` 验证搜索路由和真实窗口，使用自动生成的隔离样例目录。

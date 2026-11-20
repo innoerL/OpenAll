@@ -1,12 +1,12 @@
 {
   "baseline": "0.25.6",
-  "parityComplete": true,
-  "note": "保留 macOS 0.25.6 的原有功能对齐基线；v0.26.0 新增完整 GoldDesk 1.4.0 金价工具，并通过真实 Windows 安装、启动、功能回归与卸载。系统接口按 Windows 规则适配；字体光栅化、系统弹窗及 Quick Look 替代方式仍受平台影响。",
+  "parityComplete": false,
+  "note": "保留原有功能对齐基线；0.26.1 将金价重构为宿主管理的内置工具，背景与强调色跟随 OpenAll，曲线及涨跌保留独立语义颜色。本轮真实 Windows 安装回归待云端验证。",
   "features": [
     {
       "id": "gold",
       "title": "金价桌台",
-      "status": "verified_windows",
+      "status": "pending_windows_validation",
       "introducedIn": "0.26.0",
       "sourceVersion": "GoldDesk 1.4.0"
     },
@@ -131,7 +131,9 @@
       "status": "verified_windows"
     }
   ],
-  "remaining": [],
+  "remaining": [
+    "0.26.1 内置金价真实 Windows 与安装包回归"
+  ],
   "platformBoundaries": [
     "Ctrl 对应 Cmd，资源管理器对应访达；文件快速预览使用默认应用。",
     "系统文件索引仅覆盖已索引位置，另有 KnownFolders 目录扫描回退。",

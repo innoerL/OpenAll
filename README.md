@@ -10,12 +10,12 @@ OpenAll 支持 **macOS 和 Windows**。用快捷键搜索应用、文件或工�
 
 ## 下载安装
 
-当前版本：**0.26.0**。安装包和 SHA-256 校验文件见 [Releases](https://github.com/innoerL/OpenAll/releases/latest)。
+当前版本：**0.26.1**。安装包和 SHA-256 校验文件见 [Releases](https://github.com/innoerL/OpenAll/releases/latest)。
 
 | 平台 | 安装包 | 运行要求 |
 | --- | --- | --- |
-| macOS | [下载通用版](https://github.com/innoerL/OpenAll/releases/download/v0.26.0/OpenAll-macOS-0.26.0.zip) | macOS 13 或更新版本，Intel / Apple Silicon |
-| Windows | [下载安装版](https://github.com/innoerL/OpenAll/releases/download/v0.26.0/OpenAll-Windows-0.26.0-x64-setup.exe) | Windows x64 |
+| macOS | [下载通用版](https://github.com/innoerL/OpenAll/releases/download/v0.26.1/OpenAll-macOS-0.26.1.zip) | macOS 13 或更新版本，Intel / Apple Silicon |
+| Windows | [下载安装版](https://github.com/innoerL/OpenAll/releases/download/v0.26.1/OpenAll-Windows-0.26.1-x64-setup.exe) | Windows x64 |
 
 macOS 解压后将 `OpenAll.app` 放入“应用程序”；Windows 双击安装器，按向导完成安装。安装包尚未经过 Apple 公证或 Windows 代码签名，系统可能提示未知开发者。
 
@@ -25,7 +25,7 @@ macOS 解压后将 `OpenAll.app` 放入“应用程序”；Windows 双击安装
 
 | 工具 | 可以做什么 |
 | --- | --- |
-| 金价 | 输入“金价”打开桌面浮窗：国际现货、周大福牌价、近一年曲线、三币种、七日展望与实际预测验证；保留贴边收起、悬停展开和置顶。[使用说明](shared/gold-desk/README.md) |
+| 金价 | 输入“金价”打开桌面浮窗：国际现货、周大福牌价、近一年曲线、三币种、七日展望与实际预测验证；保留贴边收起、悬停展开和置顶。[使用说明](shared/gold-core/README.md) |
 | 搜索 | 应用与文件搜索、拼音与首字母、精确匹配、拼写纠错、网址别名、常用片段。支持 `文件 报告`、`文档 报告`、`图片 截图`、`json 配置` 等类型限定。 |
 | 剪贴板 | 屏幕底部通栏、大卡片和彩色类型栏；文本、图片、文件、收藏与标签；图片文字搜索、全文预览、双卡对比和跨工具粘贴。 |
 | JSON | 在同一区域格式化与编辑，支持行号、折叠、查找、压缩、转义、键名自然排序和撤销。 |

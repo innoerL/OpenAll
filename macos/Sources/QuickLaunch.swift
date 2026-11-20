@@ -633,6 +633,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     private var choosingAppearanceTag = 1
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        goldTool.onAppearanceSettings = { [weak self] in
+            guard let self else { return }
+            self.settingsTabIndex = 7
+            self.showSettings()
+        }
         if DesignPreview.enabled {
             NSApp.setActivationPolicy(.prohibited)
             buildWindow()

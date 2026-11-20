@@ -408,6 +408,20 @@ enum OpenAllTheme {
         WindowChrome.refreshAllWindows()
         return check()
     }
+
+    @MainActor static func withTemporaryAppearanceForDesign<T>(background: NSColor?, accent: NSColor?,
+                                                                perform check: () async throws -> T) async rethrows -> T {
+        let original = settings
+        defer { settings = original; WindowChrome.refreshAllWindows() }
+        // 原生窗口专项仅在内存中往返外观，不写入用户偏好。
+        if DesignPreview.enabled {
+            settings.backgroundHex = background.map(hex)
+            settings.accentHex = accent.map(hex)
+            settings.followsSystem = false
+            WindowChrome.refreshAllWindows()
+        }
+        return try await check()
+    }
 }
 
 enum WindowChrome {

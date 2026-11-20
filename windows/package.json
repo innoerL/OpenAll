@@ -1,7 +1,7 @@
 {
   "name": "openall-windows",
   "productName": "OpenAll",
-  "version": "0.26.0",
+  "version": "0.26.1",
   "description": "OpenAll Windows 效率工具",
   "main": "src/main.js",
   "scripts": {
@@ -37,10 +37,21 @@
     ],
     "extraResources": [
       {
-        "from": "../shared/gold-desk/app",
-        "to": "gold-desk/app",
+        "from": "../shared/gold-core",
+        "to": "gold-core",
         "filter": [
-          "**/*"
+          "*.cjs"
+        ]
+      },
+      {
+        "from": "../shared/gold-ui",
+        "to": "gold-ui",
+        "filter": [
+          "index.html",
+          "style.css",
+          "theme.js",
+          "renderer.js",
+          "chart.js"
         ]
       }
     ],

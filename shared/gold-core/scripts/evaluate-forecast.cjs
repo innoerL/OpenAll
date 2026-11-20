@@ -1,9 +1,9 @@
 const { DatabaseSync } = require('node:sqlite');
 const { readFileSync } = require('node:fs');
-const { forecast, classifyReturn, dateAfter } = require('../app/outlook.cjs');
-const { summarizeChecks } = require('../app/forecast-verification.cjs');
-const { dateBeforeYear, scheduledAt } = require('../app/time.cjs');
-const { marketIsClosed } = require('../app/sources.cjs');
+const { forecast, classifyReturn, dateAfter } = require('../outlook.cjs');
+const { summarizeChecks } = require('../forecast-verification.cjs');
+const { dateBeforeYear, scheduledAt } = require('../time.cjs');
+const { marketIsClosed } = require('../sources.cjs');
 
 const [filename, cutoff, period, hourlyFilename] = process.argv.slice(2);
 if (!filename || !cutoff || !['development', 'holdout'].includes(period)) {

@@ -1,0 +1,97 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const vm = require('node:vm');
+const { EventEmitter } = require('node:events');
+const { createRequire } = require('node:module');
+const filename = path.join(__dirname, '../src/gold-service.js');
+const localRequire = createRequire(filename);
+const nativeTheme = Object.assign(new EventEmitter(), { shouldUseDarkColors: true });
+const powerMonitor = new EventEmitter();
+const failExternal = () => { throw Error('离线回归禁止访问网络或外部应用'); };
+const electron = { app: { isPackaged: false }, BrowserWindow: failExternal, net: { fetch: failExternal, isOnline: failExternal }, powerMonitor, nativeTheme, shell: { openExternal: failExternal } };
+const moduleObject = { exports: {} };
+vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { module: moduleObject, exports: moduleObject.exports, require: name => name === 'electron' ? electron : localRequire(name), __dirname: path.dirname(filename), AbortController, AbortSignal, setTimeout, clearTimeout, console });
+
+(async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'openall-gold-service-'));
+  const sentinel = path.join(directory, 'quotes.sqlite');
+  const sentinelBytes = Buffer.from('金价样例不能读取或修改此文件');
+  fs.writeFileSync(sentinel, sentinelBytes);
+  let settings = { theme: 'custom', backgroundHex: '#203448', accentHex: '#f5ad52' };
+  let service, second;
+  try {
+    service = await moduleObject.exports.createGoldService({ dataDirectory: directory, legacyDirectory: directory, fixture: true, settings: () => settings });
+    await service.ready;
+    const first = service.snapshot();
+    assert.ok(['gold', 'ctf'].every(id => first.instruments[id].quote && first.instruments[id].history.length > 300));
+    assert.equal(first.theme.background, '#203448');
+    assert.equal(first.theme.accent, '#f5ad52');
+    assert.equal(first.theme.dark, true);
+    let updates = 0, published;
+    const unsubscribe = service.subscribe(value => { updates++; published = value; });
+    settings = { theme: 'system', accentHex: '#4455aa' };
+    nativeTheme.shouldUseDarkColors = false;
+    nativeTheme.emit('updated');
+    assert.equal(published.theme.background, '#f2f2ef');
+    assert.equal(published.theme.accent, '#4455aa');
+    assert.equal(published.theme.dark, false);
+    service.update('currency', 'EUR');
+    service.update('layout', true);
+    service.update('view', 'outlook');
+    assert.equal(service.snapshot().currency, 'EUR');
+    assert.equal(service.snapshot().view, 'outlook');
+    assert.equal(service.getSetting('dark'), undefined, '不建立金价独立主题设置');
+    assert.throws(() => service.update('currency', 'INVALID'));
+    assert.throws(() => service.update('layout', 'true'));
+    assert.throws(() => service.update('view', 'INVALID'));
+    await assert.rejects(service.openSource('__proto__'));
+    await assert.rejects(service.openEvent('https://example.test/'));
+    assert.equal(await service.openSource('gold'), true);
+    const forecast = service.snapshot().outlook.forecasts.gold;
+    assert.equal(forecast.days.length, 7);
+    unsubscribe();
+    const before = updates;
+    service.update('pin');
+    assert.equal(updates, before);
+    service.dispose(); service.dispose();
+    assert.equal(powerMonitor.listenerCount('resume'), 0);
+    assert.equal(nativeTheme.listenerCount('updated'), 0);
+    assert.deepEqual(fs.readFileSync(sentinel), sentinelBytes, '样例不读取无效旧库，也不覆盖哨兵');
+    assert.deepEqual(fs.readdirSync(directory), ['quotes.sqlite'], '样例不创建 WAL、SHM 或迁移临时文件');
+    const missingDirectory = path.join(directory, 'not-created');
+    second = await moduleObject.exports.createGoldService({ dataDirectory: missingDirectory, fixture: true, settings: () => settings });
+    await second.ready;
+    second.dispose();
+    assert.equal(fs.existsSync(missingDirectory), false, '样例不创建传入的数据目录');
+
+    // 磁盘持久化通过正式服务分支与注入的数据源验证，不使用用户真实目录。
+    electron.net.isOnline = () => true;
+    const sample = localRequire('../../shared/gold-core/fixture.cjs').createFixture();
+    const persistentDirectory = path.join(directory, 'persistent');
+    let reads = 0;
+    const sources = Object.fromEntries(Object.entries(sample.sources).map(([instrument, methods]) => [instrument,
+      Object.fromEntries(Object.entries(methods).map(([kind, read]) => [kind, (...args) => { reads++; return read(...args); }]))]));
+    service = await moduleObject.exports.createGoldService({ dataDirectory: persistentDirectory, sources, clock: sample.clock, settings: () => settings });
+    await service.ready;
+    service.update('currency', 'EUR');
+    service.update('layout', true);
+    const retained = service.snapshot();
+    service.dispose();
+    const previousReads = reads;
+    second = await moduleObject.exports.createGoldService({ dataDirectory: persistentDirectory, sources, clock: sample.clock, settings: () => settings });
+    await second.ready;
+    assert.ok(fs.existsSync(path.join(persistentDirectory, 'quotes.sqlite')));
+    assert.equal(reads, previousReads, '正式分支重开复用已完成任务，不重复拉取样例');
+    assert.equal(second.snapshot().currency, 'EUR');
+    assert.equal(second.snapshot().combined, true);
+    assert.equal(second.snapshot().theme.background, '#f2f2ef');
+    assert.equal(second.snapshot().instruments.gold.quote.price, retained.instruments.gold.quote.price);
+    assert.equal(second.snapshot().instruments.ctf.quote.price, retained.instruments.ctf.quote.price);
+    console.log('金价宿主服务回归通过：内存样例与哨兵保护、主题同步、参数边界、正式分支持久化与资源释放');
+  } finally {
+    second?.dispose(); service?.dispose();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });

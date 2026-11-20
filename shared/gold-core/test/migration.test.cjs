@@ -3,26 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { Store } = require('../app/store.cjs');
-const { migrateLegacyData } = require('../app/migrate.cjs');
-const { helperDataDirectory } = require('../app/data-location.cjs');
-
-test('辅助进程误继承样例环境时也不会覆盖正式或显式指定的用户目录', () => {
-  const official = path.join(os.tmpdir(), 'openall-not-created-data');
-  const first = helperDataDirectory(official, '', true);
-  const second = helperDataDirectory(official, official, true);
-  try {
-    assert.notEqual(first, second);
-    assert.notEqual(first, path.join(official, 'OpenAll/gold'));
-    assert.notEqual(second, official);
-    assert.equal(path.dirname(first), os.tmpdir());
-    assert.equal(helperDataDirectory(official, '', false), path.join(official, 'OpenAll/gold'));
-    assert.equal(helperDataDirectory(official, official, false), official);
-  } finally {
-    fs.rmSync(first, { force: true, recursive: true });
-    fs.rmSync(second, { force: true, recursive: true });
-  }
-});
+const { Store } = require('../store.cjs');
+const { migrateLegacyData } = require('../migrate.cjs');
 
 function directory(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openall-gold-migration-'));

@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { Scheduler } = require('../app/scheduler.cjs');
-const { Store } = require('../app/store.cjs');
-const { dateAt, scheduledAt, dateBeforeYear, HALF_HOUR, DAY } = require('../app/time.cjs');
-const { createSources, parseCtfHistory, parseGold, parseGoldHistory, parseOfficialCtf } = require('../app/sources.cjs');
-const { convertGold, cutoffDate, parseFx, GRAMS_PER_TROY_OUNCE } = require('../app/currency.cjs');
+const { Scheduler } = require('../scheduler.cjs');
+const { Store } = require('../store.cjs');
+const { dateAt, scheduledAt, dateBeforeYear, HALF_HOUR, DAY } = require('../time.cjs');
+const { createSources, parseCtfHistory, parseGold, parseGoldHistory, parseOfficialCtf } = require('../sources.cjs');
+const { convertGold, cutoffDate, parseFx, GRAMS_PER_TROY_OUNCE } = require('../currency.cjs');
 
 const when = (time) => Date.parse(`2026-11-20T${time}:00+08:00`);
 const quote = (date, price = 3500) => ({ date, price, quoteTime: null, source: '测试源', note: '' });

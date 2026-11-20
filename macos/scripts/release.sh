@@ -12,10 +12,6 @@ releaseRoot="$macosRoot/.build/release"
 OPENALL_REVIEW=0 OPENALL_STRESS=0 zsh "$macosRoot/scripts/build.sh"
 mkdir -p "$releaseRoot"
 /usr/bin/ditto "$macosRoot/.build/OpenAll.app" "$releaseRoot/OpenAll.app"
-# 先签名需要 JIT 的运行组件，再签名外层 AppKit 应用，避免覆盖子组件权限。
-for helper in "$releaseRoot/OpenAll.app/Contents/Helpers/"OpenAllGold-*.app; do
-    /usr/bin/codesign --force --deep --options runtime --timestamp --entitlements "$macosRoot/scripts/gold-entitlements.plist" --sign "$DEVELOPER_ID_APPLICATION" "$helper"
-done
 /usr/bin/codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_APPLICATION" "$releaseRoot/OpenAll.app"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$releaseRoot/OpenAll.app"
 /usr/bin/ditto -c -k --keepParent "$releaseRoot/OpenAll.app" "$releaseRoot/OpenAll-notary.zip"

@@ -6,12 +6,14 @@ on:
     branches: [main]
     paths:
       - 'macos/**'
-      - 'shared/gold-desk/**'
+      - 'shared/gold-core/**'
+      - 'shared/gold-ui/**'
       - '.github/workflows/macos.yml'
   pull_request:
     paths:
       - 'macos/**'
-      - 'shared/gold-desk/**'
+      - 'shared/gold-core/**'
+      - 'shared/gold-ui/**'
       - '.github/workflows/macos.yml'
 
 permissions:
@@ -31,7 +33,6 @@ jobs:
     env:
       OPENALL_REVIEW: '0'
       OPENALL_STRESS: '0'
-      OPENALL_ELECTRON_CACHE: ${{ github.workspace }}/macos/.build/electron
     steps:
       - name: 检出源码
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -59,7 +60,9 @@ jobs:
       - name: 运行纯模型回归
         run: |
           zsh macos/scripts/test.sh 2>&1 | tee macos/.build/ci-logs/models.log
-          node --test shared/gold-desk/test/*.test.cjs 2>&1 | tee macos/.build/ci-logs/gold-models.log
+          node --test shared/gold-core/test/*.test.cjs 2>&1 | tee macos/.build/ci-logs/gold-models.log
+      - name: 金价原生数据库与模型一致性
+        run: zsh macos/scripts/check-gold-native.sh 2>&1 | tee macos/.build/ci-logs/gold-native.log
       - name: 构建 macOS Universal 应用
         run: zsh macos/scripts/build.sh 2>&1 | tee macos/.build/ci-logs/build.log
       - name: 检查双架构与本地签名
@@ -68,9 +71,7 @@ jobs:
           xcrun lipo -info macos/.build/OpenAll.app/Contents/MacOS/OpenAll | tee macos/.build/ci-logs/architectures.log
           codesign --verify --deep --strict --verbose=2 macos/.build/OpenAll.app 2>&1 | tee macos/.build/ci-logs/signature.log
           plutil -lint macos/.build/OpenAll.app/Contents/Info.plist
-          for architecture in x64 arm64; do
-            codesign --verify --deep --strict "macos/.build/OpenAll.app/Contents/Helpers/OpenAllGold-$architecture.app"
-          done
+          test ! -d macos/.build/OpenAll.app/Contents/Helpers
       - name: 金价搜索与真实窗口验收
         run: |
           OPENALL_PREVIEW_ROOT="$RUNNER_TEMP/openall-gold-preview" \

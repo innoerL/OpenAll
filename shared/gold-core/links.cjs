@@ -1,4 +1,4 @@
-const { CTF_PAGE } = require('./ctf-official.cjs');
+const CTF_PAGE = 'https://www.ctfmall.com/todaygold';
 const { CALENDAR_URLS } = require('./macro-calendar.cjs');
 const LINKS = {
   gold: 'https://gold-api.com/assets/gold',

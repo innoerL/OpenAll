@@ -1,7 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const subscribe=(channel,fn)=>{const handler=(_event,...args)=>fn(...args);ipcRenderer.on(channel,handler);return ()=>ipcRenderer.removeListener(channel,handler);};
+// 金价和贴边条沿用宿主预加载，只注入当前页面所需的最小能力。
+if (process.isMainFrame !== false && process.argv.includes('--openall-page=gold')) {
+  contextBridge.exposeInMainWorld('openallGold', {
+    read: () => ipcRenderer.invoke('openall:gold-read'),
+    watch: fn => subscribe('openall:gold-snapshot', fn),
+    action: (name, payload) => ipcRenderer.invoke('openall:gold-action', name, payload),
+    watchEdge: fn => subscribe('openall:gold-edge', fn),
+  });
+} else if (process.isMainFrame !== false && process.argv.includes('--openall-page=gold-rail')) {
+  contextBridge.exposeInMainWorld('openallGoldRail', {
+    read: () => ipcRenderer.invoke('openall:gold-rail-read'),
+    watch: fn => subscribe('openall:gold-rail-theme', fn),
+    expand: () => ipcRenderer.invoke('openall:gold-rail-expand'),
+  });
+} else if (process.isMainFrame !== false) {
 const backend = require('./backend');
 const diff = require('../assets/diff-core');
-const subscribe=(channel,fn)=>{const handler=(_event,...args)=>fn(...args);ipcRenderer.on(channel,handler);return ()=>ipcRenderer.removeListener(channel,handler);};
 contextBridge.exposeInMainWorld('openall', {
   diff:{align:diff.align},
   backend:{configDiff:backend.configDiff,parseLogs:backend.parseLogs,logFields:backend.logFields,logGroups:backend.logGroups,restoreSQL:backend.restoreSQL,explain:backend.explain},
@@ -20,3 +35,4 @@ contextBridge.exposeInMainWorld('openall', {
   onNavigate:fn=>subscribe('navigate',fn),onClipboard:fn=>subscribe('clipboard-changed',fn),onSearchUpdated:fn=>subscribe('search-updated',fn),
   onPaste:fn=>subscribe('paste-content',fn),onPasteImage:fn=>subscribe('paste-image',fn),onSettingsChanged:fn=>subscribe('settings-changed',fn),onStackChanged:fn=>subscribe('stack-changed',fn),onNotice:fn=>subscribe('notice',fn)
 });
+}

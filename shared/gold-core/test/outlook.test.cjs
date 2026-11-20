@@ -1,13 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { dateAt, DAY } = require('../app/time.cjs');
-const { createSources, marketIsClosed } = require('../app/sources.cjs');
-const { getChanges } = require('../app/changes.cjs');
-const { forecast, classifyReturn, estimateDirection } = require('../app/outlook.cjs');
-const { parseFred, parseNews } = require('../app/market-context.cjs');
-const { parseBls, parseFomc, parseEia, upcomingCalendar } = require('../app/macro-calendar.cjs');
-const { EdgeDock, edgeSide, edgeBounds, railBounds, smoothStep } = require('../app/edge-dock.cjs');
+const { dateAt, DAY } = require('../time.cjs');
+const { createSources, marketIsClosed } = require('../sources.cjs');
+const { getChanges } = require('../changes.cjs');
+const { forecast, classifyReturn, estimateDirection } = require('../outlook.cjs');
+const { parseFred, parseNews } = require('../market-context.cjs');
+const { parseBls, parseFomc, parseEia, upcomingCalendar } = require('../macro-calendar.cjs');
+const { EdgeDock, edgeSide, edgeBounds, railBounds, smoothStep } = require('../edge-dock.cjs');
 
 test('涨跌优先比较保存的同单位报价，并显示前移后的实际日期', () => {
   const now = { date: '2026-11-23', price: 110 };

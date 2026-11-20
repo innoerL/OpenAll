@@ -12,7 +12,8 @@ on:
       - 'windows/scripts/**'
       - 'windows/package*.json'
       - 'macos/comparison-editor/**'
-      - 'shared/gold-desk/**'
+      - 'shared/gold-core/**'
+      - 'shared/gold-ui/**'
       - '.github/workflows/windows.yml'
   pull_request:
     paths:
@@ -23,7 +24,8 @@ on:
       - 'windows/scripts/**'
       - 'windows/package*.json'
       - 'macos/comparison-editor/**'
-      - 'shared/gold-desk/**'
+      - 'shared/gold-core/**'
+      - 'shared/gold-ui/**'
       - '.github/workflows/windows.yml'
 
 permissions:

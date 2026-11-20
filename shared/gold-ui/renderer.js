@@ -1,4 +1,6 @@
-const desk = window.goldDesk;
+(() => {
+'use strict';
+const host = window.openallGold;
 const $ = (selector, root = document) => root.querySelector(selector);
 const amount = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const whole = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 });
@@ -18,190 +20,22 @@ let lastSnapshot;
 let forecastInstrument = 'gold';
 let preferredPin = true;
 let dockSide = null;
+let outlookSignature;
 
-function chartBounds(values) {
-  const low = Math.min(...values);
-  const high = Math.max(...values);
-  const span = high - low || high * .04;
-  const step = 10 ** Math.floor(Math.log10(span / 2));
-  const interval = Math.ceil(span / 2 / step) * step;
-  const minimum = Math.floor(low / interval) * interval;
-  const maximum = Math.ceil(high / interval) * interval;
-  return [minimum, Math.max(maximum, minimum + interval)];
+function showError(error) {
+  const panel = $('#error');
+  panel.textContent = `读取金价失败：${error?.message || String(error)}`;
+  panel.hidden = false;
 }
 
-class Chart {
-  constructor(card) {
-    this.canvas = $('canvas', card);
-    this.label = $('.hover', card);
-    this.empty = $('.chart-empty', card);
-    this.context = this.canvas.getContext('2d');
-    new ResizeObserver(() => this.paint()).observe(this.canvas);
-    this.canvas.addEventListener('pointermove', (event) => this.pick(event.offsetX));
-    this.canvas.addEventListener('pointerleave', () => this.select(null));
-    this.canvas.addEventListener('blur', () => this.select(null));
-    this.canvas.addEventListener('keydown', (event) => this.onKey(event));
-  }
-
-  update(series, since, today, dualAxis, state) {
-    const signature = JSON.stringify([series, since, today, dualAxis]);
-    if (this.signature !== signature) {
-      this.signature = signature;
-      this.dualAxis = dualAxis;
-      this.first = Date.parse(since);
-      this.last = Date.parse(today);
-      this.selected = null;
-      this.series = series.map(({ id, rows, unit }) => ({
-        id, name: SERIES[id], unit, byTime: new Map(rows.map(({ date, price }) => [Date.parse(date), price])),
-      }));
-      this.times = [...new Set(this.series.flatMap(({ byTime }) => [...byTime.keys()]))].sort((a, b) => a - b);
-      this.paint();
-    }
-    this.empty.hidden = this.times.length > 0;
-    this.empty.textContent = state === 'loading' ? '读取历史数据…' : '暂无历史数据';
-  }
-
-  horizontal(time) {
-    return this.left + (time - this.first) / (this.last - this.first) * this.plotWidth;
-  }
-
-  vertical(price, [minimum, maximum]) {
-    return 6 + (maximum - price) / (maximum - minimum) * (this.height - 12);
-  }
-
-  paint() {
-    const { width, height } = this.canvas.getBoundingClientRect();
-    if (!width || !height) return;
-    this.height = height;
-    const density = window.devicePixelRatio || 1;
-    this.canvas.width = Math.round(width * density);
-    this.canvas.height = Math.round(height * density);
-    const draw = this.context;
-    draw.scale(density, density);
-    if (!this.times?.length) {
-      this.label.hidden = true;
-      return;
-    }
-
-    const prices = this.series.flatMap(({ byTime }) => [...byTime.values()]);
-    const theme = getComputedStyle(document.documentElement);
-    for (const line of this.series) {
-      line.accent = theme.getPropertyValue(`--${line.id}-line`).trim();
-      line.fill = theme.getPropertyValue(`--${line.id}-fill`).trim();
-    }
-    const shared = this.dualAxis ? null : chartBounds(prices);
-    const axes = this.series.map(({ byTime }) => shared || (byTime.size ? chartBounds([...byTime.values()]) : null));
-    draw.font = '9px system-ui, sans-serif';
-    const axisWidth = (axis) => axis ? Math.max(30, draw.measureText(whole.format(axis[1])).width + 7) : 7;
-    this.left = axisWidth(axes[0]);
-    const right = width - (this.dualAxis ? axisWidth(axes[1]) : 5);
-    this.plotWidth = right - this.left;
-
-    for (const tick of [0, .5, 1]) {
-      const y = 6 + tick * (height - 12);
-      for (const [index, axis] of axes.entries()) {
-        if (!axis || (!this.dualAxis && index > 0)) continue;
-        const [min, max] = axis;
-        draw.textAlign = index ? 'right' : 'left';
-        draw.fillStyle = this.dualAxis ? this.series[index].accent : theme.getPropertyValue('--axis').trim();
-        draw.fillText(whole.format(max - tick * (max - min)), index ? width - 1 : 0, y + 3);
-      }
-      draw.strokeStyle = theme.getPropertyValue('--chart-grid').trim();
-      draw.lineWidth = 1;
-      draw.beginPath();
-      draw.moveTo(this.left, y);
-      draw.lineTo(right, y);
-      draw.stroke();
-    }
-
-    this.series.forEach((serie, index) => {
-      if (axes[index]) this.paintSeries(serie, axes[index]);
-    });
-    this.paintSelection(width);
-  }
-
-  paintSeries(serie, axis) {
-    const draw = this.context;
-    const runs = [];
-    for (const [time, price] of serie.byTime) {
-      const run = runs.at(-1);
-      const point = { time, x: this.horizontal(time), y: this.vertical(price, axis) };
-      if (!run || time - run.at(-1).time > 4 * DAY) runs.push([point]);
-      else run.push(point);
-    }
-    const wash = draw.createLinearGradient(0, 0, 0, this.height);
-    wash.addColorStop(0, serie.fill + 'd0');
-    wash.addColorStop(1, serie.fill + '00');
-    for (const points of runs) {
-      if (points.length === 1) {
-        draw.beginPath();
-        draw.arc(points[0].x, points[0].y, 2, 0, Math.PI * 2);
-        draw.fillStyle = serie.accent;
-        draw.fill();
-        continue;
-      }
-      if (this.series.length === 1) {
-        draw.beginPath();
-        draw.moveTo(points[0].x, this.height - 5);
-        for (const { x, y } of points) draw.lineTo(x, y);
-        draw.lineTo(points.at(-1).x, this.height - 5);
-        draw.closePath();
-        draw.fillStyle = wash;
-        draw.fill();
-      }
-      draw.beginPath();
-      draw.moveTo(points[0].x, points[0].y);
-      for (const { x, y } of points.slice(1)) draw.lineTo(x, y);
-      draw.strokeStyle = serie.accent;
-      draw.lineWidth = this.series.length === 1 ? 1.5 : 1.75;
-      draw.lineJoin = 'round';
-      draw.stroke();
-    }
-  }
-
-  paintSelection(width) {
-    const time = this.times[this.selected];
-    this.label.hidden = !Number.isFinite(time);
-    if (this.label.hidden) return;
-    const draw = this.context;
-    const x = this.horizontal(time);
-    draw.beginPath();
-    draw.moveTo(x, 4);
-    draw.lineTo(x, this.height - 4);
-    draw.strokeStyle = '#65736b8a';
-    draw.lineWidth = 1;
-    draw.stroke();
-    const date = new Date(time).toISOString().slice(0, 10);
-    const prices = this.series.map(({ name, unit, byTime }) => {
-      const price = byTime.get(time);
-      return `${name} ${price === undefined ? '—' : amount.format(price) + ' ' + unit}`;
-    });
-    this.label.textContent = [date, ...prices].join('\n');
-    this.label.style.left = `${Math.max(0, Math.min(width - this.label.offsetWidth, x + 8))}px`;
-  }
-
-  select(index) {
-    if (index === this.selected) return;
-    this.selected = index;
-    this.paint();
-  }
-
-  onKey(event) {
-    if (!this.times?.length || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const last = this.times.length - 1;
-    const current = this.selected ?? last;
-    if (event.key === 'Home') this.select(0);
-    else if (event.key === 'End') this.select(last);
-    else this.select(Math.max(0, Math.min(last, current + (event.key === 'ArrowLeft' ? -1 : 1))));
-  }
-
-  pick(x) {
-    if (!this.times?.length) return;
-    const target = this.first + (x - this.left) / this.plotWidth * (this.last - this.first);
-    const nearest = this.times.reduce((best, time, index) =>
-      Math.abs(target - time) < Math.abs(target - this.times[best]) ? index : best, 0);
-    this.select(nearest);
+async function action(name, payload) {
+  try {
+    const result = await host.action(name, payload);
+    if (result?.instruments) render(result);
+    return result;
+  } catch (error) {
+    showError(error);
+    return null;
   }
 }
 
@@ -211,17 +45,6 @@ function updatePin(pinned) {
   button.setAttribute('aria-pressed', Boolean(dockSide) || pinned);
   button.setAttribute('aria-disabled', Boolean(dockSide));
   button.title = dockSide ? '贴边展开时自动置顶' : pinned ? '取消置顶' : '窗口置顶';
-}
-
-function updateTheme(dark) {
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  const button = $('#theme');
-  button.setAttribute('aria-pressed', dark);
-  button.textContent = dark ? '☀' : '☾';
-  const label = dark ? '切换浅色模式' : '切换黑色模式';
-  button.title = label;
-  button.setAttribute('aria-label', label);
-  for (const chart of Object.values(charts)) chart.paint();
 }
 
 function updateEdgeMotion(side, collapsed) {
@@ -258,7 +81,7 @@ function updateQuote(id, card, item, snapshot) {
     status === 'loading' ? '正在取价' :
     status === 'retry' ? '等待重试' :
     waitingForFx ? '等待汇率' :
-    done ? (quote?.note ? '休市时段' : outOfDate ? '上次报价' : '已更新') : '等待 10 点';
+    done ? (quote?.note?.includes('休市') ? '休市时段' : outOfDate ? '上次报价' : '已更新') : '等待 10 点';
   state.dataset.tone = !online ? 'offline' : done && !outOfDate && !waitingForFx ? 'ok' : 'pending';
   $('span', state).textContent = label;
   $('.quote-price', card).textContent = quote ? (id === 'gold' ? amount : whole).format(quote.price) : '—';
@@ -310,7 +133,7 @@ function updateSummary(id, card, outlook) {
     '打开七日展望';
 }
 
-function updateChanges(card, { daily, weekly }) {
+function updateChanges(card, { daily, weekly } = {}) {
   let strip = $('.changes', card);
   if (!strip) {
     strip = element('span', undefined, 'changes');
@@ -331,7 +154,7 @@ function updateChanges(card, { daily, weekly }) {
 }
 
 const cards = { gold: $('#gold'), ctf: $('#ctf'), combined: $('#combined') };
-const charts = Object.fromEntries(Object.entries(cards).map(([id, card]) => [id, new Chart(card)]));
+const charts = Object.fromEntries(Object.entries(cards).map(([id, card]) => [id, new window.OpenAllGoldChart(card)]));
 
 function updateChart(id, series, snapshot, caption, dualAxis = false) {
   const card = cards[id];
@@ -344,7 +167,15 @@ function updateChart(id, series, snapshot, caption, dualAxis = false) {
 }
 
 function render(snapshot) {
+  if (!snapshot?.instruments) return;
   lastSnapshot = snapshot;
+  window.OpenAllGoldTheme.apply(snapshot.theme);
+  dockSide = snapshot.dockSide ?? null;
+  updatePin(snapshot.pinned ?? true);
+  updateView(snapshot.view || 'quotes');
+  updateLayout(Boolean(snapshot.combined));
+  $('#edge-setting').setAttribute('aria-pressed', snapshot.edgeEnabled !== false);
+  $('#error').hidden = true;
   const { currency, instruments } = snapshot;
   $('#date').textContent = snapshot.today;
   $('#currency').value = currency;
@@ -371,6 +202,7 @@ function render(snapshot) {
   updateChart('ctf', [ctf], snapshot, '每日挂牌价');
   updateChart('combined', [gold, ctf], snapshot, separateAxes ? '左右轴各用独立刻度' : '两条曲线共用刻度', separateAxes);
   renderOutlook();
+  window.OpenAllGoldUI = { ready: true };
 }
 
 const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', weekday: 'short' });
@@ -378,6 +210,9 @@ const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', weekday: 'sh
 function renderOutlook() {
   if (!lastSnapshot) return;
   const { outlook, currency } = lastSnapshot;
+  const signature = JSON.stringify([outlook, currency, forecastInstrument]);
+  if (signature === outlookSignature) return;
+  outlookSignature = signature;
   const data = outlook.forecasts[forecastInstrument];
   const unit = forecastInstrument === 'gold' ? `${UNITS[currency]}/克` : '元/克';
   const number = forecastInstrument === 'gold' ? amount : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 });
@@ -427,7 +262,8 @@ function renderOutlook() {
       `${factor.change > 0 ? '+' : ''}${Math.round(factor.change)} 基点`;
     const button = element('button', undefined, 'driver');
     button.append(element('span', factor.name), element('small', factor.date), element('b', change));
-    button.addEventListener('click', () => desk.openSource(factor.id));
+    button.dataset.direction = factor.change > 0 ? 'up' : factor.change < 0 ? 'down' : 'flat';
+    button.addEventListener('click', () => action('source', factor.id));
     drivers.append(button);
   }
 
@@ -441,7 +277,7 @@ function renderOutlook() {
     const line = element('li');
     const button = element('button', event.title);
     button.title = event.title;
-    button.addEventListener('click', () => desk.openEvent(event.url));
+    button.addEventListener('click', () => action('event', event.url));
     line.append(element('span', `${displayTime.format(new Date(event.timestamp)).split(' ')[0]} · ${event.tag}`), button);
     events.append(line);
   }
@@ -454,7 +290,7 @@ function renderOutlook() {
   for (const event of outlook.calendar.events.slice(0, 4)) {
     const line = element('li');
     const button = element('button', event.title);
-    button.addEventListener('click', () => desk.openSource(event.source));
+    button.addEventListener('click', () => action('source', event.source));
     line.append(element('span', displayTime.format(event.timestamp)), button);
     calendar.append(line);
   }
@@ -472,37 +308,35 @@ function selectForecast(id) {
 
 async function openOutlook(id) {
   selectForecast(id);
-  updateView(await desk.setView('outlook'));
+  await action('view', 'outlook');
 }
 
-$('#pin').addEventListener('click', async () => {
-  if (!dockSide) updatePin(await desk.pin());
-});
-$('#theme').addEventListener('click', async () => updateTheme(await desk.theme()));
-$('#edge-setting').addEventListener('click', async (event) => {
-  const button = event.currentTarget;
-  button.setAttribute('aria-pressed', await desk.toggleEdge());
-});
+
+$('#pin').addEventListener('click', () => { if (!dockSide) action('pin'); });
+$('#theme').addEventListener('click', () => action('appearance'));
+$('#edge-setting').addEventListener('click', () => action('edge'));
 for (const view of ['quotes', 'outlook']) {
-  $(`#${view}-view`).addEventListener('click', async () => updateView(await desk.setView(view)));
+  $(`#${view}-view`).addEventListener('click', () => action('view', view));
 }
 for (const id of ['gold', 'ctf']) {
   $(`#forecast-${id}`).addEventListener('click', () => selectForecast(id));
 }
-$('#layout').addEventListener('click', async () => updateLayout(await desk.setLayout($('#layout').getAttribute('aria-pressed') !== 'true')));
-$('#currency').addEventListener('change', async (event) => render(await desk.setCurrency(event.target.value)));
-$('#minimize').addEventListener('click', () => desk.minimize());
-$('#close').addEventListener('click', () => desk.quit());
-document.querySelectorAll('[data-source]').forEach((link) => {
-  link.addEventListener('click', () => desk.openSource(link.dataset.source));
+$('#layout').addEventListener('click', () => action('layout', $('#layout').getAttribute('aria-pressed') !== 'true'));
+$('#currency').addEventListener('change', event => action('currency', event.target.value));
+$('#minimize').addEventListener('click', () => action('minimize'));
+$('#close').addEventListener('click', () => action('close'));
+document.addEventListener('click', event => {
+  const source = event.target.closest('[data-source]');
+  if (source) action('source', source.dataset.source);
 });
-desk.watch(render);
-desk.watchEdge(updateEdgeMotion);
-desk.read().then((snapshot) => {
-  render(snapshot);
-  dockSide = snapshot.dockSide;
-  updatePin(snapshot.pinned);
-  updateLayout(snapshot.combined);
-  updateTheme(snapshot.dark);
-  $('#edge-setting').setAttribute('aria-pressed', snapshot.edgeEnabled);
+$('.window-bar').addEventListener('mousedown', event => {
+  if (event.button === 0 && !event.target.closest('button,select,input,a')) action('drag');
 });
+if (!host) showError(new Error('请从 OpenAll 打开金价工具'));
+else {
+  const unsubscribe = host.watch(render);
+  const unsubscribeEdge = host.watchEdge(updateEdgeMotion);
+  host.read().then(render).catch(showError);
+  window.addEventListener('pagehide', () => { unsubscribe?.(); unsubscribeEdge?.(); }, { once: true });
+}
+})();

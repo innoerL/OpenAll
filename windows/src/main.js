@@ -9,6 +9,8 @@ const { commands, identity } = require('./search-engine');
 const { NativeBridge, WorkerClient, recognizeImage } = require('./native-services');
 const { Updater }=require('./native-updater');
 const { ShortcutRecording }=require('./native-shortcut-recording');
+const { createGoldService, resourceDirectory }=require('./gold-service');
+const { placement: goldPlacement, attachGoldWindow }=require('./gold-window');
 const smokeMode=process.env.OPENALL_CI_SMOKE==='1';
 const testMode=smokeMode||process.env.OPENALL_TEST_MODE==='1';
 if(testMode){const isolated=process.env.OPENALL_TEST_USER_DATA||fs.mkdtempSync(path.join(os.tmpdir(),'openall-win-test-'));fs.mkdirSync(isolated,{recursive:true});app.setPath('userData',path.resolve(isolated));}
@@ -23,7 +25,7 @@ let ranking=store.read('search-ranking',{usage:{},rules:{}});
 const native=new NativeBridge();
 const windows=new Map(),windowContexts=new Map();
 const workers=[];
-let goldToolReady;
+let goldServiceReady,goldWindowController;
 let searchWorker,backendWorker,imageWorker,tray,monitor,refreshTimer,searchStatus={},lastExternal={handle:'0',pid:0,name:''},pasteTarget=null,lastContentHash='',capturing=false,capturePausedUntil=0,ocrQueue=Promise.resolve(),shortcutsStatus={};
 let shortcutTestRegistration=false;
 const shortcutRecording=new ShortcutRecording({suspend:()=>globalShortcut.unregisterAll(),resume:()=>{if(!app.isQuitting){const failed=applyShortcuts(settings);if(failed.length)notifyError(Error('快捷键恢复失败：'+failed.join('、')));}}});
@@ -44,50 +46,51 @@ function windowState(win){return {maximized:win.isMaximized(),resizable:win.isRe
 function rememberTarget(){const focused=BrowserWindow.getFocusedWindow();const ctx=currentContext(focused);if(focused&&!transient.has(ctx.page)){pasteTarget={windowId:focused.id};return;}if(native.foreground.pid&&native.foreground.pid!==process.pid){lastExternal=native.foreground;pasteTarget={...lastExternal};}}
 function dimensions(page){const sizes={search:[720,76],clipboard:[screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea.width,330],stack:[340,174],translate:[580,320],selection:[640,510],json:[960,600],comparison:[1040,600],configFormat:[960,420],sqlFormat:[960,420],markdown:[980,540],manual:[980,540],unicode:[800,380],id:[660,520],image:[900,540],converter:[980,610],settings:[930,560],configDiff:[1000,680],sqlRestore:[1000,680],logTimeline:[1000,680],explain:[1000,680]};return sizes[page]||[980,540];}
 function position(win,page){const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;const [width,height]=win.getSize();if(page==='clipboard')win.setBounds({x:area.x,y:area.y+area.height-height,width:area.width,height});else if(page==='stack')win.setPosition(area.x+area.width-width-24,area.y+24);else if(page==='search')win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+Math.max(80,area.height*.22)));else win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+(area.height-height)/2));}
-async function showGoldTool(){
+async function getGoldService(){
  if(app.isQuitting)throw Error('OpenAll 正在退出');
- // 金价使用共享原版界面和调度器；由宿主管理窗口登记及应用退出。
- if(!goldToolReady){
-  const moduleFile=app.isPackaged?path.join(process.resourcesPath,'gold-desk/app/host.cjs'):path.join(__dirname,'../../shared/gold-desk/app/host.cjs');
-  goldToolReady=Promise.resolve().then(()=>require(moduleFile).createGoldTool({
+ if(!goldServiceReady){
+  goldServiceReady=createGoldService({
    dataDirectory:path.join(app.getPath('userData'),'gold-desk'),
    legacyDirectory:testMode?undefined:path.join(app.getPath('appData'),'GoldDesk'),
-   icon:path.join(__dirname,'../assets/icon.png'),fixture:testMode,
-   onWindow:win=>{
-    windows.set('gold',win);windowContexts.set(win.id,{page:'gold',initialValue:''});
-    win.once('closed',()=>{if(windows.get('gold')===win)windows.delete('gold');windowContexts.delete(win.id);});
-   }
-  })).catch(error=>{goldToolReady=undefined;throw error;});
+   fixture:testMode,settings:()=>settings,
+  }).catch(error=>{goldServiceReady=undefined;throw error;});
  }
- const tool=await goldToolReady;
- if(app.isQuitting){tool.dispose();throw Error('OpenAll 正在退出');}
- return tool.show();
+ const service=await goldServiceReady;
+ if(app.isQuitting){service.dispose();throw Error('OpenAll 正在退出');}
+ return service;
 }
 async function createWindow(rawPage,initialValue,options={}){
- let page=normalizePage(rawPage);if(page==='gold')return showGoldTool();if(['permissions','diagnostics','snippets','linkAliases','commandAliases'].includes(page)){initialValue=page;page='settings';}const existing=windows.get(page);
+ let page=normalizePage(rawPage);if(['permissions','diagnostics','snippets','linkAliases','commandAliases'].includes(page)){initialValue=page;page='settings';}
+ const gold=page==='gold'?await getGoldService():null;
+ const existing=windows.get(page);
  if(existing&&!existing.isDestroyed()){
   if(initialValue!==undefined&&initialValue!==''){windowContexts.set(existing.id,{page,initialValue});existing.webContents.send('navigate',page,initialValue);}
   else if(transient.has(page))existing.webContents.send('navigate',page,initialValue);
   if(page==='search'){existing.setSize(720,76);position(existing,page);}if(page==='clipboard')position(existing,page);
-  if(!options.hidden){existing.show();existing.focus();}return existing;
+  if(!options.hidden){if(gold)await goldWindowController.show();else {existing.show();existing.focus();}}return existing;
  }
+ if(gold)gold.update('view','quotes');
  const [width,height]=dimensions(page),isTransient=transient.has(page);
- const win=new BrowserWindow({width,height,minWidth:page==='search'?720:page==='clipboard'?400:page==='stack'?340:page==='translate'?580:480,minHeight:page==='search'?76:page==='clipboard'?330:page==='stack'?174:page==='translate'?320:300,
-   frame:false,transparent:isTransient,backgroundColor:isTransient?'#00000000':settings.backgroundHex,show:false,title:page==='search'?'OpenAll':(commands.find(x=>x.id===page)?.title||'OpenAll'),
-   skipTaskbar:isTransient,alwaysOnTop:isTransient,resizable:!isTransient,hasShadow:true,icon:path.join(__dirname,'../assets/icon.png'),
-   webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:false,backgroundThrottling:false}});
+ const win=new BrowserWindow({width,height,...(gold?goldPlacement(gold):{}),minWidth:gold?345:page==='search'?720:page==='clipboard'?400:page==='stack'?340:page==='translate'?580:480,minHeight:gold?396:page==='search'?76:page==='clipboard'?330:page==='stack'?174:page==='translate'?320:300,
+   frame:false,transparent:isTransient,backgroundColor:gold?gold.snapshot().theme.background:isTransient?'#00000000':settings.backgroundHex,show:false,title:gold?'OpenAll · 金价':page==='search'?'OpenAll':(commands.find(x=>x.id===page)?.title||'OpenAll'),
+   skipTaskbar:isTransient,alwaysOnTop:gold?gold.snapshot().pinned:isTransient,resizable:!isTransient,hasShadow:true,icon:path.join(__dirname,'../assets/icon.png'),
+   webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:!!gold,backgroundThrottling:false,additionalArguments:gold?['--openall-page=gold']:[]}});
  windows.set(page,win);windowContexts.set(win.id,{page,initialValue:initialValue??''});
  win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
- win.webContents.on('will-navigate',(event,url)=>{if(!url.startsWith('file://'))event.preventDefault();});
+ win.webContents.on('will-navigate',(event,url)=>{if(gold||!url.startsWith('file://'))event.preventDefault();});
  win.on('focus',()=>{if(!isTransient)pasteTarget={windowId:win.id};});
  const updateWindowState=()=>{if(!win.webContents.isDestroyed())win.webContents.send('window-state',windowState(win));};
  win.on('maximize',updateWindowState);win.on('unmaximize',updateWindowState);
  win.on('blur',()=>{if(page==='search'&&!win._pinned&&!smokeMode)win.hide();});
  win.on('close',event=>{if(!app.isQuitting&&isTransient){event.preventDefault();win.hide();}});
- win.on('closed',()=>{windows.delete(page);windowContexts.delete(win.id);});
- position(win,page);
- await win.loadFile(path.join(__dirname,'index.html'),{query:{page}});
- if(!options.hidden){win.show();win.focus();}return win;
+ win.on('closed',()=>{if(windows.get(page)===win)windows.delete(page);windowContexts.delete(win.id);});
+ if(gold){
+  const controller=attachGoldWindow(win,gold,rail=>{windows.set('gold-rail',rail);windowContexts.set(rail.id,{page:'gold-rail'});rail.once('closed',()=>{if(windows.get('gold-rail')===rail)windows.delete('gold-rail');windowContexts.delete(rail.id);});});
+  goldWindowController=controller;win.once('closed',()=>{if(goldWindowController===controller)goldWindowController=null;});
+ }else position(win,page);
+ try {await win.loadFile(gold?path.join(resourceDirectory('gold-ui'),'index.html'):path.join(__dirname,'index.html'),{query:{page}});}
+ catch(error){win.destroy();throw error;}
+ if(!options.hidden){if(gold)await goldWindowController.show();else {win.show();win.focus();}}return win;
 }
 async function showPage(page='search',initialValue){rememberTarget();return createWindow(page,initialValue);}
 async function togglePage(page){const existing=windows.get(page);if(existing?.isVisible()){existing.hide();return;}await showPage(page);}
@@ -215,8 +218,28 @@ async function clipboardAction(event,action,payload={}){
  default:throw Error('未知剪贴板操作');}
 }
 function registerIPC(){
+ const trustedGold=(event,page='gold')=>{const win=windows.get(page);return !app.isQuitting&&win&&!win.isDestroyed()&&event.sender===win.webContents&&event.senderFrame===win.webContents.mainFrame;};
+ const authorizeGold=(event,page)=>{if(!trustedGold(event,page))throw Error('金价操作仅允许对应工具页面的主框架调用');};
+ ipcMain.handle('openall:gold-read',async event=>{authorizeGold(event);return (await getGoldService()).snapshot();});
+ ipcMain.handle('openall:gold-action',async(event,name,payload)=>{
+  authorizeGold(event);
+  const service=await getGoldService();
+  authorizeGold(event);
+  const action=({'edge-setting':'edge','source-link':'source','open-source':'source','event-link':'event','quit-window':'close','theme':'appearance'})[name]||name;
+  if(['pin','layout','currency','view','edge'].includes(action)){service.update(action,payload);goldWindowController.update(action);return service.snapshot();}
+  if(action==='minimize'){windows.get('gold').minimize();return true;}
+  if(action==='close'){windows.get('gold').close();return true;}
+  if(action==='source')return service.openSource(payload);
+  if(action==='event')return service.openEvent(payload);
+  if(action==='appearance'){await createWindow('settings','appearance');return true;}
+  if(action==='drag')return true;
+  if(action==='recheck-network'){service.checkNetwork();return service.snapshot();}
+  throw Error('未知金价操作');
+ });
+ ipcMain.handle('openall:gold-rail-read',async event=>{authorizeGold(event,'gold-rail');return (await getGoldService()).snapshot().theme;});
+ ipcMain.handle('openall:gold-rail-expand',event=>{authorizeGold(event,'gold-rail');goldWindowController.expand();return true;});
  ipcMain.handle('get-settings',()=>settings);
- ipcMain.handle('set-settings',async(_event,next)=>{const old=settings,merged=normalizeSettings({...settings,...next});const failed=applyShortcuts(merged);if(failed.length){applyShortcuts(old);return {ok:false,failed};}settings=merged;await store.write('settings',settings);if(!testMode)app.setLoginItemSettings({openAtLogin:!!settings.launchAtLogin});clips.cleanup();for(const open of windows.values())if(!transient.has(currentContext(open).page)&&currentContext(open).page!=='gold')open.setBackgroundColor(settings.backgroundHex);broadcast('settings-changed',settings);const changed=['chromeBookmarks','chromeHistory','chromePath','searchFiles','fileSearchFolders'].some(k=>JSON.stringify(old[k])!==JSON.stringify(settings[k]));if(changed)searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError);else updateSearch();return {ok:true};});
+ ipcMain.handle('set-settings',async(_event,next)=>{const old=settings,merged=normalizeSettings({...settings,...next});const failed=applyShortcuts(merged);if(failed.length){applyShortcuts(old);return {ok:false,failed};}settings=merged;await store.write('settings',settings);if(!testMode)app.setLoginItemSettings({openAtLogin:!!settings.launchAtLogin});clips.cleanup();for(const open of windows.values())if(!transient.has(currentContext(open).page)&&!['gold','gold-rail'].includes(currentContext(open).page))open.setBackgroundColor(settings.backgroundHex);await goldServiceReady?.then(service=>service.publish());broadcast('settings-changed',settings);const changed=['chromeBookmarks','chromeHistory','chromePath','searchFiles','fileSearchFolders'].some(k=>JSON.stringify(old[k])!==JSON.stringify(settings[k]));if(changed)searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError);else updateSearch();return {ok:true};});
  ipcMain.handle('search',(_event,query)=>searchWithIcons(query));
  ipcMain.handle('open',(event,item)=>openItem(item,event));
  ipcMain.handle('open-tool',(_event,page,value)=>createWindow(page,value).then(()=>true));
@@ -251,5 +274,5 @@ app.whenReady().then(async()=>{
  await createWindow('search');
 }).catch(error=>{console.error(error.stack);app.exit(1);});
 app.on('window-all-closed',()=>{});
-let flushedBeforeQuit=false;app.on('before-quit',event=>{app.isQuitting=true;if(!flushedBeforeQuit){event.preventDefault();Promise.allSettled([store.flush(),goldToolReady?.then(tool=>tool.dispose())]).finally(()=>{flushedBeforeQuit=true;app.quit();});}});
+let flushedBeforeQuit=false;app.on('before-quit',event=>{app.isQuitting=true;if(!flushedBeforeQuit){event.preventDefault();Promise.allSettled([store.flush(),goldServiceReady?.then(service=>{goldWindowController?.dispose();service.dispose();})]).finally(()=>{flushedBeforeQuit=true;app.quit();});}});
 app.on('will-quit',()=>{clearInterval(monitor);clearInterval(refreshTimer);globalShortcut.unregisterAll();native.stop();for(const worker of workers)worker.close();});

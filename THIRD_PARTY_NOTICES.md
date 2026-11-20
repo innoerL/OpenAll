@@ -14,4 +14,4 @@
 
 内置站点图标用于识别对应服务。上游名称、商标和许可声明保留原文。
 
-macOS 金价组件使用 Electron 45.4.1 官方发行包，构建时保留 Electron-LICENSE 与 LICENSES.chromium.html；摘要固定在 macos/scripts/build-gold.sh。金价业务源码来自金价桌台 v1.4.0，数据来源及使用口径见 [金价说明](shared/gold-desk/README.md)。
+金价模型源自金价桌台 v1.4.0；窗口与运行环境归 OpenAll 管理。macOS 使用系统 JavaScriptCore、SQLite 和 WebKit，Windows 复用 OpenAll 自己的 Electron。数据来源及使用口径见 [金价说明](shared/gold-core/README.md)。
