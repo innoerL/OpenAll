@@ -121,6 +121,28 @@ enum JSONFoldingChecks {
         require(editable.replaceCharacters(in: inner, with: "\"key\": 3") && editable.collapsed.isEmpty,
                 "被真正改动的折叠区域展开")
         require(!editable.replaceCharacters(in: NSRange(location: Int.max, length: 1), with: ""), "越界编辑拒绝执行")
+        for ending in ["", "\n", "\r\n"] {
+            var clearing = JSONFoldDocument(source: source + ending)
+            clearing.collapseAll()
+            let original = clearing
+            let collapsed = clearing.projection()
+            let length = (collapsed.text as NSString).length
+            require(collapsed.coversEntireDocument(NSRange(location: 0, length: length)), "全选折叠根节点及尾部换行可直接清空")
+            require(!collapsed.coversEntireDocument(NSRange(location: 0, length: length - 1)), "未选尾部字符不得误判为全文清空")
+            require(!collapsed.coversEntireDocument(NSRange(location: 1, length: length - 1)), "缺少开头的局部选区保留两次删除规则")
+            require(!collapsed.coversEntireDocument(NSRange(location: 0, length: length + 1)), "越界选区不能触发全文快路径")
+            require(!collapsed.coversEntireDocument(NSRange(location: NSNotFound, length: 0)), "未指定选区不能触发全文快路径")
+            clearing.clear()
+            require(clearing.source.isEmpty && clearing.collapsed.isEmpty && clearing.regions.isEmpty && clearing.lineCount == 0,
+                "全文清空同时清除隐藏正文、节点和行数")
+            require(original.source == source + ending && !original.collapsed.isEmpty && collapsed.text.contains("…"),
+                "清空不破坏共享的正文、折叠和投影撤销快照")
+        }
+        require(siblingProjection.coversEntireDocument(NSRange(location: 0, length: projectedSource.length)),
+            "全选多个同级折叠节点覆盖全部隐藏正文")
+        let siblingMarker = projectedSource.range(of: siblings.regions[1].placeholder)
+        require(!siblingProjection.coversEntireDocument(siblingMarker), "局部省略标记仍使用展开后删除")
+        require(!empty.coversEntireDocument(NSRange(location: 0, length: 0)), "空文档不登记清空撤销")
         print("JSON 折叠模型检查通过")
     }
 

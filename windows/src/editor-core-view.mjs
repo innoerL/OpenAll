@@ -54,7 +54,7 @@ function create(options) {
       EditorView.contentAttributes.of({ 'aria-label': options.label || 'JSON 编辑区', spellcheck: 'false', autocorrect: 'off', autocapitalize: 'off' }),
       codeFolding({
         preparePlaceholder: (state, range) => state.doc.lineAt(range.to).number - state.doc.lineAt(range.from).number,
-        placeholderDOM: (_view, onclick, lines) => { const span = document.createElement('span'); span.className = 'cm-foldPlaceholder'; span.textContent = ` … ${lines} 行 `; span.title = '点击展开；删除折叠内容时首次仅展开'; span.onclick = onclick; return span; }
+        placeholderDOM: (_view, onclick, lines) => { const span = document.createElement('span'); span.className = 'cm-foldPlaceholder'; span.textContent = ` … ${lines} 行 `; span.title = '点击展开；局部删除先展开，全选可直接清空'; span.onclick = onclick; return span; }
       }),
       foldGutter({ openText: '⌄', closedText: '›', foldingChanged: update => update.transactions.some(transaction => transaction.effects.some(effect => effect.is(regionsEffect))) }),
       foldService.of((state, from, to) => {
@@ -62,9 +62,10 @@ function create(options) {
         while (low < high) { const middle = (low + high) >>> 1; if (regions[middle].from < from) low = middle + 1; else high = middle; }
         const region = regions[low]; return region && region.from <= to && region.to > to ? { from: region.from, to: region.to } : null;
       }),
-      // 折叠仍保留原始文档。所有删除/替换路径（键盘、剪切、粘贴覆盖）统一保护隐藏内容。
+      // 折叠保留完整文档；全文删除直接清空，局部删除与替换仍先展开隐藏内容。
       EditorState.transactionFilter.of(transaction => {
         if (!transaction.docChanged || transaction.isUserEvent('undo') || transaction.isUserEvent('redo') || ['input.format', 'input.load'].includes(transaction.annotation(Transaction.userEvent))) return transaction;
+        if (transaction.isUserEvent('delete') && transaction.newDoc.length === 0) return transaction;
         const effects = [], seen = new Set();
         transaction.changes.iterChangedRanges((from, to) => {
           if (to <= from) return;

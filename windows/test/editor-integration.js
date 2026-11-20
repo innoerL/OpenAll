@@ -35,6 +35,20 @@ app.whenReady().then(async () => {
       view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
       const deleted = c.getText(); if (deleted === original) return false; c.undo(); if (c.getText() !== original) return false; c.redo(); if (c.getText() !== deleted) return false; c.undo(); return c.getText() === original;
     }), '跨两个折叠块首次退格仅展开，二次删除及撤销重做保真');
+    check(await execute(json, async () => {
+      const c = OpenAllApp.controller, view = c.editor.view, original = c.getText();
+      for (const key of ['Backspace', 'Delete']) {
+        await c.waitIdle(); c.foldLine(2); c.foldLine(5); view.focus();
+        view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', metaKey: /Mac/.test(navigator.platform), ctrlKey: !/Mac/.test(navigator.platform), bubbles: true, cancelable: true }));
+        if (!c.getState().folded || view.state.selection.main.from !== 0 || view.state.selection.main.to !== original.length) return false;
+        view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        if (c.getText() !== '') return false;
+        c.undo(); if (c.getText() !== original) return false;
+        c.redo(); if (c.getText() !== '') return false;
+        c.undo(); if (c.getText() !== original) return false;
+      }
+      return true;
+    }), 'JSON 全选后退格或 Delete 一次清空所有折叠内容，撤销重做保真');
     await execute(json, () => { const c = OpenAllApp.controller, at = c.getText().indexOf('目标'); c.editor.focus(); c.editor.view.dispatch({ selection: { anchor: at, head: at + 2 } }); });
     await pasteFromShelf(json);
     check(await execute(json, () => OpenAllApp.controller.getText().includes('跨窗粘贴')), '独立剪贴板窗口粘贴回 JSON 原选区');

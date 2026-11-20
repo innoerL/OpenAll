@@ -35,6 +35,13 @@ struct JSONFoldProjection {
     private let sourceLength: Int
     private let projectedLength: Int
 
+    var originalLength: Int { sourceLength }
+
+    /// 使用已缓存的 UTF-16 长度识别全选，避免为清空大文档扫描或展开正文。
+    func coversEntireDocument(_ range: NSRange) -> Bool {
+        sourceLength > 0 && range.location == 0 && range.length == projectedLength
+    }
+
     fileprivate init(text: String, sourceLength: Int, sourceLineStarts: [Int],
                      segments: [JSONFoldSegment], regions: [JSONFoldRegion], collapsed: Set<Int>) {
         self.text = text
@@ -136,6 +143,9 @@ struct JSONFoldDocument {
     mutating func reset(source: String) {
         self = Self(source: source)
     }
+
+    /// 全文清空不解析原文，也不遍历或展开折叠节点；旧值可由撤销快照共享保留。
+    mutating func clear() { self = Self(source: "") }
 
     /// 编辑完整正文，并平移未被修改的折叠区域；暂时不完整的 JSON 也保留这些安全区域。
     @discardableResult

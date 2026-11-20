@@ -728,6 +728,12 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             print("文本对比与身份证专项检查通过")
             return
         }
+        if ProcessInfo.processInfo.environment["OPENALL_JSON_CHECK"] == "1" {
+            guard try jsonTool.verifyFoldingForDesign() else { throw NSError(domain: "JSONFoldingRegression", code: 1) }
+            guard try await jsonTool.verifyPerformanceForDesign() else { throw NSError(domain: "JSONPerformanceRegression", code: 1) }
+            print("JSON 折叠编辑与大文本专项检查通过")
+            return
+        }
         if ProcessInfo.processInfo.environment["OPENALL_PERFORMANCE_CHECK"] == "1" {
             let rounds = min(10, max(1, Int(ProcessInfo.processInfo.environment["OPENALL_STRESS_ROUNDS"] ?? "1") ?? 1))
             for round in 1...rounds {

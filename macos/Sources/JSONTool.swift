@@ -535,6 +535,13 @@ private final class JSONSearchWindow: NSWindow {
 }
 
 final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate {
+    private struct DocumentSnapshot {
+        let document: JSONFoldDocument
+        let projection: JSONFoldProjection
+        let supportsFolding: Bool
+        let selection: NSRange
+    }
+    private static let clearDocumentAction = "清空全文"
     private var window: NSWindow?
     private var editor: JSONEditorTextView!
     private var status: NSTextField!
@@ -561,6 +568,8 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
     private var applyingFoldedEdit = false
     private var compositionFolds: JSONFoldDocument?
     private var historyFolds: JSONFoldDocument?
+    private var applyingDocumentHistory = false
+    private var fullExpansionCount = 0
     private var largeDocument = false
     private var hasLargeHistory = false
     private var historyDocumentLength = 0
@@ -1060,6 +1069,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         configureDocumentSize(source)
         compositionFolds = nil
         historyFolds = nil
+        applyingDocumentHistory = false
         editor.breakUndoCoalescing()
         history.removeAllActions()
         result = JSONFoldDocument(source: source, scanRegions: !largeDocument)
@@ -1095,11 +1105,16 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
 
     private func expandForEditing() {
         guard !result.collapsed.isEmpty else { return }
+        fullExpansionCount += 1
         result.expandAll()
         renderEditor(preservingPosition: true)
     }
 
     @objc private func prepareHistoryChange(_ notification: Notification) {
+        let action = notification.name == Notification.Name.NSUndoManagerWillRedoChange ? history.redoActionName : history.undoActionName
+        applyingDocumentHistory = action == Self.clearDocumentAction
+        // 全文快照同时保存正文与投影，不经过普通字符撤销的展开流程。
+        if applyingDocumentHistory { historyFolds = nil; return }
         // 撤销记录使用完整文档的字符范围，不能直接应用到含省略标记的投影上。
         if hasLargeHistory { configureDocumentLength(200001) }
         if !result.collapsed.isEmpty { historyFolds = result }
@@ -1107,7 +1122,9 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
     }
 
     @objc private func historyDidChange(_ notification: Notification) {
-        if let previous = historyFolds {
+        if applyingDocumentHistory {
+            applyingDocumentHistory = false
+        } else if let previous = historyFolds {
             historyFolds = nil
             restoreFolds(from: previous)
         } else { syncDocument() }
@@ -1121,6 +1138,13 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
     }
 
     func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        if textView === editor, !renderingEditor, !applyingFoldedEdit,
+           replacementString == "", projection.coversEntireDocument(affectedCharRange) {
+            // 删除不可能超限：必须先走此分支，避免复制全文计行或逐个展开隐藏节点。
+            guard !result.collapsed.isEmpty else { return true }
+            clearWholeDocument()
+            return false
+        }
         if textView === editor, !renderingEditor, let replacementString {
             let sourceRange = projection.sourceRange(for: affectedCharRange)
             let length = (result.source as NSString).length - sourceRange.length + (replacementString as NSString).length
@@ -1169,6 +1193,46 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         applyingFoldedEdit = false
         restoreFolds(from: previous)
         return false
+    }
+
+    private func documentSnapshot() -> DocumentSnapshot {
+        DocumentSnapshot(document: result, projection: projection, supportsFolding: supportsFolding,
+            selection: editor.selectedRange())
+    }
+
+    private func clearWholeDocument() {
+        var empty = result
+        empty.clear()
+        let cleared = DocumentSnapshot(document: empty, projection: empty.projection(), supportsFolding: false,
+            selection: NSRange(location: 0, length: 0))
+        editor.breakUndoCoalescing()
+        history.beginUndoGrouping()
+        restoreDocumentSnapshot(cleared)
+        history.endUndoGrouping()
+        editor.breakUndoCoalescing()
+        success("已清空")
+    }
+
+    private func restoreDocumentSnapshot(_ snapshot: DocumentSnapshot) {
+        let previous = documentSnapshot()
+        history.registerUndo(withTarget: self) { target in target.restoreDocumentSnapshot(previous) }
+        history.setActionName(Self.clearDocumentAction)
+        revision += 1
+        operationVersion += 1
+        operationWork?.cancel()
+        metadataWork?.cancel()
+        searchWork?.cancel()
+        searchNeedsRefresh = false
+        compositionFolds = nil
+        historyFolds = nil
+        result = snapshot.document
+        supportsFolding = snapshot.supportsFolding
+        // 直接恢复已保存的投影；清空只渲染空串，撤销也无需重新解析隐藏的大文本。
+        renderEditor(preservingPosition: false, cachedProjection: snapshot.projection,
+            documentLength: snapshot.projection.originalLength)
+        editor.setSelectedRange(snapshot.selection)
+        refreshSearch(navigate: false)
+        scheduleMetadata()
     }
 
     private func restoreFolds(from previous: JSONFoldDocument) {
@@ -1299,10 +1363,10 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         foldButton.title = result.collapsed.isEmpty ? "全部折叠" : "全部展开"
         copyButton.isEnabled = !result.source.isEmpty
         editor.isEditable = true
-        editor.toolTip = result.collapsed.isEmpty ? nil : "可编辑可见内容；删除折叠区域时，第一次只展开，第二次才删除"
+        editor.toolTip = result.collapsed.isEmpty ? nil : "全选删除直接清空；局部删除折叠区域时，第一次只展开，第二次才删除"
     }
 
-    private func renderEditor(preservingPosition: Bool) {
+    private func renderEditor(preservingPosition: Bool, cachedProjection: JSONFoldProjection? = nil, documentLength: Int? = nil) {
         let selection = projection.sourceRange(for: editor.selectedRange())
         let scroll = editor.enclosingScrollView
         var anchor = 0
@@ -1315,13 +1379,21 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
             lineOffset = clip.bounds.minY - manager.lineFragmentRect(forGlyphAt: min(glyph, manager.numberOfGlyphs - 1),
                 effectiveRange: nil).minY - editor.textContainerOrigin.y
         }
-        projection = result.projection()
+        projection = cachedProjection ?? result.projection()
         renderingEditor = true
+        if let documentLength, documentLength > 200000 { configureDocumentLength(documentLength) }
+        let storage = editor.textStorage
+        // 正文、基础字体与全部折叠标签一次提交，避免每个节点都触发布局和字形更新。
+        storage?.beginEditing()
         editor.string = projection.text
         let full = NSRange(location: 0, length: (projection.text as NSString).length)
-        editor.textStorage?.removeAttribute(.backgroundColor, range: full)
-        editor.textStorage?.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), range: full)
-        styleFoldPlaceholders()
+        storage?.removeAttribute(.backgroundColor, range: full)
+        storage?.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), range: full)
+        let labels = storage.map { applyFoldPlaceholderAttributes(to: $0) } ?? []
+        storage?.endEditing()
+        editor.foldLabels = labels
+        if let documentLength, documentLength <= 200000 { configureDocumentLength(documentLength) }
+        editor.window?.invalidateCursorRects(for: editor)
         renderingEditor = false
         updateEditorControls()
         let start = preservingPosition ? projection.projectedOffset(forSourceOffset: selection.location) : 0
@@ -1345,15 +1417,26 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
 
     private func styleFoldPlaceholders() {
         guard let storage = editor.textStorage else { return }
-        editor.foldLabels = []
+        storage.beginEditing()
+        let labels = applyFoldPlaceholderAttributes(to: storage)
+        storage.endEditing()
+        editor.foldLabels = labels
+        editor.window?.invalidateCursorRects(for: editor)
+    }
+
+    private func applyFoldPlaceholderAttributes(to storage: NSTextStorage) -> [(range: NSRange, start: Int)] {
+        var labels: [(range: NSRange, start: Int)] = []
+        labels.reserveCapacity(projection.visibleRegions.count)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular), .foregroundColor: OpenAllTheme.accentText
+        ]
         for visible in projection.visibleRegions where visible.isCollapsed {
             let range = NSRange(location: visible.openingOffset + 1, length: (visible.region.placeholder as NSString).length)
             guard NSMaxRange(range) <= storage.length else { continue }
-            storage.addAttributes([.font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
-                .foregroundColor: OpenAllTheme.accentText], range: range)
-            editor.foldLabels.append((range, visible.region.start))
+            storage.addAttributes(attributes, range: range)
+            labels.append((range, visible.region.start))
         }
-        editor.window?.invalidateCursorRects(for: editor)
+        return labels
     }
 
     private func toggleFold(start: Int) {
@@ -1614,6 +1697,39 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
                     "可见文字退格直接删除，不展开其他节点") else { return false }
         history.undo()
         guard check(result.source == siblings && result.collapsed == [nodes[2].start], "可见文字退格撤销") else { return false }
+
+        // 全选删除是独立的一次清空操作；普通输入的撤销、重做仍使用原生正文坐标。
+        resetFolded()
+        editor.insertText("工具😎", replacementRange: (editor.string as NSString).range(of: "OpenAll 😀"))
+        let editedFolds = result.collapsed
+        let editedProjection = editor.string
+        let expansionBeforeClear = fullExpansionCount
+        let revisionBeforeClear = revision
+        editor.selectAll(nil)
+        editor.deleteBackward(nil)
+        guard check(result.source.isEmpty && editor.string.isEmpty && result.collapsed.isEmpty && history.canUndo &&
+                    revision > revisionBeforeClear && fullExpansionCount == expansionBeforeClear, "全选退格一次清空且不展开正文") else { return false }
+        history.undo()
+        guard check(result.source == first && result.collapsed == editedFolds && editor.string == editedProjection &&
+                    fullExpansionCount == expansionBeforeClear, "撤销清空直接恢复完整正文与原折叠投影") else { return false }
+        history.undo()
+        guard check(result.source == sample && result.collapsed == folds, "清空撤销后仍可撤销此前普通编辑") else { return false }
+        history.redo()
+        guard check(result.source == first && result.collapsed == editedFolds, "清空撤销后仍可重做此前普通编辑") else { return false }
+        let expansionBeforeRedo = fullExpansionCount
+        history.redo()
+        guard check(result.source.isEmpty && editor.string.isEmpty && fullExpansionCount == expansionBeforeRedo,
+                    "重做清空不会展开或重建隐藏正文") else { return false }
+
+        resetFolded()
+        result.collapseAll()
+        renderEditor(preservingPosition: false)
+        let rootFolds = result.collapsed
+        editor.selectAll(nil)
+        editor.deleteForward(nil)
+        guard check(result.source.isEmpty && editor.string.isEmpty, "根节点折叠时全选向前删除一次清空") else { return false }
+        history.undo()
+        guard check(result.source == sample && result.collapsed == rootFolds, "向前删除的撤销恢复根节点及子折叠") else { return false }
         print("JSON 折叠编辑检查通过")
         return true
     }
@@ -1744,6 +1860,63 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         let retained = result.source
         show(String(repeating: "x", count: 10000001))
         guard result.source == retained else { return false }
+        // 真实多节点折叠大文档走原生全选与删除入口，测量范围不包含测试数据构造或折叠准备。
+        let foldedRow = "  {\n    \"payload\": \"" + String(repeating: "x", count: 980) + "\",\n    \"id\": 1\n  }"
+        let foldedSource = "[\n" + Array(repeating: foldedRow, count: 5000).joined(separator: ",\n") + "\n]"
+        show(foldedSource)
+        var metadataTicks = 0
+        while !supportsFolding && metadataTicks < 300 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            metadataTicks += 1
+        }
+        guard supportsFolding, result.regions.count == 5001 else { return false }
+        result.collapseAll()
+        result.toggle(start: result.regions[0].start)
+        renderEditor(preservingPosition: false)
+        let foldedProjection = editor.string
+        let originalFolds = result.collapsed
+        let expansionCount = fullExpansionCount
+        let sourceVersion = revision
+        formatJSON()
+        editor.selectAll(nil)
+        let clearStart = Date()
+        editor.deleteBackward(nil)
+        let clearDuration = Date().timeIntervalSince(clearStart)
+        guard result.source.isEmpty, editor.string.isEmpty, result.collapsed.isEmpty,
+              !copyButton.isEnabled, !foldButton.isEnabled, revision > sourceVersion,
+              fullExpansionCount == expansionCount else { return false }
+        let restoreStart = Date()
+        history.undo()
+        let restoreDuration = Date().timeIntervalSince(restoreStart)
+        guard result.source == foldedSource, result.collapsed == originalFolds,
+              editor.string == foldedProjection, fullExpansionCount == expansionCount else { return false }
+        let clearAgainStart = Date()
+        history.redo()
+        let clearAgainDuration = Date().timeIntervalSince(clearAgainStart)
+        guard result.source.isEmpty, editor.string.isEmpty, fullExpansionCount == expansionCount else { return false }
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        guard result.source.isEmpty, editor.string.isEmpty else { return false }
+        print("折叠大 JSON 全选清空：\(foldedSource.utf8.count) 字节，\(originalFolds.count) 个折叠节点；删除 \(clearDuration) 秒，撤销 \(restoreDuration) 秒，重做 \(clearAgainDuration) 秒；未展开正文，过期后台结果已丢弃")
+        // 仅折叠一个小节点时投影仍很大；撤销必须先恢复大文本布局，再注入缓存投影。
+        history.undo()
+        guard result.source == foldedSource else { return false }
+        result.expandAll()
+        result.toggle(start: result.regions[1].start)
+        renderEditor(preservingPosition: false)
+        let mostlyVisibleProjection = editor.string
+        guard result.collapsed.count == 1, mostlyVisibleProjection.utf16.count > 200000 else { return false }
+        editor.selectAll(nil)
+        editor.deleteBackward(nil)
+        guard result.source.isEmpty, !largeDocument else { return false }
+        let largeProjectionRestoreStart = Date()
+        history.undo()
+        let largeProjectionRestoreDuration = Date().timeIntervalSince(largeProjectionRestoreStart)
+        guard result.source == foldedSource, result.collapsed.count == 1, editor.string == mostlyVisibleProjection,
+              largeDocument, editor.isHorizontallyResizable, editor.textContainer?.widthTracksTextView == false,
+              fullExpansionCount == expansionCount else { return false }
+        history.redo()
+        guard result.source.isEmpty, editor.string.isEmpty else { return false }
+        print("单节点折叠的大投影撤销：\(mostlyVisibleProjection.utf8.count) 字节，\(largeProjectionRestoreDuration) 秒；已提前恢复大文本布局")
         do {
             try JSONValidator(String(repeating: "[", count: 10000) + "0" + String(repeating: "]", count: 10000)).validate()
             return false
