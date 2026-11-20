@@ -1,22 +1,19 @@
 {
-  "version": "0.26.0",
+  "version": "0.26.1",
   "status": "passed",
   "repository": "innoerL/OpenAll",
-  "workflow": "https://github.com/innoerL/OpenAll/actions/workflows/windows.yml",
-  "run": "https://github.com/innoerL/OpenAll/actions/runs/44701176415",
-  "runId": "44701176415",
-  "commit": "b2812b72d5906fb9913f74d554d062cb8f7a02d9",
+  "run": "https://github.com/innoerL/OpenAll/actions/runs/44711290725",
+  "runId": "44711290725",
+  "commit": "877c34a29be968bd198641fa1f43efe7a0ee1c79",
   "artifacts": {
     "installer": "OpenAll-Windows-x64",
-    "checks": "windows-checks-b2812b72d5906fb9913f74d554d062cb8f7a02d9",
-    "totalScreenshots": 71,
-    "installerId": 14612274934,
-    "checksId": 14613242201
+    "checks": "windows-checks-877c34a29be968bd198641fa1f43efe7a0ee1c79",
+    "totalScreenshots": 71
   },
   "installer": {
-    "file": "OpenAll-Windows-0.26.0-x64-setup.exe",
-    "sha256": "d6c736758f9a7e431b41f4e516e6c6c29083cde0aab28f60cf9bbc0a1b21b21d",
-    "bytes": 118072777,
+    "file": "OpenAll-Windows-0.26.1-x64-setup.exe",
+    "bytes": 118066454,
+    "sha256": "cafcc72f4c7e5df877e4e5541747d0b39d5862343e7dd041901eecd0663431a7",
     "checksumVerified": true
   },
   "installation": {
@@ -26,43 +23,42 @@
     "uninstalled": true
   },
   "regression": {
-    "checks": 135,
+    "checks": 144,
     "screenshots": 41,
     "performance": {
       "search": {
         "queries": 50,
-        "elapsedMS": 110.90000000002328
+        "elapsedMS": 215.29999999993015
       },
       "json": {
         "bytes": 6564891,
-        "elapsedMS": 630.3000000000466,
-        "heartbeats": 57,
+        "elapsedMS": 719.5,
+        "heartbeats": 61,
         "renderedLines": 43,
         "valid": true
       },
       "comparison": {
         "passed": true,
-        "ticks": 7,
-        "loadMilliseconds": 238.89999999996508,
-        "compareMilliseconds": 317.29999999998836,
-        "workerMilliseconds": 36.90000000002328,
-        "searchMilliseconds": 5.300000000046566,
-        "sortMilliseconds": 121.90000000002328,
-        "sortWorkerMilliseconds": 29.099999999976717,
-        "sortTicks": 9
+        "ticks": 10,
+        "loadMilliseconds": 570.9000000000233,
+        "compareMilliseconds": 675.1999999999534,
+        "workerMilliseconds": 55.59999999997672,
+        "searchMilliseconds": 9.699999999953434,
+        "sortMilliseconds": 219.5,
+        "sortWorkerMilliseconds": 74.60000000009313,
+        "sortTicks": 15
       }
-    },
-    "comparisonChecks": 68
+    }
   },
   "editors": {
     "passed": true,
-    "checks": 19,
+    "checks": 21,
     "jsonPerformance": {
       "bytes": 5026001,
-      "milliseconds": 474.80000000004657,
-      "ticks": 45,
+      "milliseconds": 598.5,
+      "ticks": 53,
       "formatted": true,
-      "revision": 11,
+      "revision": 37,
       "valid": true,
       "regions": 14001,
       "folded": false,
@@ -72,23 +68,28 @@
       "pendingMetadata": false,
       "renderedLines": 42
     },
-    "comparisonChecks": 68,
+    "foldDeletionPerformance": {
+      "passed": true,
+      "milliseconds": 3.099999999976717,
+      "renderedLines": 1
+    },
     "comparisonPerformance": {
       "passed": true,
-      "ticks": 6,
-      "loadMilliseconds": 222.70000000001164,
-      "compareMilliseconds": 276.20000000001164,
-      "workerMilliseconds": 29.100000000034925,
-      "searchMilliseconds": 5.699999999953434,
-      "sortMilliseconds": 111,
-      "sortWorkerMilliseconds": 28,
-      "sortTicks": 8
+      "ticks": 8,
+      "loadMilliseconds": 388.4000000000233,
+      "compareMilliseconds": 468.20000000001164,
+      "workerMilliseconds": 52.90000000002328,
+      "searchMilliseconds": 9.5,
+      "sortMilliseconds": 228.5,
+      "sortWorkerMilliseconds": 76.5,
+      "sortTicks": 17
     }
   },
   "crossWindowPaste": {
     "passed": true,
     "checks": [
       "跨两个折叠块首次退格仅展开，二次删除及撤销重做保真",
+      "JSON 全选后退格或 Delete 一次清空所有折叠内容，撤销重做保真",
       "独立剪贴板窗口粘贴回 JSON 原选区",
       "JSON 查找框聚焦时跨窗粘贴仅替换查询",
       "编辑区按 Escape 只关闭 JSON 查找",
@@ -96,6 +97,48 @@
       "对比查找框聚焦时跨窗粘贴不覆盖正文",
       "JSON 浅色主题语法配色响应设置广播",
       "对比 iframe 浅色主题、编辑表面与辅助文字响应设置广播"
+    ]
+  },
+  "gold": {
+    "passed": true,
+    "platform": "win32",
+    "electron": "35.7.5",
+    "checks": [
+      "金价搜索返回内置工具",
+      "两品种近一年历史完整加载",
+      "国际金价、周大福牌价与日周涨跌已渲染",
+      "金价页面只暴露受限宿主桥接",
+      "金价加载新工具页面",
+      "金价宿主桥接在隔离沙箱中运行",
+      "宿主未加载旧金价应用模块",
+      "连续打开金价复用同一窗口",
+      "走势图支持键盘查看历史点",
+      "合并报价卡和双轴走势图",
+      "美元、欧元、人民币报价及历史换算",
+      "金价原生背景跟随宿主浅色外观",
+      "置顶设置同步原生窗口",
+      "两品种七日展望切换",
+      "报价验证、市场因素、国际事件与财经日历",
+      "报价与新闻来源链接保留",
+      "外观更新保留当前展望品种且不重建页面",
+      "自定义背景同步原生金价窗口",
+      "宿主自定义外观保留涨跌持平语义色与两条清晰不同的曲线",
+      "贴边条实时使用宿主强调色",
+      "金价外观按钮直接进入 OpenAll 外观设置",
+      "外观更新保留走势图节点与悬停位置",
+      "其他窗口不能读取或修改金价 IPC",
+      "其他窗口不能关闭或最小化金价",
+      "贴边浮条创建并保留展开入口",
+      "关闭金价只销毁工具与浮条，宿主继续运行",
+      "关闭金价后宿主搜索仍可用",
+      "重新打开金价保留设置与后台调度数据",
+      "重新打开金价继续跟随宿主外观",
+      "离线金价样例只使用内存数据库"
+    ],
+    "screenshots": [
+      "gold-quotes.png",
+      "gold-outlook.png",
+      "gold-combined-dark.png"
     ]
   },
   "appearance": {
@@ -260,132 +303,11 @@
       }
     ]
   },
-  "idGenerator": {
-    "provinces": 31,
-    "regions": 2851,
-    "expectedPrefix": "33010620011120"
-  },
-  "native": {
-    "passed": true,
-    "startedAt": "2026-11-20T08:17:09.367Z",
-    "stages": [
-      {
-        "stage": "powershell",
-        "elapsedMS": 3685,
-        "pid": 1532,
-        "helperElapsedMS": 1
-      },
-      {
-        "stage": "winforms",
-        "elapsedMS": 3777,
-        "pid": 1532,
-        "helperElapsedMS": 1132
-      },
-      {
-        "stage": "interop",
-        "elapsedMS": 4560,
-        "pid": 1532,
-        "helperElapsedMS": 1915
-      }
-    ],
-    "checks": [
-      "paste",
-      "selection",
-      "files",
-      "image",
-      "ocr"
-    ],
-    "ready": {
-      "stage": "ready",
-      "elapsedMS": 4698,
-      "pid": 1532,
-      "helperElapsedMS": 2052
-    },
-    "startup": {
-      "stage": "ready",
-      "elapsedMS": 4698,
-      "pid": 1532,
-      "helperElapsedMS": 2052
-    },
-    "stderr": ""
-  },
   "systemIndex": {
-    "platform": "win32",
-    "knownFolders": true,
-    "systemIndex": {
-      "available": true,
-      "code": "ready",
-      "reason": "当前用户可访问的 Windows Search 文件索引",
-      "indexedOnly": true
-    },
-    "checks": [
-      "真实 Shell KnownFolders API，包含当前重定向路径",
-      "真实 SystemIndex 查询：精确、包含、通配符转义、中文、文档、图片、复合后缀与目录范围",
-      "索引空/不可用时保留本地 fallback 结果"
-    ],
-    "knownFolderNames": [
-      "Desktop",
-      "Documents",
-      "Downloads",
-      "Pictures",
-      "Videos",
-      "Music"
-    ],
-    "passed": true
+    "available": true,
+    "code": "ready",
+    "reason": "当前用户可访问的 Windows Search 文件索引",
+    "indexedOnly": true
   },
-  "translationFixture": {
-    "passed": true,
-    "checks": [
-      "仅允许有道 HTTPS 顶层地址",
-      "测试模式不会连接网络或创建外部页面",
-      "自动填入原文并触发输入事件，特殊字符不执行",
-      "远端页没有 Node 或 OpenAll 预加载桥接",
-      "读取内嵌翻译当前选区",
-      "剪贴板粘贴替换翻译页当前选区",
-      "内嵌区域随窗口缩放且保留本地标题栏",
-      "关闭翻译时销毁远端内容"
-    ],
-    "note": "本次使用隔离的本地测试页面验证；不表示本次云端访问了真实有道服务。"
-  },
-  "createdAt": "2026-11-20T08:16:05Z",
-  "updatedAt": "2026-11-20T08:18:42Z",
-  "gold": {
-    "passed": true,
-    "platform": "win32",
-    "electron": "35.7.5",
-    "checks": [
-      "金价搜索返回内置工具",
-      "两品种近一年历史完整加载",
-      "国际金价、周大福牌价与日周涨跌已渲染",
-      "金价渲染器只暴露自身隔离桥接",
-      "连续打开金价复用同一窗口",
-      "走势图支持键盘查看历史点",
-      "合并报价卡和双轴走势图",
-      "美元、欧元、人民币报价及历史换算",
-      "金价独立主题不改变宿主系统主题",
-      "宿主主题切换保留金价独立主题",
-      "置顶设置同步原生窗口",
-      "两品种七日展望切换",
-      "报价验证、市场因素、国际事件与财经日历",
-      "报价与新闻来源链接保留",
-      "其他窗口不能读取或修改金价 IPC",
-      "其他窗口不能关闭或最小化金价",
-      "贴边浮条创建并保留展开入口",
-      "关闭金价只销毁工具与浮条，宿主继续运行",
-      "关闭金价后宿主搜索仍可用",
-      "重新打开金价保留设置与后台调度数据",
-      "金价数据保存在宿主隔离子目录"
-    ],
-    "screenshots": [
-      "gold-quotes.png",
-      "gold-outlook.png",
-      "gold-combined-dark.png"
-    ],
-    "installed": {
-      "passed": true,
-      "checks": 21,
-      "screenshots": 3
-    },
-    "note": "独立集成测试和真实安装包均使用隔离的离线行情样例；已验证完整界面、窗口生命周期及 IPC 隔离，不代表本次云端访问了真实行情、新闻或财经日历服务。"
-  }
+  "note": "真实 Windows 测试与实际安装包均使用隔离用户目录和离线样例，不访问用户数据。后续 macOS 专用修复不改变本次 Windows 源码或资源。"
 }

@@ -1,5 +1,7 @@
 {
-  "checks" : [
+  "checks": [
+    "迁移旧 Electron 左上坐标到 AppKit 左下坐标",
+    "原生位置保存坐标系标记",
     "双品种报价与近一年曲线",
     "双品种七日展望",
     "WebKit 页面只暴露 OpenAll 金价桥接",
@@ -25,16 +27,17 @@
     "重新打开保留偏好与行情",
     "隐藏后重新打开保留原生窗口与网页状态"
   ],
-  "errors" : [
-
-  ],
-  "passed" : true,
-  "platform" : "macos",
-  "runtime" : "AppKit + WKWebView + JavaScriptCore",
-  "screenshots" : [
+  "errors": [],
+  "passed": true,
+  "platform": "macos",
+  "runtime": "AppKit + WKWebView + JavaScriptCore",
+  "screenshots": [
     "gold-quotes.png",
     "gold-combined.png",
     "gold-outlook.png",
     "gold-outlook-light.png"
-  ]
+  ],
+  "version": "0.26.1",
+  "commit": "7f1fee9acbac6247daa4513edb29d52794f95c77",
+  "run": "https://github.com/innoerL/OpenAll/actions/runs/44729212731"
 }
