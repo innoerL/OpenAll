@@ -547,6 +547,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     private let translator = TranslationWindow()
     private let comparer = TextCompareV2Window()
     private let jsonTool = JSONToolWindow()
+    private let goldTool = GoldToolController()
     private let unicodeTool = UnicodeToolWindow()
     private let markdownTool = MarkdownToolWindow()
     private let idGenerator = IDGeneratorWindow()
@@ -679,7 +680,25 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         show()
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        goldTool.stop()
+    }
+
     @MainActor private func renderDesignSnapshots() async throws {
+        if ProcessInfo.processInfo.environment["OPENALL_GOLD_CHECK"] == "1" {
+            for (index, query) in ["金价", "gold", "金价桌台"].enumerated() {
+                field.stringValue = query
+                update()
+                guard results.first?.kind == .command, results.first?.value == "gold" else {
+                    throw NSError(domain: "GoldRoutingRegression", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "金价入口搜索失败：\(query)"])
+                }
+                try DesignPreview.capture(panel, name: "gold-search-\(index + 1)")
+            }
+            try await goldTool.verifyForDesign()
+            print("金价原生入口与内置组件专项检查通过")
+            return
+        }
         if ProcessInfo.processInfo.environment["OPENALL_APPEARANCE_CHECK"] == "1" {
             clipboardWindow.show(target: nil)
             guard clipboardWindow.verifySearchAppearanceForDesign() else { throw NSError(domain: "ClipboardAppearanceRegression", code: 1) }
@@ -1526,6 +1545,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         case "translate": translator.show("")
         case "comparison", "comparisonV2": comparer.show("")
         case "json": jsonTool.show("")
+        case "gold": goldTool.show()
         case "unicode": unicodeTool.show("", decode: nil)
         case "markdown": markdownTool.show("")
         case "id": idGenerator.show()

@@ -207,6 +207,8 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       const shortcuts = await evaluate(() => openall.windowAction('testShortcuts'));
       check(shortcuts.failed.length === 0, 'Windows 四组全局快捷键实际注册');
     }
+    report.gold = await require('./gold-check')(searchWindow, output);
+    report.checks.push(...report.gold.checks); report.screenshots.push(...report.gold.screenshots);
     report.appearance = await require('./appearance-check')(searchWindow, output);
     report.checks.push(...report.appearance.checks);
     report.screenshots.push(...report.appearance.screenshots);

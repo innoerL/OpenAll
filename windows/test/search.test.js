@@ -1,6 +1,14 @@
 const test=require('node:test');const assert=require('node:assert/strict');
 const engine=require('../src/search-engine');const {normalizeSettings}=require('../src/stores');const {WorkerClient}=require('../src/native-services');
 const settings=normalizeSettings({searchFiles:true,chromeBookmarks:true,chromeHistory:true});
+test('金价桌台支持中文英文精确词和自定义别名',()=>{
+ const empty={apps:[],files:[],bookmarks:[],history:[]};
+ for(const query of ['金价','金价桌台','gold','gold price','=金价','?金价'])assert.equal(engine.search(query,empty,settings,{})[0].value,'gold',query);
+ assert.equal(engine.search('今日黄金',empty,{...settings,commandAliases:{gold:['今日黄金']}},{})[0].value,'gold');
+ const context={window:{}};require('node:vm').runInNewContext(require('node:fs').readFileSync(require('node:path').join(__dirname,'../src/catalog.js'),'utf8'),context);
+ const entry=context.window.OpenAllCatalog.find(item=>item.id==='gold');
+ assert.deepEqual(Array.from(entry.keywords),engine.commands.find(item=>item.id==='gold').keywords);
+});
 const data={apps:[{type:'application',title:'终端',value:'C:/Terminal.exe',rank:70},{type:'application',title:'Calculator',value:'C:/calc.exe',rank:70}],files:[{type:'file',title:'合同.pdf',value:'C:/合同.pdf'},{type:'file',title:'合同.json',value:'C:/合同.json'},{type:'file',title:'截图.png',value:'C:/截图.png'},{type:'file',title:'合同.docx',value:'C:/合同.docx'},{type:'file',title:'合同.pdf',value:'C:/folder',isDirectory:true}],bookmarks:[{type:'url',title:'OpenAll 文档',value:'https://example.com/manual',rank:55}],history:[]};
 test('限定文件前缀、后缀与内置命令避免冲突',()=>{assert.equal(engine.search('文档 合同',data,settings,{}).length,2);assert.equal(engine.search('json 合同',data,settings,{})[0].title,'合同.json');assert.equal(engine.search('图片 jt',data,settings,{})[0].title,'截图.png');assert.equal(engine.search('sql format',data,settings,{})[0].value,'sqlFormat');assert.equal(engine.search('json',data,settings,{})[0].value,'json');assert.deepEqual(engine.fileRequest('.custom 记录'),{term:'记录',kind:'extension',extension:'custom',title:'.custom 文件'});assert.equal(engine.search('文件 合同',data,{...settings,searchFiles:false},{}).length,0);});
 test('拼音、首字母、精确匹配与拼写纠错',()=>{assert.equal(engine.matches('终端','zhongduan'),true);assert.equal(engine.matches('终端','zd'),true);assert.equal(engine.matches('终端','zd',false),false);assert.equal(engine.search('=终端',data,settings,{})[0].value,'C:/Terminal.exe');assert.equal(engine.search('=终',data,settings,{}).length,0);assert.equal(engine.search('Calculatr',data,settings,{})[0].title,'Calculator');assert.equal(engine.search('=Calculatr',data,settings,{}).length,0);});

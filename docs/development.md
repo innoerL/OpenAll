@@ -15,13 +15,14 @@ windows/
   data/                行政区划来源与更新记录
   test/                逻辑、页面和 Windows 原生回归
   scripts/             检查、安装验收与数据生成
+shared/gold-desk/      两端共用的金价模型、调度、界面与回归
 .github/workflows/     两个平台的云端构建
 docs/                  使用说明与实际应用截图
 ```
 
 ## macOS
 
-要求 macOS、Xcode Command Line Tools、Python 3；默认目标为 macOS 13 及以上。普通应用构建使用仓库内已有的离线资源，不需要下载前端依赖。
+要求 macOS、Xcode Command Line Tools、Python 3；默认目标为 macOS 13 及以上。普通应用构建使用仓库内已有的离线编辑器资源。金价工具的 Electron 45.4.1 由构建脚本下载并验证固定摘要，缓存可通过 `OPENALL_ELECTRON_CACHE` 指定。
 
 在仓库根目录执行：
 
@@ -96,3 +97,7 @@ pwsh ./scripts/installer-smoke.ps1
 - [Windows 构建](https://github.com/innoerL/OpenAll/actions/workflows/windows.yml)：逻辑和编辑器回归、跨窗粘贴、主题往返、原生接口、安装包构建、实际安装运行与卸载、页面截图和 SHA-256。
 
 构建产物保存在 Actions artifacts。工作流不会自动创建 Release；发布时选用通过验收的产物，记录对应提交和校验值。公开下载由 [Releases](https://github.com/innoerL/OpenAll/releases) 提供。
+
+## 金价回归
+
+共享模型及迁移回归：`node --test shared/gold-desk/test/*.test.cjs`。Windows 完整应用验收：`npm --prefix windows run test:gold`；安装后 smoke 复用同一套检查。macOS 原生入口、组件与窗口验收见 [金价说明](../shared/gold-desk/README.md)。两端工作流均包含上述检查，行情实时可用性需单独核验。

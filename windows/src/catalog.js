@@ -1,5 +1,12 @@
 window.OpenAllCatalog = [
   {
+    "id": "gold",
+    "title": "金价桌台",
+    "keywords": ["金价", "金价桌台", "gold", "gold price"],
+    "detail": "国际金价、周大福牌价、历史走势与七日展望",
+    "symbol": "chart.line.uptrend.xyaxis"
+  },
+  {
     "id": "translate",
     "title": "翻译",
     "keywords": [

@@ -1,7 +1,7 @@
 {
   "name": "openall-windows",
   "productName": "OpenAll",
-  "version": "0.25.9",
+  "version": "0.26.0",
   "description": "OpenAll Windows 效率工具",
   "main": "src/main.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "dist": "electron-builder --win nsis --x64",
     "build:editors": "node scripts/build-editors.js",
     "test": "node scripts/test.js",
+    "test:gold": "electron test/gold-integration.js",
     "check": "node scripts/check.js",
     "smoke": "electron ."
   },
@@ -33,6 +34,15 @@
       "src/**/*",
       "assets/**/*",
       "!assets/editor-test.*"
+    ],
+    "extraResources": [
+      {
+        "from": "../shared/gold-desk/app",
+        "to": "gold-desk/app",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
       "target": "nsis",

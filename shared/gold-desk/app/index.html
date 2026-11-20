@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>金价桌台</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="renderer.js"></script>
+</head>
+<body>
+  <header class="window-bar">
+    <div class="wordmark"><img src="icon.png" alt=""><h1>金价桌台</h1></div>
+    <div class="window-buttons">
+      <button class="window-button setting" id="layout" aria-pressed="false" title="合并报价卡和曲线">合并</button>
+      <label class="currency-label">
+        <select id="currency" aria-label="国际金价币种" title="国际金价币种">
+          <option value="USD">美元</option>
+          <option value="EUR">欧元</option>
+          <option value="CNY">人民币</option>
+        </select>
+      </label>
+      <button class="window-button pin" id="pin" aria-pressed="true" title="取消置顶">置顶</button>
+      <button class="window-button symbol" id="theme" aria-pressed="false" aria-label="切换黑色模式" title="切换黑色模式">☾</button>
+      <button class="window-button symbol" id="minimize" aria-label="最小化" title="最小化">−</button>
+      <button class="window-button symbol close" id="close" aria-label="关闭金价窗口" title="关闭窗口，后台继续取价">×</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="today-line">
+      <span><span id="date"></span> <span class="local-zone">北京时间</span></span>
+      <nav class="view-switch" aria-label="窗口内容">
+        <button id="quotes-view" aria-pressed="true">行情</button><button id="outlook-view" aria-pressed="false">7 日展望</button>
+      </nav>
+    </div>
+
+    <div id="quotes">
+    <section class="quote-card gold" id="gold" aria-labelledby="gold-title">
+      <div class="card-top">
+        <h2 id="gold-title">国际现货黄金 <span>XAU/USD</span></h2>
+        <span class="state"><i></i><span>等待取价</span></span>
+      </div>
+      <div class="price-line">
+        <span class="quote-price">—</span><span class="unit">美元 / 克</span>
+      </div>
+      <p class="quote-time">读取本地报价</p>
+      <div class="history-head"><strong>近一年走势</strong><span class="history-caption">现货日收盘</span></div>
+      <div class="plot">
+        <canvas tabindex="0" aria-label="国际现货黄金近一年走势图，使用方向键查看数据"></canvas>
+        <div class="chart-empty">读取历史数据…</div>
+        <div class="hover" hidden></div>
+      </div>
+      <div class="chart-dates"><span></span><span></span></div>
+      <div class="source-line"><button data-source="gold" class="quote-source">报价 Gold API</button><button data-source="goldHistory">曲线 goldprice.dev</button></div>
+    </section>
+
+    <section class="quote-card ctf" id="ctf" aria-labelledby="ctf-title">
+      <div class="card-top">
+        <h2 id="ctf-title">周大福足金饰品 <span>中国内地</span></h2>
+        <span class="state"><i></i><span>等待取价</span></span>
+      </div>
+      <div class="price-line">
+        <span class="quote-price">—</span><span class="unit">元 / 克</span>
+      </div>
+      <p class="quote-time">读取本地报价</p>
+      <div class="history-head"><strong>近一年走势</strong><span class="history-caption">每日挂牌价</span></div>
+      <div class="plot">
+        <canvas tabindex="0" aria-label="周大福足金饰品近一年走势图，使用方向键查看数据"></canvas>
+        <div class="chart-empty">读取历史数据…</div>
+        <div class="hover" hidden></div>
+      </div>
+      <div class="chart-dates"><span></span><span></span></div>
+      <div class="source-line"><button data-source="ctf" class="quote-source">报价 周大福官方商城</button><button data-source="ctfHistory">曲线 搜金价</button></div>
+    </section>
+
+    <section class="quote-card combined" id="combined" aria-label="国际金价与周大福金价" hidden>
+      <div class="summary-grid">
+        <article id="summary-gold" class="summary gold">
+          <h2>国际现货黄金 <span>XAU</span></h2>
+          <span class="state"><i></i><span>等待取价</span></span>
+          <div class="price-line"><span class="quote-price">—</span><span class="unit">美元 / 克</span></div>
+          <p class="quote-time"></p>
+          <div class="source-line"><button data-source="gold" class="quote-source">报价 Gold API</button></div>
+        </article>
+        <article id="summary-ctf" class="summary ctf">
+          <h2>周大福足金饰品 <span>内地</span></h2>
+          <span class="state"><i></i><span>等待取价</span></span>
+          <div class="price-line"><span class="quote-price">—</span><span class="unit">元 / 克</span></div>
+          <p class="quote-time"></p>
+          <div class="source-line"><button data-source="ctf" class="quote-source">报价 周大福官方商城</button></div>
+        </article>
+      </div>
+      <div class="history-head"><strong>近一年走势</strong><span class="history-caption"></span></div>
+      <div class="chart-legend"><span id="legend-gold">国际现货 · 美元/克</span><span id="legend-ctf">周大福 · 元/克</span></div>
+      <div class="plot">
+        <canvas tabindex="0" aria-label="两种金价近一年走势图，使用方向键查看数据"></canvas>
+        <div class="chart-empty">读取历史数据…</div>
+        <div class="hover" hidden></div>
+      </div>
+      <div class="chart-dates"><span></span><span></span></div>
+      <div class="source-line"><button data-source="goldHistory">现货日收盘 goldprice.dev</button><button data-source="ctfHistory">挂牌价 搜金价</button></div>
+    </section>
+
+    <footer><span class="online" id="network"><i></i> <b>检测连接</b></span><span id="next">每日 10:00 取价</span></footer>
+    <div class="source-line fx-source" id="fx-source" hidden><button data-source="fx">参考汇率 Frankfurter / ECB</button></div>
+    </div>
+
+    <section id="outlook" class="quote-card outlook" aria-labelledby="forecast-title" hidden>
+      <div class="outlook-heading">
+        <h2 id="forecast-title">未来 7 日展望</h2>
+        <div class="view-switch" aria-label="展望品种">
+          <button id="forecast-gold" aria-pressed="true">国际现货</button><button id="forecast-ctf" aria-pressed="false">周大福</button>
+        </div>
+      </div>
+      <p id="forecast-meta" class="outlook-meta"></p>
+      <table id="forecast-table">
+        <thead><tr><th scope="col">北京日期</th><th scope="col">走势 · 可信度估计</th><th scope="col">预计价</th><th scope="col">情景区间</th></tr></thead>
+        <tbody id="forecast-rows"></tbody>
+      </table>
+      <div class="outlook-block">
+        <div class="outlook-heading"><h3>实际报价验证</h3><span id="verification-status"></span></div>
+        <p id="verification-note" class="outlook-meta"></p>
+      </div>
+      <div class="outlook-block">
+        <div class="outlook-heading"><h3>市场因素</h3><span id="market-status"></span></div>
+        <div id="drivers"></div>
+      </div>
+      <div class="outlook-block">
+        <div class="outlook-heading"><h3>近期国际事件</h3><button class="text-button" data-source="news">联合国新闻 ↗</button></div>
+        <p id="event-note" class="outlook-meta"></p>
+        <ul id="events"></ul>
+      </div>
+      <div class="outlook-block">
+        <div class="outlook-heading"><h3>未来 7 日财经日历</h3><span id="calendar-status"></span></div>
+        <ul id="calendar"></ul>
+      </div>
+      <p id="model-note" class="model-note"></p>
+    </section>
+    <div class="edge-setting">
+      <button id="edge-setting" aria-pressed="true" title="拖到屏幕左右边缘自动收起">贴边收起</button>
+    </div>
+  </main>
+</body>
+</html>

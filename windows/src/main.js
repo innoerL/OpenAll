@@ -23,6 +23,7 @@ let ranking=store.read('search-ranking',{usage:{},rules:{}});
 const native=new NativeBridge();
 const windows=new Map(),windowContexts=new Map();
 const workers=[];
+let goldToolReady;
 let searchWorker,backendWorker,imageWorker,tray,monitor,refreshTimer,searchStatus={},lastExternal={handle:'0',pid:0,name:''},pasteTarget=null,lastContentHash='',capturing=false,capturePausedUntil=0,ocrQueue=Promise.resolve(),shortcutsStatus={};
 let shortcutTestRegistration=false;
 const shortcutRecording=new ShortcutRecording({suspend:()=>globalShortcut.unregisterAll(),resume:()=>{if(!app.isQuitting){const failed=applyShortcuts(settings);if(failed.length)notifyError(Error('快捷键恢复失败：'+failed.join('、')));}}});
@@ -30,7 +31,7 @@ const iconCache=new Map(),iconPending=new Map();
 async function fileIcon(file,application=false){if(!file)return '';const key=application?file.toLowerCase():path.extname(file).toLowerCase()||'<folder>';if(iconCache.has(key))return iconCache.get(key);if(iconPending.has(key))return iconPending.get(key);const request=app.getFileIcon(file,{size:'small'}).then(icon=>icon.isEmpty()?'':icon.toDataURL()).catch(()=>'').then(value=>{iconCache.set(key,value);iconPending.delete(key);if(iconCache.size>512)iconCache.delete(iconCache.keys().next().value);return value;});iconPending.set(key,request);return request;}
 async function searchWithIcons(query){const results=await searchWorker.call('search',{query:String(query).slice(0,4096)});return Promise.all(results.map(async item=>['application','file'].includes(item.type)?{...item,icon:await fileIcon(item.value,item.type==='application')}:item));}
 const testClipboard={text:'',html:'',image:null,files:[]};
-const pageAliases={'JSON 工具':'json','文本对比':'comparison','Markdown 编辑器':'markdown','结构化配置对比':'configDiff','SQL 参数还原':'sqlRestore','日志时间线':'logTimeline','执行计划阅读器':'explain','设置':'settings','剪贴板':'clipboard'};
+const pageAliases={'金价':'gold','金价桌台':'gold','JSON 工具':'json','文本对比':'comparison','Markdown 编辑器':'markdown','结构化配置对比':'configDiff','SQL 参数还原':'sqlRestore','日志时间线':'logTimeline','执行计划阅读器':'explain','设置':'settings','剪贴板':'clipboard'};
 const normalizePage=id=>pageAliases[id]||id||'search';
 const transient=new Set(['search','clipboard','stack','selection']);
 const getText=()=>testMode?testClipboard.text:clipboard.readText();
@@ -43,8 +44,27 @@ function windowState(win){return {maximized:win.isMaximized(),resizable:win.isRe
 function rememberTarget(){const focused=BrowserWindow.getFocusedWindow();const ctx=currentContext(focused);if(focused&&!transient.has(ctx.page)){pasteTarget={windowId:focused.id};return;}if(native.foreground.pid&&native.foreground.pid!==process.pid){lastExternal=native.foreground;pasteTarget={...lastExternal};}}
 function dimensions(page){const sizes={search:[720,76],clipboard:[screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea.width,330],stack:[340,174],translate:[580,320],selection:[640,510],json:[960,600],comparison:[1040,600],configFormat:[960,420],sqlFormat:[960,420],markdown:[980,540],manual:[980,540],unicode:[800,380],id:[660,520],image:[900,540],converter:[980,610],settings:[930,560],configDiff:[1000,680],sqlRestore:[1000,680],logTimeline:[1000,680],explain:[1000,680]};return sizes[page]||[980,540];}
 function position(win,page){const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;const [width,height]=win.getSize();if(page==='clipboard')win.setBounds({x:area.x,y:area.y+area.height-height,width:area.width,height});else if(page==='stack')win.setPosition(area.x+area.width-width-24,area.y+24);else if(page==='search')win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+Math.max(80,area.height*.22)));else win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+(area.height-height)/2));}
+async function showGoldTool(){
+ if(app.isQuitting)throw Error('OpenAll 正在退出');
+ // 金价使用共享原版界面和调度器；由宿主管理窗口登记及应用退出。
+ if(!goldToolReady){
+  const moduleFile=app.isPackaged?path.join(process.resourcesPath,'gold-desk/app/host.cjs'):path.join(__dirname,'../../shared/gold-desk/app/host.cjs');
+  goldToolReady=Promise.resolve().then(()=>require(moduleFile).createGoldTool({
+   dataDirectory:path.join(app.getPath('userData'),'gold-desk'),
+   legacyDirectory:testMode?undefined:path.join(app.getPath('appData'),'GoldDesk'),
+   icon:path.join(__dirname,'../assets/icon.png'),fixture:testMode,
+   onWindow:win=>{
+    windows.set('gold',win);windowContexts.set(win.id,{page:'gold',initialValue:''});
+    win.once('closed',()=>{if(windows.get('gold')===win)windows.delete('gold');windowContexts.delete(win.id);});
+   }
+  })).catch(error=>{goldToolReady=undefined;throw error;});
+ }
+ const tool=await goldToolReady;
+ if(app.isQuitting){tool.dispose();throw Error('OpenAll 正在退出');}
+ return tool.show();
+}
 async function createWindow(rawPage,initialValue,options={}){
- let page=normalizePage(rawPage);if(['permissions','diagnostics','snippets','linkAliases','commandAliases'].includes(page)){initialValue=page;page='settings';}const existing=windows.get(page);
+ let page=normalizePage(rawPage);if(page==='gold')return showGoldTool();if(['permissions','diagnostics','snippets','linkAliases','commandAliases'].includes(page)){initialValue=page;page='settings';}const existing=windows.get(page);
  if(existing&&!existing.isDestroyed()){
   if(initialValue!==undefined&&initialValue!==''){windowContexts.set(existing.id,{page,initialValue});existing.webContents.send('navigate',page,initialValue);}
   else if(transient.has(page))existing.webContents.send('navigate',page,initialValue);
@@ -196,7 +216,7 @@ async function clipboardAction(event,action,payload={}){
 }
 function registerIPC(){
  ipcMain.handle('get-settings',()=>settings);
- ipcMain.handle('set-settings',async(_event,next)=>{const old=settings,merged=normalizeSettings({...settings,...next});const failed=applyShortcuts(merged);if(failed.length){applyShortcuts(old);return {ok:false,failed};}settings=merged;await store.write('settings',settings);if(!testMode)app.setLoginItemSettings({openAtLogin:!!settings.launchAtLogin});clips.cleanup();for(const open of windows.values())if(!transient.has(currentContext(open).page))open.setBackgroundColor(settings.backgroundHex);broadcast('settings-changed',settings);const changed=['chromeBookmarks','chromeHistory','chromePath','searchFiles','fileSearchFolders'].some(k=>JSON.stringify(old[k])!==JSON.stringify(settings[k]));if(changed)searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError);else updateSearch();return {ok:true};});
+ ipcMain.handle('set-settings',async(_event,next)=>{const old=settings,merged=normalizeSettings({...settings,...next});const failed=applyShortcuts(merged);if(failed.length){applyShortcuts(old);return {ok:false,failed};}settings=merged;await store.write('settings',settings);if(!testMode)app.setLoginItemSettings({openAtLogin:!!settings.launchAtLogin});clips.cleanup();for(const open of windows.values())if(!transient.has(currentContext(open).page)&&currentContext(open).page!=='gold')open.setBackgroundColor(settings.backgroundHex);broadcast('settings-changed',settings);const changed=['chromeBookmarks','chromeHistory','chromePath','searchFiles','fileSearchFolders'].some(k=>JSON.stringify(old[k])!==JSON.stringify(settings[k]));if(changed)searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError);else updateSearch();return {ok:true};});
  ipcMain.handle('search',(_event,query)=>searchWithIcons(query));
  ipcMain.handle('open',(event,item)=>openItem(item,event));
  ipcMain.handle('open-tool',(_event,page,value)=>createWindow(page,value).then(()=>true));
@@ -231,5 +251,5 @@ app.whenReady().then(async()=>{
  await createWindow('search');
 }).catch(error=>{console.error(error.stack);app.exit(1);});
 app.on('window-all-closed',()=>{});
-let flushedBeforeQuit=false;app.on('before-quit',event=>{app.isQuitting=true;if(!flushedBeforeQuit){event.preventDefault();store.flush().catch(()=>{}).finally(()=>{flushedBeforeQuit=true;app.quit();});}});
+let flushedBeforeQuit=false;app.on('before-quit',event=>{app.isQuitting=true;if(!flushedBeforeQuit){event.preventDefault();Promise.allSettled([store.flush(),goldToolReady?.then(tool=>tool.dispose())]).finally(()=>{flushedBeforeQuit=true;app.quit();});}});
 app.on('will-quit',()=>{clearInterval(monitor);clearInterval(refreshTimer);globalShortcut.unregisterAll();native.stop();for(const worker of workers)worker.close();});

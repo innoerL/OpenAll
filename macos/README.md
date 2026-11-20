@@ -1,6 +1,6 @@
 # OpenAll macOS
 
-此目录包含 OpenAll **0.25.9（77）** 的 macOS 源码和离线资源，最低运行系统为 **macOS 13**。默认构建同时包含 Intel `x86_64` 与 Apple Silicon `arm64`。
+此目录包含 OpenAll **0.26.0（78）** 的 macOS 源码和离线资源，最低运行系统为 **macOS 13**。默认构建同时包含 Intel `x86_64` 与 Apple Silicon `arm64`。
 
 ## 构建前置条件
 
@@ -8,7 +8,7 @@
 - 系统自带的 `zsh`、`sips`，以及 `python3`。
 - 重建文本对比编辑器时需要 Node.js 18 或更新版本与 npm；直接构建应用使用仓库中已经打包的离线 JavaScript，无需安装 Node.js 依赖。
 
-项目使用 AppKit、WebKit、Carbon、ApplicationServices、Vision、ImageIO、UniformTypeIdentifiers 和系统 SQLite。没有 CocoaPods、SwiftPM 或额外原生库下载步骤。
+项目使用 AppKit、WebKit、Carbon、ApplicationServices、Vision、ImageIO、UniformTypeIdentifiers 和系统 SQLite。没有 CocoaPods 或 SwiftPM。金价工具使用随应用内置的 Electron 45.4.1；首次构建会从官方发行地址下载对应架构 ZIP 并校验固定 SHA-256。通用包包含两个架构的组件，因此体积比之前的纯原生版本增大。
 
 ## 构建应用
 
@@ -35,7 +35,7 @@ npm --prefix macos/comparison-editor ci --ignore-scripts
 npm --prefix macos/comparison-editor run build
 ```
 
-版本锁定在 `comparison-editor/package-lock.json`。输出 `Resources/comparison-editor.js`，随后重新执行应用构建即可。运行时不需要访问 npm 或 CDN。
+版本锁定在 `comparison-editor/package-lock.json`。输出 `Resources/comparison-editor.js`，随后重新执行应用构建即可。运行时不需要访问 npm 或 CDN。金价的行情、历史和新闻按原功能联网获取。
 
 ## 验证
 
@@ -73,10 +73,14 @@ zsh macos/scripts/release.sh
 
 ## 目录与资源
 
-- `Sources/`：33 个 Swift 生产源文件；入口是 `QuickLaunch.swift`。
+- `Sources/`：34 个 Swift 生产源文件；入口是 `QuickLaunch.swift`。
 - `Resources/`：对比与 Markdown 离线网页、地区数据、应用图标源文件、搜索站点图标和[命令手册](Resources/OpenAll-命令手册.md)。
 - `comparison-editor/`：CodeMirror 编辑器源码及锁文件。
 - `Tests/`：模型回归入口和隔离测试支撑代码。
 - `scripts/`：构建、图标生成、模型验证与公证发布脚本。
 
 第三方许可随应用一起复制：`Resources/ComparisonEditor-LICENSE.txt`、`Resources/Mermaid-LICENSE`、`Resources/IDRegions-LICENSE.txt`。地区资源包含 31 个省级地区、341 个城市分组、2,851 个末级选项，2025 基础数据补充到 2026 年 6 月行政区划。请保留这些文件及既有署名。Mermaid 使用仓库中附带的发行文件，当前没有单独的 Mermaid 源码构建流程。
+
+## 金价组件
+
+源码位于 [shared/gold-desk](../shared/gold-desk/README.md)，无需另装 Node.js 或金价桌台。可通过 `OPENALL_ELECTRON_CACHE` 指向已有官方 ZIP 的缓存目录；缓存仍会核对固定摘要。`OPENALL_GOLD_CHECK=1` 配合 `--design-snapshot` 验证搜索路由和真实窗口，使用自动生成的隔离样例目录。

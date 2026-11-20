@@ -10,6 +10,8 @@
 | YAML | Windows YAML 解析与整理 | [ISC 许可](windows/assets/editor-YAML-LICENSE.txt) |
 | Noto Sans SC | Windows 中文字体 | [SIL Open Font License](windows/assets/fonts/OFL.txt) |
 | 中国行政区划离线数据 | 身份证测试号的地区选择 | [数据来源与更新时间](windows/data/administrative-regions/README.md)、[CC0 许可](windows/data/administrative-regions/LICENSE)、[补充说明](macos/Resources/IDRegions-LICENSE.txt) |
-| Electron 与其他 npm 依赖 | Windows 运行时、图像、拼音、数据处理 | [依赖清单](windows/package.json)、[锁文件](windows/package-lock.json)；发行包保留所安装依赖的许可文件 |
+| Electron 与其他 npm 依赖 | Windows 运行时、macOS 金价组件、图像、拼音、数据处理 | [依赖清单](windows/package.json)、[锁文件](windows/package-lock.json)；发行包保留所安装依赖的许可文件 |
 
 内置站点图标用于识别对应服务。上游名称、商标和许可声明保留原文。
+
+macOS 金价组件使用 Electron 45.4.1 官方发行包，构建时保留 Electron-LICENSE 与 LICENSES.chromium.html；摘要固定在 macos/scripts/build-gold.sh。金价业务源码来自金价桌台 v1.4.0，数据来源及使用口径见 [金价说明](shared/gold-desk/README.md)。

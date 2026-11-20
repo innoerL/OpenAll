@@ -12,6 +12,7 @@ on:
       - 'windows/scripts/**'
       - 'windows/package*.json'
       - 'macos/comparison-editor/**'
+      - 'shared/gold-desk/**'
       - '.github/workflows/windows.yml'
   pull_request:
     paths:
@@ -22,6 +23,7 @@ on:
       - 'windows/scripts/**'
       - 'windows/package*.json'
       - 'macos/comparison-editor/**'
+      - 'shared/gold-desk/**'
       - '.github/workflows/windows.yml'
 
 permissions:
@@ -65,6 +67,10 @@ jobs:
           npm run check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 金价完整集成回归
+        run: |
+          npm run test:gold
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: 编辑器功能、压力与跨窗口粘贴
         run: |

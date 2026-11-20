@@ -16,6 +16,8 @@ enum CommandCatalog {
                         detail: "左右直接编辑，并在原处查看差异", symbol: "rectangle.split.2x1"),
          OpenAllCommand(id: "json", title: "JSON 工具", keywords: ["json", "json格式化"],
                         detail: "校验、键名自然排序与转义", symbol: "curlybraces"),
+         OpenAllCommand(id: "gold", title: "金价", keywords: ["金价", "黄金", "gold", "金价桌台"],
+                        detail: "国际现货、周大福金价、近一年走势与七日展望", symbol: "chart.line.uptrend.xyaxis"),
          OpenAllCommand(id: "unicode", title: "Unicode 转换", keywords: ["unicode", "中文编码"],
                         detail: "中文与 Unicode 转义互转", symbol: "character.cursor.ibeam"),
          OpenAllCommand(id: "markdown", title: "Markdown 编辑器", keywords: ["mark", "markdown"],
