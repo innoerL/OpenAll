@@ -35,20 +35,24 @@ function directory(t) {
 test('首次导入包含原应用仍打开的 WAL 数据，并保留原库与任务设置', async t => {
   const { legacy, destination } = directory(t);
   const original = new Store(path.join(legacy, 'quotes.sqlite'));
-  t.after(() => original.close());
-  original.setSetting('currency', 'CNY');
-  original.setSetting('firstSlot', '2026-10-01');
-  original.setJob('quote', 'gold', '2026-11-20', 'done');
-  assert.ok(fs.statSync(path.join(legacy, 'quotes.sqlite-wal')).size > 0);
-  assert.equal(await migrateLegacyData(destination, legacy), true);
-  const copied = new Store(destination);
   try {
-    assert.equal(copied.getSetting('currency'), 'CNY');
-    assert.equal(copied.getSetting('firstSlot'), '2026-10-01');
-    assert.equal(copied.job('quote', 'gold', '2026-11-20').status, 'done');
-    copied.setSetting('currency', 'EUR');
-    assert.equal(original.getSetting('currency'), 'CNY');
-  } finally { copied.close(); }
+    original.setSetting('currency', 'CNY');
+    original.setSetting('firstSlot', '2026-10-01');
+    original.setJob('quote', 'gold', '2026-11-20', 'done');
+    assert.ok(fs.statSync(path.join(legacy, 'quotes.sqlite-wal')).size > 0);
+    assert.equal(await migrateLegacyData(destination, legacy), true);
+    const copied = new Store(destination);
+    try {
+      assert.equal(copied.getSetting('currency'), 'CNY');
+      assert.equal(copied.getSetting('firstSlot'), '2026-10-01');
+      assert.equal(copied.job('quote', 'gold', '2026-11-20').status, 'done');
+      copied.setSetting('currency', 'EUR');
+      assert.equal(original.getSetting('currency'), 'CNY');
+    } finally { copied.close(); }
+  } finally {
+    // Windows 不能删除仍打开的 SQLite 文件，先关闭连接再执行目录清理。
+    original.close();
+  }
 });
 
 test('宿主已有数据时不覆盖，即使旧文件无效', async t => {
