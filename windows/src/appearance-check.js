@@ -31,23 +31,29 @@ module.exports = async function verifyAppearance(initialWindow, output) {
     return win;
   }
   async function capture(win, name, regions = []) {
+    if (regions.length) {
+      win.show();
+      win.focus();
+      win.webContents.focus();
+    }
     await run(win, async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-    const bounds = await run(win, selectors => selectors.map(selector => {
+    const contentBounds = () => run(win, selectors => selectors.map(selector => {
       const frame = document.querySelector('iframe');
       const local = document.querySelector(selector), element = local || frame?.contentDocument?.querySelector(selector);
       if (!element) throw Error('截图缺少内容：' + selector);
       const rect = element.getBoundingClientRect(), offset = local ? { x: 0, y: 0 } : frame.getBoundingClientRect();
-      return { x: rect.x + offset.x, y: rect.y + offset.y, width: Math.min(180, rect.width), height: Math.min(40, rect.height) };
+      return { selector, x: rect.x + offset.x, y: rect.y + offset.y, width: Math.min(180, rect.width), height: Math.min(40, rect.height) };
     }), regions);
     // DWM 完成组合可能晚于页面的动画帧。直接核对文字区域的像素，避免只有标题栏的空帧通过。
     const started = Date.now();
     let image;
     while (true) {
       image = await win.webContents.capturePage();
-      if (!bounds.length) break;
-      const [width, height] = win.getContentSize();
+      if (!regions.length) break;
+      const bounds = await contentBounds();
+      const [width, height] = await run(win, () => [innerWidth, innerHeight]);
       const pixels = nativeImage.createFromBuffer(image.toPNG()).resize({ width, height }).toBitmap();
-      const hasInk = bounds.every(rect => {
+      const samples = bounds.map(rect => {
         let min = 255, max = 0, bright = 0, dark = 0;
         const intensities = new Uint32Array(256);
         for (let y = Math.max(0, Math.ceil(rect.y)); y < Math.min(height, Math.floor(rect.y + rect.height)); y++) {
@@ -62,12 +68,12 @@ module.exports = async function verifyAppearance(initialWindow, output) {
           if (level <= min + 20) dark += intensities[level];
           if (level >= max - 20) bright += intensities[level];
         }
-        return max - min >= 58 && bright >= 3 && dark >= 3;
+        return { ...rect, min, max, bright, dark };
       });
-      if (hasInk) break;
+      if (samples.every(({min, max, bright, dark}) => max - min >= 58 && bright >= 3 && dark >= 3)) break;
       if (Date.now() - started > 2500) {
         fs.writeFileSync(path.join(output, name + '-failed.png'), image.toPNG());
-        throw Error('实际截图缺少可读的前景内容：' + name);
+        throw Error('实际截图缺少可读的前景内容：' + name + ' ' + JSON.stringify(samples));
       }
       await pause(70);
     }
@@ -180,7 +186,7 @@ module.exports = async function verifyAppearance(initialWindow, output) {
       search.value = '';
       search.dispatchEvent(new Event('input'));
     });
-    await until(() => run(shelf, () => !!document.querySelector('.clip-content')), '剪贴板卡片就绪');
+    await until(() => run(shelf, () => document.querySelector('.clip-content')?.textContent === '毛玻璃卡片的文字'), '剪贴板卡片就绪');
     await capture(shelf, 'appearance-glass-clipboard', ['.clipboard-tab.selected', '.clip-content']);
     await run(settings, () => {
       const first = document.querySelector('.settings-nav');
