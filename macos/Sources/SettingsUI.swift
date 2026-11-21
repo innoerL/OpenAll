@@ -79,7 +79,7 @@ final class SettingsNavItem: NSButton, WindowThemeRefreshing {
 
     var showsKeyboardFocus: Bool {
         guard let window = window as? SettingsWindow else { return false }
-        return window.isKeyWindow && window.showsNavigationFocus && window.firstResponder === self
+        return window.isKeyWindow && window.showsNavigationFocus && window.firstResponder === self && canBecomeKeyView
     }
 
     func refreshWindowTheme() {
