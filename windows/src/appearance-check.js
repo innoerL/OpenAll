@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, nativeImage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -30,10 +30,50 @@ module.exports = async function verifyAppearance(initialWindow, output) {
     }, id);
     return win;
   }
-  async function capture(win, name) {
+  async function capture(win, name, regions = []) {
     await run(win, async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-    fs.writeFileSync(path.join(output, name + '.png'), (await win.webContents.capturePage()).toPNG());
+    const bounds = await run(win, selectors => selectors.map(selector => {
+      const frame = document.querySelector('iframe');
+      const local = document.querySelector(selector), element = local || frame?.contentDocument?.querySelector(selector);
+      if (!element) throw Error('截图缺少内容：' + selector);
+      const rect = element.getBoundingClientRect(), offset = local ? { x: 0, y: 0 } : frame.getBoundingClientRect();
+      return { x: rect.x + offset.x, y: rect.y + offset.y, width: Math.min(180, rect.width), height: Math.min(40, rect.height) };
+    }), regions);
+    // DWM 完成组合可能晚于页面的动画帧。直接核对文字区域的像素，避免只有标题栏的空帧通过。
+    const started = Date.now();
+    let image;
+    while (true) {
+      image = await win.webContents.capturePage();
+      if (!bounds.length) break;
+      const [width, height] = win.getContentSize();
+      const pixels = nativeImage.createFromBuffer(image.toPNG()).resize({ width, height }).toBitmap();
+      const hasInk = bounds.every(rect => {
+        let min = 255, max = 0, bright = 0, dark = 0;
+        const intensities = new Uint32Array(256);
+        for (let y = Math.max(0, Math.ceil(rect.y)); y < Math.min(height, Math.floor(rect.y + rect.height)); y++) {
+          for (let x = Math.max(0, Math.ceil(rect.x)); x < Math.min(width, Math.floor(rect.x + rect.width)); x++) {
+            const i = (y * width + x) * 4;
+            const value = (pixels[i] + pixels[i + 1] * 2 + pixels[i + 2]) >> 2;
+            intensities[value]++;
+            min = Math.min(min, value); max = Math.max(max, value);
+          }
+        }
+        for (let level = 0; level <= 255; level++) {
+          if (level <= min + 20) dark += intensities[level];
+          if (level >= max - 20) bright += intensities[level];
+        }
+        return max - min >= 58 && bright >= 3 && dark >= 3;
+      });
+      if (hasInk) break;
+      if (Date.now() - started > 2500) {
+        fs.writeFileSync(path.join(output, name + '-failed.png'), image.toPNG());
+        throw Error('实际截图缺少可读的前景内容：' + name);
+      }
+      await pause(70);
+    }
+    fs.writeFileSync(path.join(output, name + '.png'), image.toPNG());
     report.screenshots.push(name + '.png');
+    if (regions.length) check(true, name + '：实际截图中可见前景文字');
   }
   const original = await run(initialWindow, () => openall.settings());
   try {
@@ -101,7 +141,9 @@ module.exports = async function verifyAppearance(initialWindow, output) {
     });
     check(material.accessible || (material.color === 'rgba(255, 255, 255, 0.15)' && material.blur === 'blur(16px)' &&
       material.border === '1px' && material.background.includes('radial-gradient')), '毛玻璃卡片绘制材质、描边和彩色背景');
-    await capture(settings, 'appearance-glass-settings');
+    await capture(settings, 'appearance-glass-settings', ['.settings-nav.selected', '.settings-content h1', '.appearance-preview h3']);
+    await capture(json, 'appearance-glass-json', ['.editor-action-group button', '.cm-line:nth-child(2)']);
+    await capture(comparison, 'appearance-glass-comparison', ['.heading strong', '#left .cm-line', '#right .cm-line']);
     const effects = await run(settings, async () => {
       const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -132,6 +174,14 @@ module.exports = async function verifyAppearance(initialWindow, output) {
       '光晕限制于可视面板，离开后消退且滚动范围保持稳定');
     check(await run(shelf, () => document.documentElement.dataset.material === 'glass' &&
       document.querySelector('.clipboard-search').value === '保留可见输入'), '剪贴板接受材质广播并保留已输入的文本');
+    await run(shelf, async () => {
+      await openall.windowAction('smokeFixture', { clipboard: [{ kind: 'text', value: '毛玻璃卡片的文字', text: '毛玻璃卡片的文字' }] });
+      const search = document.querySelector('.clipboard-search');
+      search.value = '';
+      search.dispatchEvent(new Event('input'));
+    });
+    await until(() => run(shelf, () => !!document.querySelector('.clip-content')), '剪贴板卡片就绪');
+    await capture(shelf, 'appearance-glass-clipboard', ['.clipboard-tab.selected', '.clip-content']);
     await run(settings, () => {
       const first = document.querySelector('.settings-nav');
       first.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
