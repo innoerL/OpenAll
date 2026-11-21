@@ -54,23 +54,21 @@ module.exports = async function verifyAppearance(initialWindow, output) {
       const [width, height] = await run(win, () => [innerWidth, innerHeight]);
       const pixels = nativeImage.createFromBuffer(image.toPNG()).resize({ width, height }).toBitmap();
       const samples = bounds.map(rect => {
-        let min = 255, max = 0, bright = 0, dark = 0;
         const intensities = new Uint32Array(256);
         for (let y = Math.max(0, Math.ceil(rect.y)); y < Math.min(height, Math.floor(rect.y + rect.height)); y++) {
           for (let x = Math.max(0, Math.ceil(rect.x)); x < Math.min(width, Math.floor(rect.x + rect.width)); x++) {
             const i = (y * width + x) * 4;
             const value = (pixels[i] + pixels[i + 1] * 2 + pixels[i + 2]) >> 2;
             intensities[value]++;
-            min = Math.min(min, value); max = Math.max(max, value);
           }
         }
-        for (let level = 0; level <= 255; level++) {
-          if (level <= min + 20) dark += intensities[level];
-          if (level >= max - 20) bright += intensities[level];
-        }
-        return { ...rect, min, max, bright, dark };
+        // 忽略少量描边和抗锯齿极值，要求笔画及其底色各至少有八个像素。
+        let min = 0, max = 255, dark = 0, bright = 0;
+        while (min < 255 && (dark += intensities[min]) < 8) min++;
+        while (max > 0 && (bright += intensities[max]) < 8) max--;
+        return { ...rect, min, max };
       });
-      if (samples.every(({min, max, bright, dark}) => max - min >= 58 && bright >= 3 && dark >= 3)) break;
+      if (samples.every(({ min, max }) => max - min >= 58)) break;
       if (Date.now() - started > 2500) {
         fs.writeFileSync(path.join(output, name + '-failed.png'), image.toPNG());
         throw Error('实际截图缺少可读的前景内容：' + name + ' ' + JSON.stringify(samples));
