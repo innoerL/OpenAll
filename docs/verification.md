@@ -1,4 +1,21 @@
-# 0.27.1 发布验证
+# 0.27.3 发布验证
+
+本次调整通用设置中的快捷键、JSON 工具栏与搜索栏、文本对比的栏头与搜索。macOS 和 Windows 安装包均由提交 `b115a72` 构建。
+
+| 平台 | 已验证 |
+| --- | --- |
+| macOS | 云构建完成 Intel 和 Apple Silicon 双架构、签名完整性、设置焦点、JSON 搜索与大文本检查。本地原生窗口通过文本对比的 68 项交互检查，840 点宽度下实测 ⌘F 查找、Enter 跨栏跳转与 Esc 返回编辑。[云端记录](https://github.com/innoerL/OpenAll/actions/runs/44910395707) |
+| Windows x64 | 云端完成编辑器交互、大文本、跨窗口粘贴以及安装、启动和卸载检查。另用 Electron 验证深浅主题与 480 像素窄窗显示。[云端记录](https://github.com/innoerL/OpenAll/actions/runs/44910395660) |
+
+两个本地安装包的 SHA-256 与各自的云构建及发布资产一致。macOS 使用临时签名，尚未公证。Windows 安装器尚未代码签名。[下载与校验文件](https://github.com/innoerL/OpenAll/releases/tag/v0.27.3)
+
+## 0.27.2 macOS 历史验证
+
+设置侧栏使用真实的鼠标、Tab、Shift-Tab 和空格事件进行回归。测试覆盖打开设置、键盘遍历、从「外观」点击「通用」及直接重开「诊断」。各路径分别检查当前页面、第一响应者及键盘焦点提示，另保存了鼠标切换后的窗口截图。macOS 通用包通过双架构、签名完整性和大文本回归检查。[构建记录](https://github.com/innoerL/OpenAll/actions/runs/44909116413)
+
+安装包的 SHA-256 与该次云端构建一致。macOS 安装包使用临时签名，尚未公证。[安装包和校验文件](https://github.com/innoerL/OpenAll/releases/tag/v0.27.2)
+
+## 0.27.1 历史验证
 
 设置导航即时选中，背景色与强调色分别显示名称和对勾。卡片使用实色，按钮保留按下反馈。两个平台基于同一提交 `656b164` 构建。
 
