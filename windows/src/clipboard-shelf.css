@@ -1,0 +1,39 @@
+/* finesse · register=product · shell=剪贴板底部通栏 */
+.clipboard-footer { gap: 14px; }
+.clipboard-footer button { flex: none; width: 92px; }
+.clipboard-footer .clip-count {
+  flex: none;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.clip-key-hints {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: flex-start;
+  column-gap: 16px;
+  min-width: 0;
+  height: 18px;
+  overflow: hidden;
+}
+.clip-key-hints span { flex: none; line-height: 18px; white-space: nowrap; }
+.clipboard-tab { flex: none; white-space: nowrap; }
+.clip-card:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; }
+@media (max-width: 620px) {
+  .clipboard-header { padding-inline: 12px; align-items: flex-start; gap: 6px; }
+  .clipboard-header .clipboard-search { width: clamp(92px, 25vw, 145px); }
+  .clipboard-tabs { gap: 4px; }
+  .clipboard-tab { padding-inline: 8px; }
+  .clipboard-filter { width: 62px; }
+  .clipboard-footer { inset-inline: 12px; gap: 8px; }
+  .clipboard-footer button { width: 76px; }
+  .clip-key-hints { column-gap: 8px; }
+}
+@media (max-width: 480px) {
+  .clipboard-add-tab { width: 28px; justify-content: center; padding: 0; }
+  .clipboard-add-tab span { display: none; }
+}

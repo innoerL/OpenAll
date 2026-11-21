@@ -46,6 +46,13 @@ private final class ClipboardLocalDestination {
 final class ShelfPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+    var focusChanged: (() -> Void)?
+
+    @discardableResult override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        let accepted = super.makeFirstResponder(responder)
+        if accepted { focusChanged?() }
+        return accepted
+    }
 }
 
 final class ShelfPreviewWindow: NSWindow {
@@ -74,7 +81,7 @@ final class ShelfSearchField: NSSearchField, WindowThemeRefreshing {
             .font: font ?? NSFont.systemFont(ofSize: 13)])
         superview?.layer?.backgroundColor = OpenAllTheme.editorCanvas.cgColor
         let editor = currentEditor() as? NSTextView
-        superview?.layer?.borderColor = (editor == nil ? OpenAllTheme.rule : NSColor.systemBlue.withAlphaComponent(0.8)).cgColor
+        superview?.layer?.borderColor = (editor == nil ? OpenAllTheme.rule : OpenAllTheme.accentText).cgColor
         superview?.layer?.borderWidth = editor == nil ? 1 : 1.5
         guard let editor else { return }
         // NSSearchField 聚焦后由窗口共享的 NSTextView 绘字；同时更新已有文字和后续输入属性。
@@ -532,6 +539,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     private var scroll: NSScrollView!
     private var cards: NSView!
     private var status: NSTextField!
+    private var keyboardHint: NSTextField!
     var onCompareText: ((String, String) -> Void)?
     private var previewButton: NSButton!
     private var previewWindow: NSWindow?
@@ -597,6 +605,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         reload()
         if DesignPreview.enabled {
             panel?.setFrame(shelfFrame, display: false)
+            focusFirstCard()
             DesignPreview.lastWindow = panel
             return
         }
@@ -715,7 +724,11 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             show(target: nil)
         }
         let originalIDs = Set(store.records.map(\.id))
-        guard panel.makeFirstResponder(search), let editor = search.currentEditor() as? NSTextView else { return false }
+        guard panel.makeFirstResponder(search), let initialEditor = search.currentEditor() as? NSTextView,
+              keyboardHint.stringValue == "↓ 选择卡片",
+              control(search, textView: initialEditor, doCommandBy: #selector(NSResponder.moveDown(_:))),
+              panel.firstResponder is ClipCard, keyboardHint.stringValue.contains("↵ 粘贴"),
+              panel.makeFirstResponder(search), let editor = search.currentEditor() as? NSTextView else { return false }
         editor.insertText("JSONx", replacementRange: NSRange(location: 0, length: 0))
         editor.setSelectedRange(NSRange(location: 5, length: 0))
         editor.doCommand(by: #selector(NSResponder.deleteBackward(_:)))
@@ -809,9 +822,12 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             control(search, textView: editor, doCommandBy: #selector(NSResponder.moveLeft(_:))) &&
             selectedID == displayedItems[0].id
         let shiftStatus = control(search, textView: editor, doCommandBy: #selector(NSResponder.moveRightAndModifySelection(_:))) &&
-            selectedIDs.count == 2 && status.stringValue.hasPrefix("\(displayedItems.count) 条记录 · 2 项已选")
+            selectedIDs.count == 2 && status.stringValue == "\(displayedItems.count) 条匹配 · 2 项已选"
+        guard let countCell = status.cell,
+              countCell.titleRect(forBounds: status.bounds).width >= ceil(countCell.attributedStringValue.size().width),
+              status.frame.maxX < keyboardHint.frame.minX else { return false }
         let singleStatus = control(search, textView: editor, doCommandBy: #selector(NSResponder.moveLeft(_:))) &&
-            selectedIDs.count == 1 && status.stringValue.hasPrefix("\(displayedItems.count) 条记录 · 1 项已选")
+            selectedIDs.count == 1 && status.stringValue == "\(displayedItems.count) 条匹配 · 1 项已选"
         selectedID = displayedItems.last?.id
         selectedIDs = [displayedItems.last!.id]
         search.stringValue = "json"
@@ -820,7 +836,8 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             selectedIDs == [displayedItems.first!.id]
         search.stringValue = "绝无此卡片-OpenAll"
         controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: search))
-        let emptyCleared = displayedItems.isEmpty && selectedID == nil && selectedIDs.isEmpty
+        let emptyCleared = displayedItems.isEmpty && selectedID == nil && selectedIDs.isEmpty &&
+            status.stringValue == "0 条匹配" && keyboardHint.stringValue.isEmpty && !previewButton.isEnabled
         search.stringValue = ""
         controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: search))
         guard displayedItems.count >= 3 else { return false }
@@ -936,16 +953,23 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         }
         root.addSubview(scroll)
         status = NSTextField(labelWithString: "")
-        status.font = .systemFont(ofSize: 12)
-        status.textColor = OpenAllTheme.ink.withAlphaComponent(0.78)
-        status.frame = NSRect(x: 190, y: 17, width: 992, height: 22)
+        status.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        status.textColor = OpenAllTheme.ink
+        status.lineBreakMode = .byTruncatingTail
         root.addSubview(status)
-        previewButton = NSButton(title: "预览选中卡片 ↗", target: self, action: #selector(previewSelected))
-        previewButton.frame = NSRect(x: 18, y: 11, width: 158, height: 30)
+        keyboardHint = NSTextField(labelWithString: "")
+        keyboardHint.font = .systemFont(ofSize: 12)
+        keyboardHint.textColor = OpenAllTheme.muted
+        keyboardHint.alignment = .right
+        keyboardHint.lineBreakMode = .byTruncatingTail
+        root.addSubview(keyboardHint)
+        previewButton = NSButton(title: "预览卡片", target: self, action: #selector(previewSelected))
+        previewButton.frame = NSRect(x: 18, y: 11, width: 92, height: 30)
         ClipboardShelfStyle.action(previewButton)
         previewButton.toolTip = "查看完整内容（空格）"
         root.addSubview(previewButton)
         panel = w
+        w.focusChanged = { [weak self] in self?.updateSelectionStatus() }
     }
 
     private func moveToBottom() {
@@ -965,7 +989,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         root.subviews.compactMap { $0 as? NSButton }.first { $0.title == "×" }?.frame.origin.x = width - 42
         scroll.frame.size.width = width - 36
         if cards.frame.width < scroll.frame.width { cards.frame.size.width = scroll.frame.width }
-        status.frame.size.width = width - 208
+        updateSelectionStatus()
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -996,6 +1020,10 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             return false
         }
         if control === search {
+            if selector == #selector(NSResponder.moveDown(_:)), !textView.hasMarkedText(), !displayedItems.isEmpty {
+                focusFirstCard()
+                return true
+            }
             // 搜索框的删除始终交给共享文本编辑器，空查询和输入法组合文字也不例外。
             if selector == #selector(NSResponder.deleteBackward(_:)) || selector == #selector(NSResponder.deleteForward(_:)) {
                 return false
@@ -1183,7 +1211,11 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         cards.viewWithTag(7341)?.removeFromSuperview()
         displayedItems = visibleItems()
         if displayedItems.isEmpty {
-            let empty = NSTextField(labelWithString: search.stringValue.isEmpty ? "复制内容后会出现在这里" : "没有匹配的内容 · 试试更短的关键词")
+            let emptyText: String
+            if hasSearchFilter { emptyText = "没有匹配的记录" }
+            else if activeBoard != nil { emptyText = "这个标签还没有记录" }
+            else { emptyText = "复制内容后会出现在这里" }
+            let empty = NSTextField(labelWithString: emptyText)
             empty.tag = 7341
             empty.font = .systemFont(ofSize: 14)
             empty.textColor = OpenAllTheme.muted
@@ -1491,12 +1523,45 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         presentingDialog = true
         card.startDrag(writers: Array(writers.prefix(30)), event: event)
     }
-    private func updateSelectionStatus() {
-        let keys = search.currentEditor() != nil ? "输入关键词筛选 · ↓ 选择卡片" : "← → 浏览 · 空格预览 · ↵ 粘贴 · ⌫ 删除"
-        status.stringValue = "\(displayedItems.count) 条记录 · \(selectedIDs.count) 项已选 · \(keys)"
-        status.toolTip = "⌘ 点击多选卡片；搜索框内的删除键正常编辑文字。"
+    private var hasSearchFilter: Bool {
+        !search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || typeFilter.indexOfSelectedItem > 0
     }
-    private func message(_ text: String) { status?.stringValue = text }
+
+    private func updateSelectionStatus() {
+        guard let panel, let root = panel.contentView else { return }
+        let count = "\(displayedItems.count) 条" + (hasSearchFilter ? "匹配" : "记录")
+        status.stringValue = selectedIDs.isEmpty ? count : "\(count) · \(selectedIDs.count) 项已选"
+        let statusX = previewButton.frame.maxX + 14
+        // 单行 NSTextField 的固有尺寸可能取到上一次已截断的标题；按完整文本和实际字体留出边距。
+        let textWidth = (status.stringValue as NSString).size(withAttributes: [.font: status.font!]).width
+        let statusWidth = min(max(144, ceil(textWidth) + 16), max(0, root.bounds.width - statusX - 18))
+        status.frame = NSRect(x: statusX, y: 16, width: statusWidth, height: 18)
+        let hintX = status.frame.maxX + 20
+        keyboardHint.frame = NSRect(x: hintX, y: 16, width: max(0, root.bounds.width - hintX - 18), height: 18)
+
+        var hints: [String]
+        if displayedItems.isEmpty { hints = [] }
+        else if let editor = search.currentEditor(), panel.firstResponder === editor {
+            hints = ["↓ 选择卡片"]
+        } else if let card = panel.firstResponder as? ClipCard {
+            hints = [selectedIDs.count > 1 ? "↵ 粘贴所选" : "↵ 粘贴"]
+            if !card.item.pinned { hints.append("⌫ 删除此卡") }
+            hints += ["← → 浏览", "空格 预览", "⌘ 点击多选"]
+        } else { hints = [] }
+        keyboardHint.toolTip = hints.joined(separator: "　")
+        var visible = hints
+        while !visible.isEmpty {
+            keyboardHint.stringValue = visible.joined(separator: "　")
+            if keyboardHint.intrinsicContentSize.width <= keyboardHint.frame.width { return }
+            visible.removeLast()
+        }
+        keyboardHint.stringValue = ""
+    }
+
+    private func message(_ text: String) {
+        keyboardHint?.stringValue = text
+        keyboardHint?.toolTip = text
+    }
     @objc private func hide() {
         guard let panel, panel.isVisible, !closing else { return }
         closing = true

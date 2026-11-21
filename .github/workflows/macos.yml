@@ -88,6 +88,17 @@ jobs:
           OPENALL_PREVIEW_OUTPUT="$PWD/macos/.build/ci-logs/settings-ui" \
           OPENALL_SETTINGS_CHECK=1 \
           macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot -AppleKeyboardUIMode 2 -NSApplicationCrashOnExceptions YES 2>&1 | tee macos/.build/ci-logs/settings-ui.log
+      - name: 启动搜索与剪贴板键盘交互验收
+        timeout-minutes: 3
+        run: |
+          OPENALL_PREVIEW_ROOT="$RUNNER_TEMP/openall-launcher-preview" \
+          OPENALL_PREVIEW_OUTPUT="$PWD/macos/.build/ci-logs/launcher-ui" \
+          OPENALL_SEARCH_DESIGN_ONLY=1 \
+          macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot 2>&1 | tee macos/.build/ci-logs/launcher-ui.log
+          OPENALL_PREVIEW_ROOT="$RUNNER_TEMP/openall-shelf-preview" \
+          OPENALL_PREVIEW_OUTPUT="$PWD/macos/.build/ci-logs/shelf-ui" \
+          OPENALL_APPEARANCE_CHECK=1 \
+          macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot 2>&1 | tee macos/.build/ci-logs/shelf-ui.log
       - name: JSON 折叠删除与大文本验收
         timeout-minutes: 5
         env:

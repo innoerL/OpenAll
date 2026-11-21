@@ -47,8 +47,8 @@ cat > "$appPath/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>OpenAll</string>
 <key>CFBundleIconFile</key><string>OpenAll.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.27.3</string>
-<key>CFBundleVersion</key><string>84</string>
+<key>CFBundleShortVersionString</key><string>0.27.4</string>
+<key>CFBundleVersion</key><string>85</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>

@@ -124,16 +124,41 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     check(await evaluate(() => document.querySelectorAll('.clip-card').length === 5 && document.querySelectorAll('.clip-type-bar').length === 5), '剪贴板大卡片与彩色类型栏');
     await capture('05-clipboard');
     const before = await evaluate(() => openall.history());
+    check(await evaluate(() => {
+      const input = document.querySelector('.clipboard-search');
+      input.focus();
+      input.value = '找不到的记录_OpenAll_';
+      input.dispatchEvent(new Event('input'));
+      return document.querySelector('.clip-count').textContent === '0 条匹配'
+        && document.querySelector('.clipboard-footer button').disabled
+        && !document.querySelector('.clip-key-hints').textContent;
+    }), '剪贴板空筛选无可执行的卡片提示');
     await evaluate(() => { const input = document.querySelector('.clipboard-search'); input.value = 'choose'; input.dispatchEvent(new Event('input')); input.focus(); input.setSelectionRange(6, 6); });
+    check(await evaluate(() => document.querySelector('.clip-count').textContent === '1 条匹配 · 1 项已选'
+      && document.querySelector('.clip-key-hints').textContent === '↓ 选择卡片'), '搜索聚焦显示匹配数和进入卡片提示');
     active.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
     active.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
     await pause(100);
     check(await evaluate(async n => document.querySelector('.clipboard-search').value === 'choos' && (await openall.history()).length === n, before.length), '搜索框 Backspace 只删除输入');
-    await evaluate(() => { const input = document.querySelector('.clipboard-search'); input.value = ''; input.dispatchEvent(new Event('input')); document.querySelector('.clip-card').focus(); });
+    const deletion = await evaluate(() => {
+      const input = document.querySelector('.clipboard-search');
+      input.value = '';
+      input.dispatchEvent(new Event('input'));
+      const second = document.querySelectorAll('.clip-card')[1];
+      second.dispatchEvent(new MouseEvent('click', {bubbles:true, ctrlKey:true}));
+      const controller = OpenAllApp.controller, cards = document.querySelectorAll('.clip-card');
+      return {kept:controller.getItems()[0].id, deleted:controller.getItems()[1].id,
+        multi:document.querySelectorAll('.clip-card[aria-selected=true]').length === 2
+          && document.activeElement === cards[1] && document.querySelector('.clip-key-hints').textContent.includes('Backspace 删除此卡')};
+    });
+    check(deletion.multi, '多选边框、读屏选中态和焦点卡删除提示一致');
     active.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
     active.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
     await until(async () => (await evaluate(() => openall.history())).length === before.length - 1, '卡片删除');
-    check(true, '卡片聚焦 Backspace 删除卡片');
+    check(await evaluate(async ({kept, deleted}) => {
+      const remaining = await openall.history();
+      return remaining.some(r => r.id === kept) && !remaining.some(r => r.id === deleted);
+    }, deletion), '多选时 Backspace 只删除焦点卡');
     await evaluate(async () => { const id = (await openall.history())[0].id; await openall.clipboardAction('newTag', { tag: '项目' }); await openall.clipboardAction('tag', { ids: [id], tag: '项目' }); await openall.clipboardAction('renameTag', { tag: '项目', name: '项目资料' }); });
     check(await evaluate(async () => (await openall.history())[0].tags.includes('项目资料')), '剪贴板标签与收藏持久化');
 

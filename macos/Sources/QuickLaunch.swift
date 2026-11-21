@@ -35,6 +35,14 @@ struct Entry: Equatable {
     let detail: String
     let value: String
     let rank: Int
+
+    var returnAction: String {
+        switch kind {
+        case .calculator, .timeValue: return "复制"
+        case .snippet: return "使用片段"
+        default: return "打开"
+        }
+    }
 }
 
 final class ChromeIndex {
@@ -326,10 +334,22 @@ final class SearchSurfaceView: NSVisualEffectView {
 }
 
 final class SearchResultRowView: NSTableRowView {
+    var returnAction = ""
+
     override func drawSelection(in dirtyRect: NSRect) {
         guard selectionHighlightStyle != .none else { return }
-        OpenAllTheme.accent.withAlphaComponent(0.11).setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 5, dy: 2), xRadius: 6, yRadius: 6).fill()
+        let row = bounds.insetBy(dx: 5, dy: 2)
+        OpenAllTheme.accent.withAlphaComponent(0.16).setFill()
+        NSBezierPath(roundedRect: row, xRadius: 6, yRadius: 6).fill()
+        let label = NSAttributedString(string: "↵  " + returnAction, attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: OpenAllTheme.ink
+        ])
+        let size = label.size()
+        let badge = NSRect(x: row.maxX - ceil(size.width) - 26, y: row.midY - 11,
+                           width: ceil(size.width) + 14, height: 22)
+        OpenAllTheme.ink.withAlphaComponent(0.16).setStroke()
+        NSBezierPath(roundedRect: badge, xRadius: 5, yRadius: 5).stroke()
+        label.draw(at: NSPoint(x: badge.minX + 7, y: round(badge.midY - size.height / 2)))
     }
 }
 
@@ -808,11 +828,14 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             return
         }
         if ProcessInfo.processInfo.environment["OPENALL_APPEARANCE_CHECK"] == "1" {
+            clipboardStore.seedPreviewRecords()
             clipboardWindow.show(target: nil)
             guard clipboardWindow.verifySearchAppearanceForDesign() else { throw NSError(domain: "ClipboardAppearanceRegression", code: 1) }
+            guard clipboardWindow.verifySearchSelectionForDesign() else { throw NSError(domain: "ClipboardSearchSelectionRegression", code: 1) }
+            guard try clipboardWindow.verifySearchFocusForDesign() else { throw NSError(domain: "ClipboardSearchFocusRegression", code: 1) }
             guard try clipboardWindow.verifyFocusedDeletionForDesign() else { throw NSError(domain: "ClipboardFocusRegression", code: 1) }
             try DesignPreview.capture(DesignPreview.lastWindow!, name: "clipboard-appearance")
-            print("剪贴板外观往返与输入检查通过")
+            print("剪贴板主题、过滤计数、多选、搜索焦点与卡片删除检查通过")
             return
         }
         if ProcessInfo.processInfo.environment["OPENALL_SEARCH_LATENCY_CHECK"] == "1" {
@@ -1139,18 +1162,24 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
               field.frame == NSRect(x: 62, y: 5, width: 560, height: 44), field.font?.pointSize == 15,
               field.placeholderAttributedString?.string == "搜索应用、文件与更多" else { throw NSError(domain: "RestoredSearchGeometry", code: 1) }
         apps = [Entry(kind: .application, title: "Terminal", detail: "应用 · /System/Applications/Utilities/Terminal.app", value: "/System/Applications/Utilities/Terminal.app", rank: 70)]
-        for (query, name) in [("终端", "01-search-application"), ("?", "01-search-catalog"), ("文件 报告", "01-search-file-disabled"), ("zz-unmatched-982741", "01-search-no-results"), ("翻译 为产品上线前的最终验证准备一份完整的检查清单，确认搜索、快捷键和剪贴板在不同应用中都能连续使用", "01-search-long-query")] {
+        for (query, name) in [("终端", "01-search-application"), ("?", "01-search-catalog"), ("2+3", "01-search-calculator"), ("文件 报告", "01-search-file-disabled"), ("zz-unmatched-982741", "01-search-no-results"), ("翻译 为产品上线前的最终验证准备一份完整的检查清单，确认搜索、快捷键和剪贴板在不同应用中都能连续使用", "01-search-long-query")] {
             field.stringValue = query; update()
             if query == "终端" { guard results.first?.kind == .application else { throw NSError(domain: "RestoredSearchApplication", code: 1) } }
             if query == "?" {
                 guard results.count > 7, table.rowHeight == 56 else { throw NSError(domain: "RestoredSearchCatalog", code: 1) }
                 move(1)
-                guard table.selectedRow == 1 else { throw NSError(domain: "RestoredSearchNavigation", code: 1) }
+                guard table.selectedRow == 1, footer.stringValue.contains("⌘K 操作") else { throw NSError(domain: "RestoredSearchNavigation", code: 1) }
+            }
+            if query == "2+3" {
+                let row = table.rowView(atRow: 0, makeIfNecessary: true) as? SearchResultRowView
+                guard results.first?.value == "5", row?.returnAction == "复制", footer.stringValue == "⌘K 操作" else {
+                    throw NSError(domain: "SearchCalculatorAction", code: 1)
+                }
             }
             if query == "文件 报告" { guard results.isEmpty, footer.stringValue.contains("文件搜索已关闭") else { throw NSError(domain: "RestoredSearchFiles", code: 1) } }
             if query.hasPrefix("zz-") {
                 activateSelection()
-                guard results.isEmpty, scroll.isHidden, field.stringValue == query else { throw NSError(domain: "RestoredSearchEmpty", code: 1) }
+                guard results.isEmpty, scroll.isHidden, field.stringValue == query, footer.stringValue.contains("没有匹配结果") else { throw NSError(domain: "RestoredSearchEmpty", code: 1) }
             }
             if query.hasPrefix("翻译 ") { guard results.first?.value == String(query.dropFirst(3)) else { throw NSError(domain: "RestoredSearchTranslation", code: 1) } }
             try DesignPreview.capture(panel, name: name)
@@ -1798,7 +1827,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                           detail: command.detail + " · " + command.keywords.joined(separator: " / "),
                           value: command.id, rank: 110)
                 }
-            footer.stringValue = results.isEmpty ? "没有匹配的命令" : "↑↓ 选择    ↵ 执行    ⌘K 收藏"
+            footer.stringValue = results.isEmpty ? "没有匹配的命令" : searchNavigationHint
             presentSearchResults()
             return
         }
@@ -1838,13 +1867,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 footer.stringValue = "未找到 · 无法读取：\(fileSearch.unreadableFolders.joined(separator: "、"))"
             } else {
                 footer.stringValue = results.isEmpty ? "未找到\(fileRequest.filter.title) · 可检查文件权限和搜索范围" :
-                    (fileSearch.unreadableFolders.isEmpty ? "↑↓ 选择    ↵ 打开 · \(fileRequest.filter.title)搜索" : "↑↓ 选择    ↵ 打开 · 部分目录未授权")
+                    (fileSearch.unreadableFolders.isEmpty ? searchNavigationHint : "\(searchNavigationHint) · 部分目录未授权")
             }
             presentSearchResults()
             return
         }
-        footer.stringValue = exactMode ? "精确匹配名称或功能别名 · 例如 =终端" :
-            q.isEmpty ? "输入名称或算式 · ? 命令 · = 精确匹配" : "↑↓ 选择 · ↵ 打开 · ⌘K 操作"
         if q.hasPrefix("翻译") || q.hasPrefix("translate ") {
             let text = q.hasPrefix("翻译") ? String(original.dropFirst(2)).trimmingCharacters(in: .whitespaces) : String(original.dropFirst(10))
             list.append(Entry(kind: .translate, title: "在有道翻译中打开", detail: text.isEmpty ? "打开网页版" : text, value: text, rank: 110))
@@ -1901,7 +1928,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         if q.hasPrefix(";") {
             let keyword = String(q.dropFirst())
             list += snippets.search(keyword).map {
-                Entry(kind: .snippet, title: ";\($0.keyword)  \($0.name)", detail: "常用片段 · 回车展开并粘贴",
+                Entry(kind: .snippet, title: ";\($0.keyword)  \($0.name)", detail: "常用片段",
                       value: $0.id.uuidString, rank: 118)
             }
         }
@@ -1930,10 +1957,10 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         let timeEntries = TimeResults.entries(for: original)
         if timeEntries.isEmpty, calculatorIntent, let result = ExpressionParser(expression).parse() {
             let formatted = result.rounded() == result && abs(result) < 1e15 ? String(Int64(result)) : String(format: "%.12g", result)
-            list.append(Entry(kind: .calculator, title: formatted, detail: "计算结果 · 回车复制", value: formatted, rank: 120))
+            list.append(Entry(kind: .calculator, title: formatted, detail: "计算结果", value: formatted, rank: 120))
         }
         list += timeEntries.map {
-            Entry(kind: .timeValue, title: $0.value, detail: "\($0.label) · 回车复制", value: $0.value, rank: 119)
+            Entry(kind: .timeValue, title: $0.value, detail: $0.label, value: $0.value, rank: 119)
         }
         let directTool = comparisonRequested || q.hasPrefix("翻译") || q.hasPrefix("translate ") || q == "文本对比" || q.hasPrefix("文本对比 ") || q == "文本" || q == "wenben"
             || q == "diff" || q.hasPrefix("diff ") || q == "剪贴板" || q == "clipboard" || q == "粘贴板"
@@ -1949,6 +1976,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             fileSearch.search("")
             results = list.filter { (!exactMode || $0.title.localizedCaseInsensitiveCompare(original) == .orderedSame)
                 && !ranking.isHidden(kind: String(describing: $0.kind), value: $0.value) }
+            footer.stringValue = searchNavigationHint
             presentSearchResults()
             return
         }
@@ -2035,7 +2063,15 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         results = Array(ranked.sorted { a, b in
             a.1 == b.1 ? a.0.title.localizedStandardCompare(b.0.title) == .orderedAscending : a.1 > b.1
         }.prefix(80).map { $0.0 })
+        footer.stringValue = exactMode
+            ? (results.isEmpty ? "没有精确匹配 · 例如 =终端" : "精确匹配 · \(searchNavigationHint)")
+            : searchNavigationHint
         presentSearchResults()
+    }
+
+    private var searchNavigationHint: String {
+        if results.isEmpty { return "没有匹配结果 · 输入 ? 浏览命令" }
+        return results.count > 1 ? "↑↓ 选择    ⌘K 操作" : "⌘K 操作"
     }
 
     private func presentSearchResults() {
@@ -2096,7 +2132,9 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
 
     func numberOfRows(in tableView: NSTableView) -> Int { results.count }
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        SearchResultRowView()
+        let view = SearchResultRowView()
+        view.returnAction = results[row].returnAction
+        return view
     }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let id = NSUserInterfaceItemIdentifier("entry")
@@ -2107,21 +2145,23 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             icon.tag = 3
             icon.imageScaling = .scaleProportionallyUpOrDown
             let title = NSTextField(labelWithString: "")
-            title.tag = 1; title.font = .systemFont(ofSize: 14, weight: .regular)
+            title.tag = 1; title.font = .systemFont(ofSize: 14, weight: .medium)
             title.textColor = OpenAllTheme.ink
-            title.frame = NSRect(x: 58, y: 28, width: 600, height: 22)
+            title.lineBreakMode = .byTruncatingTail
+            title.frame = NSRect(x: 58, y: 28, width: cell.bounds.width - 160, height: 22)
             title.autoresizingMask = [.width]
             let detail = NSTextField(labelWithString: "")
             detail.tag = 2; detail.font = .systemFont(ofSize: 12)
             detail.textColor = OpenAllTheme.muted
             detail.lineBreakMode = .byTruncatingMiddle
-            detail.frame = NSRect(x: 58, y: 9, width: 600, height: 18)
+            detail.frame = NSRect(x: 58, y: 9, width: cell.bounds.width - 160, height: 18)
             detail.autoresizingMask = [.width]
             cell.addSubview(icon); cell.addSubview(title); cell.addSubview(detail)
         }
         cell.viewWithTag(1).flatMap { $0 as? NSTextField }?.stringValue = results[row].title
         cell.viewWithTag(2).flatMap { $0 as? NSTextField }?.stringValue = results[row].detail
         let item = results[row]
+        cell.setAccessibilityHelp("回车" + item.returnAction)
         let symbol: String
         switch item.kind {
         case .application: symbol = "app"
@@ -2189,7 +2229,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             if item.value != "searchSettings" { add(commandFavorites.contains(item.value) ? "取消收藏" : "收藏命令", #selector(toggleCommandFavorite)) }
             return
         }
-        add(item.kind == .snippet ? "展开并粘贴" : "打开", #selector(activateSelection))
+        add(item.returnAction, #selector(activateSelection))
         if [.application, .file, .alias, .bookmark, .history, .calculator, .timeValue, .snippet].contains(item.kind) {
             add("对内容操作…", #selector(showSearchResultActions))
         }
