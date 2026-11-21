@@ -1,0 +1,66 @@
+/* 静止的色面在卡片后方提供纹理，阴影和字形留在各自的前景层。 */
+:root[data-material=glass] {
+  --material-base: color-mix(in srgb, var(--canvas) 63%, #131722);
+  --material-muted: #d5d7dc;
+  --material-scene:
+    radial-gradient(ellipse 53% 85% at 2% -23%, rgba(66,151,173,.22) 0 56%, rgba(66,151,173,.045) 57%, transparent 85%),
+    radial-gradient(ellipse 47% 94% at 108% 21%, rgba(125,95,169,.20) 0 54%, rgba(125,95,169,.045) 55%, transparent 82%),
+    radial-gradient(ellipse 61% 86% at 63% 134%, rgba(172,129,85,.19) 0 40%, transparent 82%);
+}
+:root[data-material=glass][data-theme=light] {
+  --material-base: color-mix(in srgb, var(--canvas) 60%, #fafbff);
+  --material-muted: #404957;
+  --material-scene:
+    radial-gradient(ellipse 53% 85% at 2% -23%, rgba(94,177,191,.22) 0 56%, rgba(94,177,191,.04) 57%, transparent 85%),
+    radial-gradient(ellipse 47% 94% at 108% 21%, rgba(150,121,200,.19) 0 54%, rgba(150,121,200,.04) 55%, transparent 82%),
+    radial-gradient(ellipse 61% 86% at 63% 134%, rgba(202,157,104,.19) 0 40%, transparent 82%);
+}
+@media (prefers-reduced-transparency: no-preference) and (forced-colors: none) and (prefers-contrast: no-preference) {
+  :root[data-material=glass] :is(.settings-layout,.search-panel,.clipboard-shelf,.aux-tool,
+    .editor-page,.context-selection,.paste-queue,.preview-page,.translation-state,.comparison-document) {
+    background-color: var(--material-base);
+    background-image: var(--material-scene);
+    --muted: var(--material-muted);
+  }
+  :root[data-material=glass] :is(.settings-sidebar,.appearance-preview,.settings-section,.clip-card,
+    .selection-preview,.preview-content,.translation-card,.aux-id-results,.aux-cron-summary,
+    .aux-image-controls,.aux-image-summary,.aux-conversion-row,.editor-action-group,
+    .editor-pane-heading,.comparison-document .heading) {
+    background-color: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.34);
+    backdrop-filter: blur(16px);
+  }
+  :root[data-material=glass] .settings-layout .settings-sidebar { border-width: 0 1px 0 0; }
+  :root[data-material=glass] .settings-section {
+    padding: 14px 16px;
+    border-radius: 10px;
+  }
+  :root[data-material=glass] .translation-card { padding: 22px 20px; border-radius: 12px; }
+  :root[data-material=glass] .search-header {
+    background: rgba(255,255,255,.15);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,.34);
+  }
+  /* 编辑正文维持稳定的高对比底色，避免每次输入或滚动触发大面积模糊。 */
+  :root[data-material=glass] :is(.editor-codemirror,.aux-editor-frame,.comparison-document .editor) {
+    --muted: var(--secondary);
+  }
+}
+.settings-viewport { position: relative; min-height: 0; min-width: 0; overflow: hidden; }
+.settings-viewport > .settings-body, .settings-viewport > .settings-sidebar { height: 100%; }
+.settings-sidebar { position: relative; }
+.settings-indicator {
+  position: absolute;
+  inset: 0 auto auto 12px;
+  width: 8px;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  fill: var(--accent-text);
+}
+.settings-nav.selected { border-radius: 18px; }
+.settings-nav.selected svg { color: var(--accent-text); }
+@media (forced-colors: active) {
+  .settings-indicator { fill: Highlight; }
+  .settings-nav.selected { outline: 1px solid Highlight; }
+}

@@ -21,3 +21,22 @@ body>.window-bar,body>main { transition:transform .22s cubic-bezier(.22,.61,.36,
 @media(prefers-reduced-motion:reduce) { body>.window-bar,body>main { transition:none; } }
 #verification-note { color:var(--foreground); font-variant-numeric:tabular-nums; } #verification-details,#verification-recent { margin-top:3px; overflow-wrap:anywhere; } .summary .week-summary { flex-wrap:wrap; row-gap:0; }
 @media(max-width:390px) { main { padding-left:9px; padding-right:9px; } .quote-card { padding-left:10px; padding-right:10px; } h2 { font-size:13px; } .window-bar { padding-left:7px; padding-right:6px; } .wordmark { gap:4px; } .brand { width:18px; height:18px; font-size:8px; } h1 { font-size:11px; } .window-buttons { gap:2px; } .window-button.symbol { min-width:23px; } .window-button.setting,.window-button.pin { min-width:34px; } .summary h2 { font-size:12px; } .summary .quote-price { font-size:32px; } .changes { flex-basis:100%; margin-left:0; } #forecast-table { font-size:10px; } .week-summary { gap:3px; font-size:9px; padding-inline:1px; } }
+
+:root[data-glass="true"] body { isolation: isolate; }
+:root[data-glass="true"] body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse 88% 50% at 103% 8%, rgba(101,169,176,.28) 0 55%, rgba(101,169,176,.045) 56%, transparent 76%),
+              radial-gradient(ellipse 80% 52% at -9% 86%, rgba(189,133,100,.26) 0 54%, transparent 55%),
+              var(--glass-ground);
+}
+:root[data-glass="true"] .quote-card {
+  color: var(--glass-ink); background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.32);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
+  :root[data-glass="true"] body::before { display: none; }
+  :root[data-glass="true"] .quote-card {
+    background: var(--surface); border-color: var(--border); color: var(--foreground);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+}

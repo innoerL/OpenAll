@@ -22,23 +22,33 @@
     const background = theme.background || '#242626';
     const surface = theme.surface || '#1e2020';
     const dark = theme.dark ?? luminance(background) < .3;
+    const glass = theme.glass === true;
+    const ground = blend(background, dark ? '#101719' : '#f5f3f0', .84);
+    // 以最明亮的暗色玻璃区域（或最暗的浅色区域）核对文字与两条曲线的对比度。
+    // 两组色面分别位于右上与左下，两者的实色部分不相交。
+    const backdrops = [ground, blend(ground, '#65a9b0', .28), blend(ground, '#bd8564', .26)];
+    const extreme = backdrops.reduce((a, b) => (luminance(b) > luminance(a)) === dark ? b : a);
+    const glassEdge = blend(extreme, '#ffffff', dark ? .20 : .15);
+    const card = glass ? glassEdge : surface;
     const foreground = theme.foreground || (dark ? '#f3f1eb' : '#202222');
     const accent = theme.accent || '#d8c19e';
     // 系列、涨跌与持平使用独立语义色，始终与宿主表面保持可辨识的对比。
-    const gold = readable(dark ? '#d8b879' : '#28755f', surface, 3.5);
-    const ctf = readable(dark ? '#9eb9da' : '#9a572e', surface, 3.5);
+    const gold = readable(dark ? '#d8b879' : '#28755f', card, 3.5);
+    const ctf = readable(dark ? '#9eb9da' : '#9a572e', card, 3.5);
     const colors = {
       background, surface, foreground, accent,
-      secondary: readable(theme.secondary || '#999d98', surface),
+      'glass-ground': ground, 'glass-ink': readable(foreground, card),
+      secondary: readable(theme.secondary || '#999d98', card),
       border: theme.border || blend(surface, foreground, .13),
-      'accent-ink': readable(accent, surface), 'accent-soft': blend(surface, accent, .13),
+      'accent-ink': readable(accent, card), 'accent-soft': blend(surface, accent, .13),
       raised: blend(surface, foreground, .07), 'chart-grid': blend(surface, foreground, .13),
       'gold-line': gold, 'ctf-line': ctf,
-      rise: readable(dark ? '#ef9f90' : '#ac303e', surface),
-      fall: readable(dark ? '#8fcbb0' : '#1d7350', surface),
-      flat: readable(dark ? '#c4c9cd' : '#52606a', surface),
+      rise: readable(dark ? '#ef9f90' : '#ac303e', card),
+      fall: readable(dark ? '#8fcbb0' : '#1d7350', card),
+      flat: readable(dark ? '#c4c9cd' : '#52606a', card),
     };
     for (const [key, value] of Object.entries(colors)) document.documentElement.style.setProperty('--' + key, value);
+    document.documentElement.dataset.glass = String(glass);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
     return colors;

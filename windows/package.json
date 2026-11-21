@@ -1,7 +1,7 @@
 {
   "name": "openall-windows",
   "productName": "OpenAll",
-  "version": "0.26.2",
+  "version": "0.27.0",
   "description": "OpenAll Windows 效率工具",
   "main": "src/main.js",
   "scripts": {
@@ -51,7 +51,17 @@
           "style.css",
           "theme.js",
           "renderer.js",
-          "chart.js"
+          "chart.js",
+          "surface-effects.js",
+          "surface-effects.css"
+        ]
+      },
+      {
+        "from": "../shared/gold-ui",
+        "to": "shared/gold-ui",
+        "filter": [
+          "surface-effects.js",
+          "surface-effects.css"
         ]
       }
     ],

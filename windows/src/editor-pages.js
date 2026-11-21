@@ -146,7 +146,7 @@
       for (const name of ['canvas', 'editor', 'raised', 'ink', 'muted', 'secondary', 'comparison-rule', 'accent-text']) vars['--' + name] = styles.getPropertyValue('--' + name).trim();
       // 主题事件已完成整套变量更新；首次载入直接读取同一份根主题，不能混用旧 body 状态。
       const light = typeof event?.detail?.light === 'boolean' ? event.detail.light : document.documentElement.dataset.theme === 'light';
-      send({ action: 'theme', theme: window.OpenAllTheme.comparison(vars, light) });
+      send({ action: 'theme', theme: window.OpenAllTheme.comparison(vars, light, document.documentElement.dataset.material === 'glass') });
     }
     const ready = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(Error('文本对比载入超时')), 15000);
@@ -159,7 +159,7 @@
       window.addEventListener('message', onMessage);
       frame._cleanup = () => { clearTimeout(timeout); window.removeEventListener('message', onMessage); };
     });
-    const observer = new MutationObserver(applyTheme); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class', 'data-theme'] });
+    const observer = new MutationObserver(applyTheme); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class', 'data-theme', 'data-material'] });
     window.addEventListener('openall-theme', applyTheme);
     await ready;
     const controller = () => frame.contentWindow.compareV2;

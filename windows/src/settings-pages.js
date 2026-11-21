@@ -6,7 +6,18 @@
     const {api}=ctx;let prefs=await api.settings(),tab=typeof ctx.initialValue==='string'?ctx.initialValue:'general',disposed=false,recording=null,renderRevision=0;
     if(!navigation.some(x=>x[0]===tab))tab='general';
     const sidebar=h('nav',{class:'settings-sidebar','aria-label':'设置分类'}),body=h('section',{class:'settings-body'}),content=h('div',{class:'settings-content'});
-    body.append(content);root.append(h('div',{class:'settings-layout'},sidebar,body));
+    body.append(content);
+    // 外层负责光晕裁切，内层独立滚动，使光晕范围始终等于可见的面板。
+    root.append(h('div',{class:'settings-layout'},
+      h('div',{class:'settings-viewport'},sidebar),h('div',{class:'settings-viewport'},body)));
+    const navigationButtons = new Map();
+    for (const [id, title, symbol] of navigation) {
+      const link = button('', event => render(id, event.detail > 0), 'settings-nav');
+      link.append(icon(symbol, 16), title);
+      navigationButtons.set(id, link);
+      sidebar.append(link);
+    }
+    const indicator = window.OpenAllMaterial.sidebarIndicator(sidebar);
     const field=(label,input)=>h('div',{class:'field'},h('label',{},label),input);
     const row=(label,control,hint='',tall=false)=>h('div',{class:'settings-row'+(tall?' tall':'')},h('label',{},label,hint?h('small',{},hint):null),control);
     const select=(options,value,fn)=>{const e=h('select',{onchange:()=>fn?.(e.value)},options.map(o=>h('option',{value:String(o[0])},o[1])));e.value=String(value);return e;};
@@ -31,8 +42,15 @@
         recording={cancel};window.addEventListener('keydown',listen,true);window.addEventListener('blur',cancel);
       },'shortcut-button');return b;
     }
-    async function render(next=tab) {
-      const revision=++renderRevision;recording?.cancel();tab=next;content.dataset.tab=tab;sidebar.replaceChildren(...navigation.map(([id,title,symbol])=>{const b=button('',()=>render(id),'settings-nav'+(id===tab?' selected':''));b.append(icon(symbol,16),title);return b;}));content.replaceChildren();body.scrollTop=0;prefs=await api.settings();if(disposed||revision!==renderRevision)return;
+    async function render(next=tab, animate=false) {
+      const revision=++renderRevision;recording?.cancel();tab=next;content.dataset.tab=tab;
+      for (const [id, link] of navigationButtons) {
+        link.classList.toggle('selected', id === tab);
+        if (id === tab) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      }
+      indicator.move(navigationButtons.get(tab), animate);
+      content.replaceChildren();body.scrollTop=0;prefs=await api.settings();if(disposed||revision!==renderRevision)return;
       if(tab==='general') {
         heading('快捷键','点击快捷键重新录制 · Esc 取消');
         content.append(row('搜索唤起方式',h('div',{class:'settings-segmented'},...['combo','double'].map((mode,i)=>button(i?'双击修饰键':'组合快捷键',async()=>{await save({searchShortcutMode:mode});render();},prefs.searchShortcutMode===mode?'selected':'')))));
@@ -98,16 +116,47 @@
       } else if(tab==='appearance') {
         heading('外观','调整背景和强调色，所有窗口同步生效。');
         const backgrounds=[['石墨','#242626'],['深蓝','#172838'],['暖棕','#30251F'],['雾白','#F2F1ED'],['跟随系统','system']],accents=[['香槟','#d8c19e'],['海蓝','#5e9ccd'],['青绿','#63b8a4'],['珊瑚','#d9917b']];
-        function palettes(title,values,key) {content.append(h('h3',{style:{marginTop:'24px'}},title),h('div',{class:'palette-row'},values.map(([label,value])=>{const b=button('',async()=>{await save(value==='system'?{theme:'system'}:{[key]:value,...(key==='backgroundHex'?{theme:'custom'}:{})});render();},'color-choice'+(prefs[key]?.toLowerCase()===value||value==='system'&&prefs.theme==='system'?' selected':''));b.title=label;b.setAttribute('aria-label',label);b.style.background=value==='system'?'linear-gradient(90deg,#ddd 50%,#242626 50%)':value;return b;})))}
+        function palettes(title, values, key) {
+          const choices = values.map(([label, value]) => {
+            const patch = value === 'system' ? {theme: 'system'} :
+              {[key]: value, ...(key === 'backgroundHex' ? {theme: 'custom'} : {})};
+            const choice = button('', () => save(patch, true), 'color-choice');
+            choice.title = label;
+            choice.setAttribute('aria-label', label);
+            choice.dataset.key = key;
+            choice.dataset.value = value.toLowerCase();
+            choice.style.background = value === 'system' ? 'linear-gradient(90deg,#ddd 50%,#242626 50%)' : value;
+            return choice;
+          });
+          content.append(h('h3',{style:{marginTop:'24px'}},title), h('div',{class:'palette-row'},choices));
+        }
+        const material = checkbox('启用毛玻璃', prefs.glass === true, value => save({glass: value}, true));
+        material.querySelector('input').id = 'appearance-glass';
+        content.append(row('卡片材质', material));
         palettes('背景',backgrounds,'backgroundHex');palettes('强调色',accents,'accentHex');
         const background=h('input',{type:'color',value:prefs.backgroundHex||'#242626'}),accent=h('input',{type:'color',value:prefs.accentHex||'#d8c19e'});
+        background.dataset.colorKey='backgroundHex';accent.dataset.colorKey='accentHex';
         background.oninput=()=>save({backgroundHex:background.value,theme:'custom'},true);accent.oninput=()=>save({accentHex:accent.value},true);
-        content.append(h('div',{class:'row'},'自定义背景',background,h('span',{class:'spacer'}),'强调色',accent),h('div',{class:'appearance-preview'},h('h3',{},'预览'),h('p',{class:'hint small'},'文字、边框与选中样式跟随当前配色'),h('div',{class:'search-result'},h('span',{class:'search-result-icon'},icon('json',28)),h('div',{class:'search-result-copy'},h('div',{class:'search-result-title'},'JSON 工具'),h('div',{class:'search-result-detail'},'校验、键名自然排序与转义')))),h('div',{class:'settings-footer'},button('恢复默认',async()=>{await save({theme:'dark',backgroundHex:'#242626',accentHex:'#d8c19e'});render();})));
+        content.append(h('div',{class:'row'},'自定义背景',background,h('span',{class:'spacer'}),'强调色',accent),h('div',{class:'appearance-preview'},h('h3',{},'预览'),h('p',{class:'hint small'},'文字、边框与选中样式跟随当前配色'),h('div',{class:'search-result'},h('span',{class:'search-result-icon'},icon('json',28)),h('div',{class:'search-result-copy'},h('div',{class:'search-result-title'},'JSON 工具'),h('div',{class:'search-result-detail'},'校验、键名自然排序与转义')))),h('div',{class:'settings-footer'},button('恢复默认',async()=>{await save({theme:'dark',glass:false,backgroundHex:'#242626',accentHex:'#d8c19e'});render();})));
+        syncAppearance(prefs);
       }
+    }
+    function syncAppearance(next) {
+      prefs = next;
+      if (tab !== 'appearance') return;
+      const glass = content.querySelector('#appearance-glass');
+      if (glass) glass.checked = prefs.glass === true;
+      for (const choice of content.querySelectorAll('.color-choice')) {
+        const {key, value} = choice.dataset;
+        const selected = key === 'backgroundHex' && prefs.theme === 'system' ? value === 'system' : prefs[key]?.toLowerCase() === value;
+        choice.classList.toggle('selected', selected);
+        choice.setAttribute('aria-pressed', String(selected));
+      }
+      for (const color of content.querySelectorAll('input[data-color-key]')) color.value = prefs[color.dataset.colorKey];
     }
     async function clearHistory(all) {if(await confirm('清理剪贴板历史',all?'将删除全部历史记录，包括收藏。':'将删除未收藏的历史记录，收藏保留。')){await api.clipboardAction('clear',{includeFavorites:all});notify('历史记录已清理');}}
     async function searchRules() {content.replaceChildren(h('div',{class:'row'},button('← 返回',()=>render('search')),h('h1',{},'置顶与隐藏结果')));const data=await api.windowAction('searchRules');const list=Array.isArray(data)?data:data?.rules||[];const table=h('table',{class:'data-table'},h('thead',{},h('tr',{},h('th',{},'名称'),h('th',{},'规则'),h('th',{},'操作'))),h('tbody',{},list.map(item=>h('tr',{},h('td',{},item.title||item.value),h('td',{},item.hidden?'隐藏':'置顶'),h('td',{},button('恢复',async()=>{await api.windowAction('searchRule',{action:'reset',item});searchRules();}))))));content.append(list.length?table:h('div',{class:'empty'},'暂无置顶或隐藏的结果'),button('清除使用频率记录',async()=>{if(await confirm('清除使用记录','搜索排序将恢复为默认顺序。')){await api.windowAction('searchRule',{action:'clearUsage'});notify('已清除使用记录');}}));}
-    await render();return {dispose(){disposed=true;recording?.cancel();},selectTab:render,getTab:()=>tab};
+    await render();return {dispose(){disposed=true;indicator.dispose();recording?.cancel();},selectTab:render,getTab:()=>tab,settingsChanged:syncAppearance};
   }
   window.OpenAllPages.settings=settingsPage;
   for(const id of ['permissions','diagnostics','snippets','linkAliases','commandAliases'])window.OpenAllPages[id]=(root,ctx)=>settingsPage(root,{...ctx,initialValue:id});

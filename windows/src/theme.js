@@ -30,11 +30,11 @@
       '--comparison-rule': light ? 'rgba(0,0,0,.09)' : 'rgba(255,255,255,.065)',
       '--selection': accent + '1c', '--editor-selection': accent + '59'
     };
-    return { light, vars };
+    return { light, glass: settings.glass === true, vars };
   }
 
-  function comparison(vars, light) {
-    const theme = { light };
+  function comparison(vars, light, glass = false) {
+    const theme = { light, glass };
     for (const name of ['canvas', 'raised', 'ink', 'muted', 'secondary']) theme[name] = vars['--' + name];
     theme.surface = vars['--editor'];
     theme.accent = vars['--accent-text'];
@@ -47,6 +47,7 @@
     for (const [key, color] of Object.entries(value.vars)) root.style.setProperty(key, color);
     root.style.colorScheme = mode;
     root.dataset.theme = mode;
+    root.dataset.material = value.glass ? 'glass' : 'solid';
     document.body.classList.toggle('light', value.light);
   }
   return { palette, comparison, apply };

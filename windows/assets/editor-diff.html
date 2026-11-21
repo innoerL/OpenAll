@@ -90,8 +90,10 @@
     @media (max-width:850px) { .toolbar,.comparison-status,#summary { gap:8px; } .options { gap:12px; } #hint { max-width:40%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; } }
   </style>
   <link rel="stylesheet" href="../src/fonts.css">
+  <link rel="stylesheet" href="../../shared/gold-ui/surface-effects.css">
+  <link rel="stylesheet" href="../src/material.css">
 </head>
-<body>
+<body class="comparison-document">
   <div class="toolbar">
     <div class="comparison-status"><div id="summary" role="status" aria-live="polite" aria-atomic="true"><span class="summary-primary notice">在左右两侧输入文本，差异会直接标出</span></div>
     <div class="navigation" role="group" aria-label="差异组导航"><span class="nav-label">差异</span><button id="previous" title="上一个差异组" aria-label="上一个差异组">↑</button><span id="navigation-count" role="status" aria-live="polite" aria-atomic="true">0 / 0</span><button id="next" title="下一个差异组" aria-label="下一个差异组">↓</button></div></div>
@@ -117,6 +119,8 @@
     </section>
   </div>
   <footer><span id="footer-status" role="status" aria-live="polite">已对齐</span><span id="hint">Ctrl+1 / Ctrl+2 切换左右</span></footer>
+  <script src="../../shared/gold-ui/surface-effects.js"></script>
+  <script src="../src/material.js"></script>
   <script src="editor-diff-core.js"></script>
   <script src="editor-comparison.js"></script>
   <script src="editor-diff.js"></script>

@@ -6,6 +6,12 @@ window.addEventListener('message', event => {
   if (message.action === 'paste') window.compareV2.pasteText(String(message.text || ''));
   if (message.action === 'focus') window.compareV2.focus(message.side || 0);
   if (message.action === 'copied') window.compareV2.copied(message.side || 0);
-  if (message.action === 'theme') window.setOpenAllV2Theme(message.theme || {});
+  if (message.action === 'theme') {
+    const theme = message.theme || {};
+    window.setOpenAllV2Theme(theme);
+    document.documentElement.dataset.theme = theme.light ? 'light' : 'dark';
+    document.documentElement.dataset.material = theme.glass ? 'glass' : 'solid';
+    window.OpenAllMaterial.refresh();
+  }
 });
 window.parent.postMessage({ openallComparison: true, action: 'ready' }, '*');
