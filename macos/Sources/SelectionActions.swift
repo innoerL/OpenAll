@@ -345,7 +345,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         root.layer?.borderWidth = 1
         root.layer?.borderColor = OpenAllTheme.rule.cgColor
         window.contentView = root
-        PanelMaterial.install(on: window)
+        ButtonPressFeedback.install(on: window)
         let title = NSTextField(labelWithString: "对选中内容执行操作")
         title.tag = 301
         title.font = .systemFont(ofSize: 14, weight: .medium)

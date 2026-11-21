@@ -89,15 +89,6 @@
     footer { flex:none; height:30px; padding:0 20px; display:flex; align-items:center; color:var(--secondary); font-size:12px; }
     #hint { margin-left:auto; text-align:right; }
     @media (max-width:850px) { .toolbar,.comparison-status,#summary { gap:8px; } .options { gap:12px; } #hint { max-width:40%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; } }
-    :root[data-glass="true"] body {
-      background: radial-gradient(ellipse at 5% 0%, rgba(77,145,155,.14), transparent 55%),
-                  radial-gradient(ellipse at 95% 100%, rgba(186,128,95,.13), transparent 55%), var(--canvas);
-    }
-    :root[data-glass="true"] .editors {
-      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.32);
-    }
-    :root[data-glass="true"] .heading { -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
-    :root[data-glass="true"] .editor { background: var(--surface); }
   </style>
 </head>
 <body>

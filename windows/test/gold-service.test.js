@@ -29,7 +29,6 @@ vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { module: moduleObject, ex
     assert.equal(first.theme.background, '#203448');
     assert.equal(first.theme.accent, '#f5ad52');
     assert.equal(first.theme.dark, true);
-    assert.equal(first.theme.glass, false);
     let updates = 0, published;
     const unsubscribe = service.subscribe(value => { updates++; published = value; });
     settings = { theme: 'system', accentHex: '#4455aa', glass: true };
@@ -38,7 +37,7 @@ vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { module: moduleObject, ex
     assert.equal(published.theme.background, '#f2f2ef');
     assert.equal(published.theme.accent, '#4455aa');
     assert.equal(published.theme.dark, false);
-    assert.equal(published.theme.glass, true);
+    assert.equal('glass' in published.theme, false);
     service.update('currency', 'EUR');
     service.update('layout', true);
     service.update('view', 'outlook');

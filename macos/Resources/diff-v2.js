@@ -540,18 +540,13 @@
     }
   }, true);
 
-  const surfaceEffects = window.OpenAllSurfaceEffects.install({
-    panels: '.heading, .toolbar',
-    dark: () => document.documentElement.style.colorScheme !== 'light',
-  });
+  window.OpenAllSurfaceEffects.install();
   window.setOpenAllV2Theme = theme => {
     const root = document.documentElement;
     for (const key of ['canvas', 'surface', 'raised', 'ink', 'muted', 'secondary', 'rule', 'accent']) {
       if (typeof theme[key] === 'string') root.style.setProperty('--' + key, theme[key]);
     }
     root.style.colorScheme = theme.light ? 'light' : 'dark';
-    root.dataset.glass = String(theme.glass === true);
-    surfaceEffects.refresh();
     const removed = theme.light ? '178,62,80' : '197,92,105';
     const added = theme.light ? '40,133,81' : '65,164,112';
     root.style.setProperty('--removed', `rgba(${removed},${theme.light ? '.14' : '.22'})`);

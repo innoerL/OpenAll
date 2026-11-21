@@ -172,7 +172,7 @@ final class PasteStackWindow: NSObject {
         surface.wantsLayer = true
         surface.layer?.backgroundColor = OpenAllTheme.sidebar.withAlphaComponent(0.97).cgColor
         root.addSubview(surface)
-        PanelMaterial.install(on: w, artworkSurface: surface)
+        ButtonPressFeedback.install(on: w)
         let title = NSTextField(labelWithString: "复制堆栈")
         title.font = .systemFont(ofSize: 16, weight: .semibold)
         title.textColor = OpenAllTheme.ink

@@ -196,7 +196,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
         var state = latest
         state["theme"] = ["background": Self.colorCSS(OpenAllTheme.canvas), "surface": Self.colorCSS(OpenAllTheme.surface),
             "foreground": Self.colorCSS(OpenAllTheme.ink), "secondary": Self.colorCSS(OpenAllTheme.muted),
-            "border": Self.colorCSS(OpenAllTheme.rule), "accent": Self.colorCSS(OpenAllTheme.accent), "dark": !OpenAllTheme.isLight, "glass": OpenAllTheme.usesGlass]
+            "border": Self.colorCSS(OpenAllTheme.rule), "accent": Self.colorCSS(OpenAllTheme.accent), "dark": !OpenAllTheme.isLight]
         state["dark"] = !OpenAllTheme.isLight
         state["pinned"] = boolean("pinned", default: true)
         state["combined"] = boolean("combined")

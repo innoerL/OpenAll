@@ -367,10 +367,9 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
     override func draw(_ dirtyRect: NSRect) {
         let bounds = self.bounds.insetBy(dx: 4, dy: 4)
         let card = NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12)
-        let glass = OpenAllTheme.usesGlass
-        if glass { PanelMaterial.drawGlass(in: self, shape: card) }
-        else { OpenAllTheme.raised.setFill(); card.fill() }
-        (selected ? OpenAllTheme.accent : hovering ? OpenAllTheme.accent.withAlphaComponent(0.55) : glass ? NSColor.white.withAlphaComponent(0.30) : OpenAllTheme.rule).setStroke()
+        OpenAllTheme.raised.setFill()
+        card.fill()
+        (selected ? OpenAllTheme.accent : hovering ? OpenAllTheme.accent.withAlphaComponent(0.55) : OpenAllTheme.rule).setStroke()
         card.lineWidth = selected ? 2.5 : hovering ? 1.5 : 1
         card.stroke()
 
@@ -882,7 +881,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         surface.wantsLayer = true
         surface.layer?.backgroundColor = OpenAllTheme.sidebar.withAlphaComponent(0.98).cgColor
         root.addSubview(surface)
-        PanelMaterial.install(on: w, artworkSurface: surface)
+        ButtonPressFeedback.install(on: w)
         search = ShelfSearchField(frame: NSRect(x: 18, y: 282, width: 220, height: 28))
         search.placeholderString = "搜索剪贴板"
         search.font = .systemFont(ofSize: 13)
@@ -933,10 +932,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         scroll.contentView.postsBoundsChangedNotifications = true
         scrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification,
                                                                  object: scroll.contentView, queue: .main) { [weak self] _ in
-            guard let self else { return }
-            self.updateVisibleCards()
-            // 可见卡片在窗口底纹上的采样位置随横向滚动改变，复用已经模糊的图像。
-            if OpenAllTheme.usesGlass { self.visibleCards.values.forEach { $0.needsDisplay = true } }
+            self?.updateVisibleCards()
         }
         root.addSubview(scroll)
         status = NSTextField(labelWithString: "")

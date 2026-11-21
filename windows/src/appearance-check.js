@@ -130,81 +130,57 @@ module.exports = async function verifyAppearance(initialWindow, output) {
       return !document.querySelector('.traffic-lights') && buttons.map(x => x.className).join(',') === 'window-minimize,window-maximize,window-close' && Math.abs(rect.right - innerWidth) < 2 && rect.left > title.right && buttons.every(x => x.getBoundingClientRect().width >= 44);
     }), '窗口按钮在右侧，按最小化、最大化、关闭排列');
     const settings = await open('settings', 'appearance');
-    await until(() => run(settings, () => !!document.querySelector('#appearance-glass')), '外观页材质开关');
-    await run(settings, () => { if (!document.querySelector('#appearance-glass').checked) document.querySelector('#appearance-glass').click(); });
-    await until(() => run(comparison, () => OpenAllApp.controller.frame.contentDocument.documentElement.dataset.material === 'glass'), '对比窗口材质广播');
-    check(await run(settings, async () => (await openall.settings()).glass &&
-      document.documentElement.dataset.material === 'glass'), '设置中的材质开关立即保存');
-    const material = await run(settings, () => {
-      const card = getComputedStyle(document.querySelector('.appearance-preview'));
-      return {
-        accessible: matchMedia('(prefers-reduced-transparency: reduce), (forced-colors: active), (prefers-contrast: more)').matches,
-        color: card.backgroundColor, blur: card.backdropFilter, border: card.borderTopWidth,
-        background: getComputedStyle(document.querySelector('.settings-layout')).backgroundImage,
-      };
-    });
-    check(material.accessible || (material.color === 'rgba(255, 255, 255, 0.15)' && material.blur === 'blur(16px)' &&
-      material.border === '1px' && material.background.includes('radial-gradient')), '毛玻璃卡片绘制材质、描边和彩色背景');
-    await capture(settings, 'appearance-glass-settings', ['.settings-nav.selected', '.settings-content h1', '.appearance-preview h3']);
-    await capture(json, 'appearance-glass-json', ['.editor-action-group button', '.cm-line:nth-child(2)']);
-    await capture(comparison, 'appearance-glass-comparison', ['.heading strong', '#left .cm-line', '#right .cm-line']);
+    await until(() => run(settings, () => !!document.querySelector('.appearance-preview')), '外观页就绪');
+    check(await run(settings, () => {
+      const preview = getComputedStyle(document.querySelector('.appearance-preview'));
+      return !document.querySelector('#appearance-glass') && preview.backdropFilter === 'none' &&
+        preview.backgroundColor.startsWith('rgb(') && getComputedStyle(document.querySelector('.settings-layout')).backgroundImage === 'none';
+    }), '外观使用实色预览');
+    const selectedColor = '[data-key="accentHex"][data-value="#5e9ccd"]';
+    await run(settings, selector => document.querySelector(selector).click(), selectedColor);
+    await until(() => run(settings, selector => document.querySelector(selector).getAttribute('aria-pressed') === 'true', selectedColor), '强调色同步');
+    check(await run(settings, selector => {
+      const choice = document.querySelector(selector);
+      const selected = document.querySelectorAll('.color-choice[data-key="accentHex"][aria-pressed=true]');
+      const names = [...document.querySelectorAll('.color-choice')].map(button => button.innerText.trim());
+      return selected.length === 1 && choice.textContent.includes('海蓝') && getComputedStyle(choice.querySelector('.color-check')).visibility === 'visible' &&
+        names.length === 9 && names.every(Boolean);
+    },selectedColor), '命名色样与勾选标记');
+    check(await run(shelf, () => document.querySelector('.clipboard-search').value === '保留可见输入'), '切换强调色保留剪贴板输入');
+    await capture(settings, 'appearance-solid-settings', ['.settings-nav.selected', '.settings-content h1', '.appearance-preview h3']);
+    await capture(json, 'appearance-solid-json', ['.editor-action-group button', '.cm-line:nth-child(2)']);
+    await capture(comparison, 'appearance-solid-comparison', ['.heading strong', '#left .cm-line', '#right .cm-line']);
     const effects = await run(settings, async () => {
-      const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
       const button = document.querySelector('.settings-nav.selected'), bounds = button.getBoundingClientRect();
       const reduce = matchMedia('(prefers-reduced-motion: reduce), (forced-colors: active), (prefers-contrast: more)').matches;
-      const fine = matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
       const point = {bubbles: true, isPrimary: true, pointerType: 'mouse', clientX: bounds.left + 7, clientY: bounds.top + 8};
+      button.dispatchEvent(new PointerEvent('pointermove', point));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const staticSurface = !document.querySelector('.oa-halo');
       button.dispatchEvent(new PointerEvent('pointerdown', point));
       const ripple = button.querySelector('.oa-ripple-circle');
       const wave = reduce ? !ripple : !!ripple && getComputedStyle(ripple).animationDuration === '0.6s' &&
         getComputedStyle(ripple.parentNode).overflow === 'hidden' &&
         Math.abs(parseFloat(ripple.style.left) + parseFloat(ripple.style.width) / 2 - 7) < 2;
-      const scroller = document.querySelector('.settings-body'), before = scroller.scrollHeight;
-      const anchor = scroller.closest('.settings-viewport'), box = anchor.getBoundingClientRect();
-      scroller.dispatchEvent(new PointerEvent('pointermove', {...point, clientX: box.left + 40, clientY: box.top + 60}));
-      await frame();
-      const glow = anchor.querySelector('.oa-halo.oa-visible');
-      const clipped = !reduce && fine ? !!glow && getComputedStyle(glow).overflow === 'hidden' &&
-        Math.abs(glow.getBoundingClientRect().height - box.height) <= 1 : !glow;
-      scroller.dispatchEvent(new PointerEvent('pointerout', {bubbles:true, relatedTarget:null}));
-      const left = !glow || !glow.classList.contains('oa-visible');
-      await wait(740);
-      return { wave, clipped, left, stable: before === scroller.scrollHeight,
-        clean: !button.querySelector('.oa-ripple') && !anchor.querySelector('.oa-halo') };
+      await new Promise(resolve => setTimeout(resolve, 740));
+      return { wave, staticSurface, clean: !button.querySelector('.oa-ripple') };
     });
-    check(effects.wave && effects.clean, '波纹从按下位置展开，限于按钮边界，结束后释放图层');
-    check(effects.clipped && effects.left && effects.stable && effects.clean,
-      '光晕限制于可视面板，离开后消退且滚动范围保持稳定');
-    check(await run(shelf, () => document.documentElement.dataset.material === 'glass' &&
-      document.querySelector('.clipboard-search').value === '保留可见输入'), '剪贴板接受材质广播并保留已输入的文本');
+    check(effects.wave && effects.clean && effects.staticSurface, '面板保持静止，按钮波纹按下后展开并清理');
     await run(shelf, async () => {
-      await openall.windowAction('smokeFixture', { clipboard: [{ kind: 'text', value: '毛玻璃卡片的文字', text: '毛玻璃卡片的文字' }] });
+      await openall.windowAction('smokeFixture', { clipboard: [{ kind: 'text', value: '核对卡片文字与类型栏', text: '核对卡片文字与类型栏' }] });
       const search = document.querySelector('.clipboard-search');
       search.value = '';
       search.dispatchEvent(new Event('input'));
     });
-    await until(() => run(shelf, () => document.querySelector('.clip-content')?.textContent === '毛玻璃卡片的文字'), '剪贴板卡片就绪');
-    await capture(shelf, 'appearance-glass-clipboard', ['.clipboard-tab.selected', '.clip-content']);
-    await run(settings, () => {
-      const first = document.querySelector('.settings-nav');
-      first.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
-      const second = first.nextElementSibling;
-      second.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
-    });
-    await pause(720);
+    await until(() => run(shelf, () => document.querySelector('.clip-content')?.textContent === '核对卡片文字与类型栏'), '剪贴板卡片就绪');
+    await capture(shelf, 'appearance-solid-clipboard', ['.clipboard-tab.selected', '.clip-content']);
     check(await run(settings, () => {
-      const active = document.querySelector('.settings-nav[aria-current=page]');
-      const indicator = document.querySelector('.settings-indicator path').getBoundingClientRect();
-      const button = active.getBoundingClientRect();
-      return active.textContent === '搜索' && active.classList.contains('selected') &&
-        Math.abs(indicator.top + indicator.height / 2 - button.top - button.height / 2) < 1;
-    }), '连续切换后导航胶囊收拢在最终分类，文字与焦点控件保留');
-    await run(settings, () => openall.saveSettings({ glass: false }));
-    await until(() => run(comparison, () => OpenAllApp.controller.frame.contentDocument.documentElement.dataset.material === 'solid'), '恢复实色材质');
-    check(await run(json, value => OpenAllApp.controller.getText() === value, contents) &&
-      await run(comparison, value => JSON.stringify(OpenAllApp.controller.getTexts()) === JSON.stringify(value), texts),
-    '开启及关闭毛玻璃时保留两个编辑器中的正文');
+      const [first, second] = document.querySelectorAll('.settings-nav');
+      first.click(); second.focus(); second.click();
+      return second.getAttribute('aria-current') === 'page' && !first.hasAttribute('aria-current') &&
+        document.activeElement === second && getComputedStyle(second, '::before').height === '16px' &&
+        !document.querySelector('.settings-indicator');
+    }), '快速切换分类时选中标记即时就位，保留键盘焦点');
     const probe = await open('unicode', '标题栏按钮检查');
     probe.show(); probe.focus();
     await clickWindowButton(probe, '.window-maximize');

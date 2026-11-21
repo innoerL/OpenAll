@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  window.OpenAllSurfaceEffects.install();
   const api=window.openall, root=document.getElementById('app'),title=document.getElementById('window-title');
   const UI=window.OpenAllUI,{h,button,icon,iconButton,notify,menu,prompt,confirm}=UI;
   let settings={},page='',controller=null,generation=0,lastEditable=null;

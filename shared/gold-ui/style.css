@@ -1,7 +1,7 @@
 :root { color-scheme: dark; font: 13px "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif; color: var(--foreground,#f3f1eb); background: var(--background,#242626); --accent:#d8c19e; --secondary:#a8ada8; --surface:#1e2020; --border:#3a3d3d; --gold-line:#d8b879; --ctf-line:#9eb9da; --rise:#ef9f90; --fall:#8fcbb0; --flat:#c4c9cd; }
 * { box-sizing:border-box; } body { margin:0; } [hidden] { display:none!important; } button,select { font:inherit; } button { cursor:pointer; } button:focus-visible,select:focus-visible,canvas:focus-visible { outline:2px solid var(--accent); outline-offset:2px; } button { color:inherit; } html { overflow-x:hidden; }
 .window-bar { position:sticky; top:0; z-index:3; height:47px; padding:0 13px 0 17px; display:flex; justify-content:space-between; align-items:center; background:var(--background); border-bottom:1px solid var(--border); -webkit-app-region:drag; user-select:none; }
-.wordmark,.window-buttons { display:flex; align-items:center; gap:8px; } .brand { width:24px; height:24px; border-radius:4px; display:grid; place-items:center; font-size:11px; letter-spacing:-1px; color:var(--accent-ink); background:var(--accent-soft); } h1 { margin:0; font-size:14px; font-weight:750; letter-spacing:.065em; }
+.wordmark,.window-buttons { display:flex; align-items:center; gap:8px; } .brand { width:24px; height:24px; border-radius:4px; display:inline-flex; align-items:flex-end; justify-content:center; gap:2px; padding:5px 3px; flex:none; color:var(--accent-ink); background:var(--accent-soft); } .brand i { width:3px; background:currentColor; border-radius:1px; } .brand i:nth-child(1) { height:36%; } .brand i:nth-child(2) { height:66%; } .brand i:nth-child(3) { height:100%; } h1 { margin:0; font-size:14px; font-weight:750; letter-spacing:.02em; }
 .window-buttons { gap:4px; -webkit-app-region:no-drag; } .window-button { height:27px; min-width:29px; border:1px solid transparent; border-radius:6px; color:var(--secondary); background:transparent; padding:0 6px; line-height:1; } .window-button:hover { background:var(--raised); color:var(--foreground); } .window-button.close:hover { background:#a3433a; color:#fff; } .window-button.symbol { font-family:system-ui,sans-serif; font-size:18px; } .window-button.pin,.window-button.setting { font-size:11px; min-width:42px; } .window-button.setting { border-color:var(--border); } button[aria-pressed="true"].window-button { color:var(--accent-ink); background:var(--accent-soft); border-color:var(--border); }
 select { appearance:none; -webkit-appearance:none; height:27px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--foreground); font-size:11px; padding:0 19px 0 6px; background-image:linear-gradient(45deg,transparent 50%,var(--secondary) 50%),linear-gradient(135deg,var(--secondary) 50%,transparent 50%); background-position:calc(100% - 10px) 11px,calc(100% - 6px) 11px; background-size:4px 4px; background-repeat:no-repeat; }
 main { padding:13px 16px 10px; max-width:720px; margin:auto; } .today-line { display:flex; justify-content:space-between; align-items:center; margin:0 2px 10px; color:var(--secondary); font-size:11px; } #date { font-weight:690; font-variant-numeric:tabular-nums; } .local-zone { margin-left:5px; font-size:10px; }
@@ -20,23 +20,4 @@ main { padding:13px 16px 10px; max-width:720px; margin:auto; } .today-line { dis
 body>.window-bar,body>main { transition:transform .22s cubic-bezier(.22,.61,.36,1); } body[data-edge-side="left"] { --edge-offset:-12px; } body[data-edge-side="right"] { --edge-offset:12px; } body[data-edge-collapsing="true"]>.window-bar,body[data-edge-collapsing="true"]>main { transform:translateX(var(--edge-offset,0)); }
 @media(prefers-reduced-motion:reduce) { body>.window-bar,body>main { transition:none; } }
 #verification-note { color:var(--foreground); font-variant-numeric:tabular-nums; } #verification-details,#verification-recent { margin-top:3px; overflow-wrap:anywhere; } .summary .week-summary { flex-wrap:wrap; row-gap:0; }
-@media(max-width:390px) { main { padding-left:9px; padding-right:9px; } .quote-card { padding-left:10px; padding-right:10px; } h2 { font-size:13px; } .window-bar { padding-left:7px; padding-right:6px; } .wordmark { gap:4px; } .brand { width:18px; height:18px; font-size:8px; } h1 { font-size:11px; } .window-buttons { gap:2px; } .window-button.symbol { min-width:23px; } .window-button.setting,.window-button.pin { min-width:34px; } .summary h2 { font-size:12px; } .summary .quote-price { font-size:32px; } .changes { flex-basis:100%; margin-left:0; } #forecast-table { font-size:10px; } .week-summary { gap:3px; font-size:9px; padding-inline:1px; } }
-
-:root[data-glass="true"] body { isolation: isolate; }
-:root[data-glass="true"] body::before {
-  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(ellipse 88% 50% at 103% 8%, rgba(101,169,176,.28) 0 55%, rgba(101,169,176,.045) 56%, transparent 76%),
-              radial-gradient(ellipse 80% 52% at -9% 86%, rgba(189,133,100,.26) 0 54%, transparent 55%),
-              var(--glass-ground);
-}
-:root[data-glass="true"] .quote-card {
-  color: var(--glass-ink); background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.32);
-  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
-}
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
-  :root[data-glass="true"] body::before { display: none; }
-  :root[data-glass="true"] .quote-card {
-    background: var(--surface); border-color: var(--border); color: var(--foreground);
-    -webkit-backdrop-filter: none; backdrop-filter: none;
-  }
-}
+@media(max-width:390px) { main { padding-left:9px; padding-right:9px; } .quote-card { padding-left:10px; padding-right:10px; } h2 { font-size:13px; } .window-bar { padding-left:7px; padding-right:6px; } .wordmark { gap:4px; } .brand { width:18px; height:18px; padding:4px 2px; gap:1px; } h1 { font-size:11px; } .window-buttons { gap:2px; } .window-button.symbol { min-width:23px; } .window-button.setting,.window-button.pin { min-width:34px; } .summary h2 { font-size:12px; } .summary .quote-price { font-size:32px; } .changes { flex-basis:100%; margin-left:0; } #forecast-table { font-size:10px; } .week-summary { gap:3px; font-size:9px; padding-inline:1px; } }

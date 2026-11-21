@@ -42,6 +42,12 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
   try {
     await until(() => evaluate(() => !!window.OpenAllApp?.ready), '应用桥接');
     check(await evaluate(async () => !!(await openall.settings()).search), '预加载与设置 IPC');
+    if (process.env.OPENALL_CHECK_LEGACY_APPEARANCE === '1') {
+      check(await evaluate(async () => {
+        const prefs = await openall.settings();
+        return !('glass' in prefs) && prefs.theme === 'custom' && prefs.accentHex === '#7ba796';
+      }), '升级后移除旧材质偏好并保留用户配色');
+    }
     await capture('01-search-idle');
     await evaluate(async () => { await openall.windowAction('pin', { pinned: true }); await OpenAllApp.render('search'); });
     check(await evaluate(() => document.querySelector('.search-pin').classList.contains('selected')), '重新打开搜索保留固定状态');

@@ -5,7 +5,7 @@
 | 平台 | 已验证的安装包与界面 |
 | --- | --- |
 | macOS | Intel 与 Apple Silicon 通用构建通过签名完整性检查。从云端 ZIP 解压启动后，实测设置的毛玻璃开关、卡片底纹与剪贴板搜索焦点。JSON 大文本与金价窗口回归通过。[构建与检查记录](https://github.com/innoerL/OpenAll/actions/runs/44903264375) |
-| Windows x64 | 安装、启动、卸载通过。安装后的设置、JSON、文本对比与剪贴板均通过实际截图的文字区域检测，另已验证快速切换分类、光晕离开淡出、波纹起点与图层清理。[构建与检查记录](https://github.com/innoerL/OpenAll/actions/runs/44904929228) |
+| Windows x64 | 发布的安装包来自提交 `3d534d5`，安装、启动、卸载通过。[安装包构建记录](https://github.com/innoerL/OpenAll/actions/runs/44903033219)。后续提交仅更新验收脚本，设置、JSON、文本对比与剪贴板另通过画面检测。[补充外观检查](https://github.com/innoerL/OpenAll/actions/runs/44904929228) |
 
 两个本地安装包的 SHA-256 均与各自的云构建记录一致。macOS 使用临时签名，尚未公证。Windows 安装器尚未代码签名。[下载与校验文件](https://github.com/innoerL/OpenAll/releases/tag/v0.27.0)
 

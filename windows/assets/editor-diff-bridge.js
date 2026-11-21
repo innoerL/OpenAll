@@ -1,3 +1,5 @@
+window.OpenAllSurfaceEffects.install();
+
 // 只接受所属父窗口消息；系统剪贴板通过顶层预加载桥接执行。
 window.addEventListener('message', event => {
   if (event.source !== window.parent || !event.data?.openallComparison) return;
@@ -10,8 +12,6 @@ window.addEventListener('message', event => {
     const theme = message.theme || {};
     window.setOpenAllV2Theme(theme);
     document.documentElement.dataset.theme = theme.light ? 'light' : 'dark';
-    document.documentElement.dataset.material = theme.glass ? 'glass' : 'solid';
-    window.OpenAllMaterial.refresh();
   }
 });
 window.parent.postMessage({ openallComparison: true, action: 'ready' }, '*');

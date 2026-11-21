@@ -167,16 +167,12 @@ function updateChart(id, series, snapshot, caption, dualAxis = false) {
   charts[id].update(series, snapshot.since, snapshot.today, dualAxis, state);
 }
 
-const surfaceEffects = window.OpenAllSurfaceEffects.install({
-  panels: '.quote-card',
-  dark: () => document.documentElement.dataset.theme === 'dark',
-});
+window.OpenAllSurfaceEffects.install();
 
 function render(snapshot) {
   if (!snapshot?.instruments) return;
   lastSnapshot = snapshot;
   window.OpenAllGoldTheme.apply(snapshot.theme);
-  surfaceEffects.refresh();
   dockSide = snapshot.dockSide ?? null;
   updatePin(snapshot.pinned ?? true);
   updateView(snapshot.view || 'quotes');

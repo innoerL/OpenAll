@@ -318,7 +318,6 @@ private struct AppearanceSettings: Codable {
     var backgroundHex: String?
     var accentHex: String?
     var followsSystem: Bool?
-    var glass: Bool?
 }
 
 enum OpenAllTheme {
@@ -358,9 +357,6 @@ enum OpenAllTheme {
         return rgb.redComponent * 0.2126 + rgb.greenComponent * 0.7152 + rgb.blueComponent * 0.0722
     }
 
-    static var glass: Bool { settings.glass == true }
-    static var usesGlass: Bool { glass && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency && !NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast }
-    static func setGlass(_ enabled: Bool) { settings.glass = enabled; save() }
     static var followsSystem: Bool { settings.followsSystem == true }
     static var systemIsLight: Bool { NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua }
     static var systemCanvas: NSColor { systemIsLight ? systemLightCanvas : defaultCanvas }
@@ -390,9 +386,7 @@ enum OpenAllTheme {
         return canvas.blended(withFraction: 0.095, of: isLight ? .black : .white) ?? canvas
     }
     static var ink: NSColor { isLight ? NSColor(calibratedWhite: 0.09, alpha: 1) : NSColor(calibratedRed: 0.940, green: 0.933, blue: 0.902, alpha: 1) }
-    static var muted: NSColor {
-        if usesGlass { return NSColor(calibratedWhite: isLight ? 0.25 : 0.83, alpha: 1) }
-        return isLight ? NSColor(calibratedWhite: 0.38, alpha: 1) : NSColor(calibratedRed: 0.61, green: 0.63, blue: 0.61, alpha: 1) }
+    static var muted: NSColor { isLight ? NSColor(calibratedWhite: 0.38, alpha: 1) : NSColor(calibratedRed: 0.61, green: 0.63, blue: 0.61, alpha: 1) }
     static var rule: NSColor { (isLight ? NSColor.black : NSColor.white).withAlphaComponent(isLight ? 0.12 : 0.085) }
 
     private static func save() {
@@ -528,7 +522,6 @@ enum WindowChrome {
     }
 
     private static func refreshThemeBindings(in view: NSView) {
-        PanelMaterial.refreshCard(view)
         (view as? WindowThemeRefreshing)?.refreshWindowTheme()
         view.subviews.forEach { refreshThemeBindings(in: $0) }
     }
@@ -647,13 +640,15 @@ enum WindowChrome {
         view.wantsLayer = true
         view.layer?.cornerRadius = radius
         view.layer?.backgroundColor = OpenAllTheme.surface.cgColor
-        PanelMaterial.registerCard(view, section: false)
+        view.layer?.borderWidth = 0.5
+        view.layer?.borderColor = OpenAllTheme.rule.cgColor
     }
 
     static func styleSettingsSection(_ view: NSView) {
         view.wantsLayer = true
         view.layer?.cornerRadius = 8
-        PanelMaterial.registerCard(view, section: true)
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+        view.layer?.borderWidth = 0
     }
 
     static func refineSettingsTypography(in view: NSView) {
@@ -736,7 +731,7 @@ enum WindowChrome {
 
     static func installControls(on window: NSWindow, compact: Bool = false, editorStyle: Bool = false) {
         guard let root = window.contentView else { return }
-        PanelMaterial.install(on: window)
+        ButtonPressFeedback.install(on: window)
         let headerHeight: CGFloat = compact ? 34 : height
         let header = NSView(frame: NSRect(x: 0, y: root.bounds.height - headerHeight,
                                           width: root.bounds.width, height: headerHeight))

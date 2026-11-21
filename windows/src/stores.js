@@ -90,7 +90,7 @@ const defaults = {
   search:'Control+Space',clipboard:'Control+Shift+V',stack:'Control+Shift+C',selection:'Control+Alt+A',
   searchShortcutMode:'combo',doubleTap:'Alt',pinyinEnabled:true,searchFiles:false,
   chromeBookmarks:false,chromeHistory:false,chromePath:'',aliases,commandAliases:{},
-  theme:'dark',glass:false,backgroundHex:'#242626',accentHex:'#d8c19e',launchAtLogin:false,
+  theme:'dark',backgroundHex:'#242626',accentHex:'#d8c19e',launchAtLogin:false,
   clipboardPreferences:{enabled:true,maxItems:300,maxItemBytes:20_000_000,retentionDays:30,directPaste:true,
     ignoreApplications:[],plainTextByDefault:false,pausedUntil:null,pinboards:['收藏'],pinboardColors:{收藏:'blue'}}
 };
@@ -116,7 +116,7 @@ function normalizeSettings(saved={}) {
   p.ignoreApplications=Array.isArray(p.ignoreApplications)?p.ignoreApplications.filter(x=>typeof x==='string'):[];
   s.aliases=Array.isArray(s.aliases)?s.aliases.filter(a=>a&&typeof a.name==='string'&&Array.isArray(a.keywords)&&/^https?:\/\//i.test(a.url||'')):structuredClone(aliases);
   s.commandAliases=s.commandAliases&&typeof s.commandAliases==='object'&&!Array.isArray(s.commandAliases)?s.commandAliases:{};
-  s.glass = s.glass === true;
+  delete s.glass;
   delete s.searchInterfaceSize;
   return s;
 }

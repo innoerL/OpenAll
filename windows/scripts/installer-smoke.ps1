@@ -19,6 +19,10 @@ try {
     $report.installed = $true
     $env:OPENALL_CI_SMOKE = '1'
     $env:OPENALL_TEST_USER_DATA = Join-Path $session 'data'
+    # 使用上一版保存过的外观设置，走安装后首次启动的真实读取路径。
+    New-Item -ItemType Directory -Path $env:OPENALL_TEST_USER_DATA -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $env:OPENALL_TEST_USER_DATA 'settings.json'), '{"theme":"custom","backgroundHex":"#242626","accentHex":"#7ba796","glass":true}')
+    $env:OPENALL_CHECK_LEGACY_APPEARANCE = '1'
     $env:OPENALL_SMOKE_OUTPUT = Join-Path $output 'screens'
     $process = Start-Process -FilePath $executable -PassThru -RedirectStandardOutput (Join-Path $output 'app.log') -RedirectStandardError (Join-Path $output 'app-errors.log')
     $report.launched = $true
