@@ -605,7 +605,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     private var recordMonitor: Any?
     private weak var recordButton: NSButton?
     private weak var settingsStatus: NSTextField?
-    private var settingsWindow: NSWindow?
+    private var settingsWindow: SettingsWindow?
     private weak var permissionsView: PermissionsView?
     private weak var searchFileHint: NSTextField?
     private var settingsBody: NSView?
@@ -704,17 +704,81 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             return
         }
         if ProcessInfo.processInfo.environment["OPENALL_SETTINGS_CHECK"] == "1" {
-            settingsTabIndex = 7
+            settingsTabIndex = 0
             showSettings()
-            guard let window = settingsWindow else { throw NSError(domain: "SettingsWindow", code: 1) }
+            guard let window = settingsWindow, let general = settingsNavigation.first(where: { $0.tag == 0 }),
+                  let appearance = settingsNavigation.first(where: { $0.tag == 7 }) else {
+                throw NSError(domain: "SettingsWindow", code: 1)
+            }
+            // 常规截图进程不可激活；只有实际焦点检查需要键盘主窗口。
+            let originalPolicy = NSApp.activationPolicy()
+            NSApp.setActivationPolicy(.accessory)
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            defer { window.orderOut(nil); NSApp.setActivationPolicy(originalPolicy) }
+            let activationLimit = Date().addingTimeInterval(3)
+            while !window.isKeyWindow && Date() < activationLimit { try await Task.sleep(nanoseconds: 20_000_000) }
+            guard window.isKeyWindow else { throw NSError(domain: "SettingsKeyWindow", code: 1) }
             let originalFrames = settingsNavigation.map(\.frame)
-            for tag in [0, 1, 7] {
-                settingsNavigation.first(where: { $0.tag == tag })?.performClick(nil)
-                guard settingsTabIndex == tag, settingsNavigation.filter({ $0.selected }).map(\.tag) == [tag],
-                      settingsNavigation.map(\.frame) == originalFrames else {
-                    throw NSError(domain: "SettingsSelection", code: tag)
+            func sidebarShows(_ tag: Int, focus: SettingsNavItem? = nil) -> Bool {
+                settingsTabIndex == tag && settingsNavigation.filter(\.selected).map(\.tag) == [tag] &&
+                settingsNavigation.filter(\.showsKeyboardFocus).map(\.tag) == (focus.map { [$0.tag] } ?? [])
+            }
+            func key(_ code: UInt16, _ text: String, shift: Bool = false) throws {
+                for type in [NSEvent.EventType.keyDown, .keyUp] {
+                    guard let event = NSEvent.keyEvent(with: type, location: .zero,
+                        modifierFlags: shift ? .shift : [], timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: window.windowNumber, context: nil, characters: text,
+                        charactersIgnoringModifiers: text, isARepeat: false, keyCode: code) else {
+                        throw NSError(domain: "SettingsKeyEvent", code: Int(code))
+                    }
+                    window.sendEvent(event)
                 }
             }
+            guard sidebarShows(0) else { throw NSError(domain: "SettingsInitialFocus", code: 1) }
+            // 由 AppKit 的实际键序寻找前项，不假设分类与内容控件的排列顺序。
+            window.recalculateKeyViewLoop()
+            guard let previous = appearance.previousValidKeyView, window.makeFirstResponder(previous) else {
+                throw NSError(domain: "SettingsKeyLoop", code: 1)
+            }
+            try key(48, "\t")
+            guard sidebarShows(0, focus: appearance) else { throw NSError(domain: "SettingsTabFocus", code: 1) }
+            // AppKit 的反向 Tab 字符为 U+0019，移除修饰符后的字符也保留该值。
+            try key(48, "\u{19}", shift: true)
+            // 文本框由共享 field editor 接收焦点，回退后不要求 firstResponder 等于控件本身。
+            guard let back = window.firstResponder, back !== appearance, back !== window,
+                  !appearance.showsKeyboardFocus, settingsTabIndex == 0 else {
+                throw NSError(domain: "SettingsBacktab", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                    "回退后焦点为 \(String(describing: window.firstResponder))，前一控件为 \(previous)"])
+            }
+            try key(48, "\t")
+            guard sidebarShows(0, focus: appearance) else { throw NSError(domain: "SettingsTabReturn", code: 1) }
+            try key(49, " ")
+            guard sidebarShows(7, focus: appearance) else { throw NSError(domain: "SettingsSpace", code: 1) }
+
+            // NSButton 在鼠标按下时进入跟踪循环，预先放入抬起事件使这次点击完整结束。
+            let location = general.convert(NSPoint(x: general.bounds.midX, y: general.bounds.midY), to: nil)
+            func mouse(_ type: NSEvent.EventType) throws -> NSEvent {
+                guard let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 1, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else {
+                    throw NSError(domain: "SettingsMouseEvent", code: 1)
+                }
+                return event
+            }
+            NSApp.postEvent(try mouse(.leftMouseUp), atStart: true)
+            window.sendEvent(try mouse(.leftMouseDown))
+            guard sidebarShows(0), window.firstResponder === general, settingsNavigation.map(\.frame) == originalFrames else {
+                throw NSError(domain: "SettingsPointerFocus", code: 1)
+            }
+            try DesignPreview.capture(window, name: "settings-mouse-general")
+            window.orderOut(nil)
+            performCommand("diagnostics")
+            window.makeKeyAndOrderFront(nil)
+            guard sidebarShows(6), (window.firstResponder as? SettingsNavItem)?.tag == 6 else {
+                throw NSError(domain: "SettingsReopenFocus", code: 1)
+            }
+            appearance.performClick(nil)
             for (name, color) in [("settings-dark", "#242626"), ("settings-light", "#F2F1ED")] {
                 try await OpenAllTheme.withTemporaryAppearanceForDesign(background: OpenAllTheme.color(color), accent: nil) {
                     self.renderSettings()
@@ -1610,11 +1674,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         case "selection": showSelectionActions()
         case "settings": showSettings()
         case "searchSettings": settingsSearchManager = false; settingsTabIndex = 1; showSettings()
-        case "permissions": showSettings(); settingsTabIndex = 5; renderSettings()
-        case "diagnostics": showSettings(); settingsTabIndex = 6; renderSettings()
-        case "snippets": showSettings(); settingsTabIndex = 4; renderSettings()
-        case "linkAliases": showSettings(); settingsTabIndex = 3; renderSettings()
-        case "commandAliases": showSettings(); settingsTabIndex = 8; renderSettings()
+        case "permissions": settingsTabIndex = 5; showSettings()
+        case "diagnostics": settingsTabIndex = 6; showSettings()
+        case "snippets": settingsTabIndex = 4; showSettings()
+        case "linkAliases": settingsTabIndex = 3; showSettings()
+        case "commandAliases": settingsTabIndex = 8; showSettings()
         default: break
         }
     }
@@ -2280,7 +2344,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         if !DesignPreview.enabled && settings.value.searchShortcutMode == "double"
             && settings.value.doubleTapKeyCode != nil && !doubleTapMonitor.isActive { installDoubleTapMonitor() }
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 930, height: 560),
+            let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 930, height: 560),
                                   styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             WindowChrome.apply(window, title: "OpenAll 设置")
@@ -2323,6 +2387,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             settingsWindow = window
             settingsBody = body
         }
+        settingsWindow?.setNavigationFocusVisible(false)
         renderSettings()
         WindowChrome.present(settingsWindow)
         settingsWindow?.makeFirstResponder(settingsNavigation.first { $0.tag == settingsTabIndex })

@@ -1,6 +1,44 @@
 import AppKit
 import ApplicationServices
 
+/// 侧栏只在键盘遍历时显示焦点提示，鼠标点击与页面选中分别处理。
+final class SettingsWindow: NSWindow {
+    private(set) var showsNavigationFocus = false
+
+    func setNavigationFocusVisible(_ visible: Bool) {
+        guard showsNavigationFocus != visible else { return }
+        showsNavigationFocus = visible
+        (firstResponder as? SettingsNavItem)?.needsDisplay = true
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        switch event.type {
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            setNavigationFocusVisible(false)
+        case .keyDown where event.keyCode == 48 && event.modifierFlags.intersection([.command, .control, .option]).isEmpty:
+            setNavigationFocusVisible(true)
+        default: break
+        }
+        super.sendEvent(event)
+    }
+
+    @discardableResult
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        let previous = firstResponder as? SettingsNavItem
+        let accepted = super.makeFirstResponder(responder)
+        if previous !== firstResponder {
+            previous?.needsDisplay = true
+            (firstResponder as? SettingsNavItem)?.needsDisplay = true
+        }
+        return accepted
+    }
+
+    override func resignKey() {
+        super.resignKey()
+        setNavigationFocusVisible(false)
+    }
+}
+
 final class SettingsNavItem: NSButton, WindowThemeRefreshing {
     let titleText: String
     private let iconView = NSImageView()
@@ -16,7 +54,7 @@ final class SettingsNavItem: NSButton, WindowThemeRefreshing {
         titleText = title
         super.init(frame: frame)
         isBordered = false
-        focusRingType = .exterior
+        focusRingType = .none
         setAccessibilityRole(.radioButton)
         setAccessibilityLabel(title)
         self.title = title
@@ -31,13 +69,18 @@ final class SettingsNavItem: NSButton, WindowThemeRefreshing {
     }
     required init?(coder: NSCoder) { fatalError("不支持从归档创建") }
 
-    @objc private func choose() { onChoose?() }
+    @objc private func choose() {
+        window?.makeFirstResponder(self)
+        onChoose?()
+    }
     private var rowShape: NSBezierPath {
         NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 3), xRadius: 7, yRadius: 7)
     }
 
-    override var focusRingMaskBounds: NSRect { rowShape.bounds }
-    override func drawFocusRingMask() { rowShape.fill() }
+    var showsKeyboardFocus: Bool {
+        guard let window = window as? SettingsWindow else { return false }
+        return window.isKeyWindow && window.showsNavigationFocus && window.firstResponder === self
+    }
 
     func refreshWindowTheme() {
         iconView.contentTintColor = selected ? OpenAllTheme.accentText : OpenAllTheme.muted
@@ -51,6 +94,12 @@ final class SettingsNavItem: NSButton, WindowThemeRefreshing {
             OpenAllTheme.accentText.setFill()
             NSBezierPath(roundedRect: NSRect(x: 4, y: bounds.midY - 8, width: 3, height: 16),
                          xRadius: 1.5, yRadius: 1.5).fill()
+        }
+        if showsKeyboardFocus {
+            OpenAllTheme.accentText.setStroke()
+            let outline = rowShape
+            outline.lineWidth = 1.5
+            outline.stroke()
         }
         let name = titleText as NSString
         let attributes: [NSAttributedString.Key: Any] = [
