@@ -7,6 +7,7 @@ const whole = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 });
 const percent = new Intl.NumberFormat('zh-CN', {
   style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero',
 });
+const metricPercent = new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 2 });
 const displayTime = new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
   hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -125,11 +126,11 @@ function updateSummary(id, card, outlook) {
   const days = outlook?.days.filter(({ mid }) => Number.isFinite(mid)) ?? [];
   const last = days.at(-1);
   $('.week-direction', summary).textContent = last ? FORECAST_LABELS[last.direction] : '待生成';
-  $('.week-confidence', summary).textContent = last ? `可信度 ${last.confidence}%` : '';
+  $('.week-confidence', summary).textContent = last ? `方向概率 ${last.confidence}%` : '';
   $('.week-confidence', summary).hidden = !last;
   summary.dataset.direction = last?.direction ?? '';
   summary.title = last ?
-    `截至 ${last.date} · ${FORECAST_LABELS[last.direction]} · 可信度估计 ${last.confidence}% · 尚待实时报价校准` :
+    `截至 ${last.date} · ${FORECAST_LABELS[last.direction]} · 方向概率 ${last.confidence}%（未校准），不是价格命中率` :
     '打开七日展望';
 }
 
@@ -210,6 +211,7 @@ const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', weekday: 'sh
 function renderOutlook() {
   if (!lastSnapshot) return;
   const { outlook, currency } = lastSnapshot;
+  const verification = outlook.verification[forecastInstrument];
   const signature = JSON.stringify([outlook, currency, forecastInstrument]);
   if (signature === outlookSignature) return;
   outlookSignature = signature;
@@ -219,7 +221,7 @@ function renderOutlook() {
   const target = $('#forecast-rows');
   target.replaceChildren();
   $('#forecast-meta').textContent = data ?
-    `基准 ${data.anchor.date}  ${number.format(data.anchor.price)} ${unit} · 可信度待校准` :
+    `基准 ${data.anchor.date}  ${number.format(data.anchor.price)} ${unit} · 模型 ${data.version || verification.version || '—'} · 方向概率未校准${data.provisional ? ' · 数据尚未就绪，暂估' : ''}` :
     '等待足够的最新历史报价或参考汇率';
   $('#forecast-table').hidden = !data;
   for (const item of data?.days ?? []) {
@@ -230,28 +232,42 @@ function renderOutlook() {
       trend.dataset.direction = item.direction;
       const label = element('span', undefined, 'daily-direction');
       const confidence = element('span', `${item.confidence}%`, 'daily-confidence');
-      confidence.setAttribute('aria-label', `可信度估计 ${item.confidence}%`);
+      confidence.setAttribute('aria-label', `方向概率 ${item.confidence}%，未校准，不是价格命中率`);
       label.append(element('b', FORECAST_LABELS[item.direction]), confidence);
       trend.append(label);
-      trend.title = `${item.sample} 个历史情景 · ${item.model} · 可信度待校准`;
+      trend.title = `${item.sample} 个历史情景 · ${item.model} · 方向概率未校准，不是价格命中率`;
     } else {
       trend.textContent = item.closed ? '例行休市' : '样本不足';
     }
+    const price = element('td', item.mid ? number.format(item.mid) : '—');
+    price.title = item.mid ? (item.pointMethod === 'persistence' ?
+      '参考估计沿用基准价，方向概率与区间另行估计；不代表保证价格不变' : '参考估计来自历史情景；方向概率不是价格命中率') : '';
     row.append(
-      element('td', day), trend, element('td', item.mid ? number.format(item.mid) : '—'),
+      element('td', day), trend, price,
       element('td', item.low ? `${number.format(item.low)} – ${number.format(item.high)}` : '—'),
     );
     target.append(row);
   }
 
-  const verification = outlook.verification[forecastInstrument];
   const counts = Object.entries(verification.byHorizon).map(([horizon, score]) => score.total ?
     `${horizon} 日方向命中 ${score.hit}/${score.total}` : `${horizon} 日无到期样本`);
   $('#verification-status').textContent = '北京时间 10:00–10:15';
-  const seven = verification.byHorizon[7];
-  $('#verification-note').textContent = counts.join(' · ') + (seven.total ?
-    `。7 日平均估计 ${Math.round(seven.meanConfidence * 100)}%，实际命中 ${Math.round(seven.hitRate * 100)}%。` : '') +
-    (verification.late ? ` 另有 ${verification.late} 条迟到样本。` : '');
+  const one = verification.byHorizon[1] || {};
+  const priceSummary = one.priceCount && Number.isFinite(one.mape) ?
+    `明日价平均误差 ${metricPercent.format(one.mape)}（${one.priceCount} 次${one.priceCount < 30 ? '，样本较少' : ''}）` : '明日价暂无到期的准时价格误差样本';
+  const intervalSummary = one.intervalCount && Number.isFinite(one.intervalCoverage) ?
+    `区间覆盖 ${metricPercent.format(one.intervalCoverage)}（${one.intervalCount} 次）` : '区间暂无可验证样本';
+  $('#verification-note').textContent = `${priceSummary} · ${intervalSummary}`;
+  $('#verification-note').title = '当前模型的实际到期记录。平均误差为绝对价格误差除以实际价格（MAPE），越小越好；区间覆盖是实际价格落入已存档区间的比例。方向概率不是价格命中率。';
+  const late = verification.lateByHorizon?.[1];
+  const lateSummary = verification.late ? `另有 ${verification.late} 条迟到样本，不计入上方统计` +
+    (late?.priceCount && Number.isFinite(late.mape) ? `；迟到明日价误差 ${metricPercent.format(late.mape)}（${late.priceCount} 次）` : '') +
+    (late?.intervalCount && Number.isFinite(late.intervalCoverage) ? `，区间覆盖 ${metricPercent.format(late.intervalCoverage)}（${late.intervalCount} 次）` : '') : '';
+  $('#verification-details').textContent = counts.join(' · ') + (lateSummary ? `。${lateSummary}。` : '');
+  const recent = verification.recent;
+  const comparison = $('#verification-recent');
+  comparison.hidden = !recent;
+  comparison.textContent = recent ? `${recent.target} 到期 ${recent.horizon} 日预测：参考估计较基准 ${percent.format(recent.predictedReturn)}，实际 ${percent.format(recent.actualReturn)}，价格误差 ${metricPercent.format(recent.errorRate)}（${recent.onSchedule ? '准时' : '迟到'}）。` : '';
 
   const drivers = $('#drivers');
   drivers.replaceChildren();
@@ -295,7 +311,10 @@ function renderOutlook() {
     calendar.append(line);
   }
   $('#model-note').textContent = data ?
-    '涨跌相对基准价，±0.2% 以内为维持。可信度取同期限历史频率。市场因素和日历用于解读行情。' +
+    '涨跌相对基准价，±0.2% 以内为维持。方向概率未校准，不是价格命中率。' +
+      (data.days.some(day => day.pointMethod === 'persistence') ?
+        '周大福参考估计采用不变价保守基准，方向与区间另行估计；不代表保证价格不变。' : '参考估计来自历史情景。') +
+      '区间为历史情景范围，覆盖率以到期记录验证。市场因素和日历用于解读行情。' +
       (forecastInstrument === 'gold' && currency !== 'USD' ? ' 展望按当前汇率折算，方向基于美元金价。' : '') : '';
 }
 

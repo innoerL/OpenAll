@@ -92,6 +92,23 @@ test('涨跌以当前基准的实际百分比划分，正负 0.2% 边界仍属�
   assert.equal(classifyReturn(Math.log1p(-.00201)), 'down');
 });
 
+test('默认周大福点价使用保守基准，方向独立估计，国际现货保持原方法', () => {
+  const now = Date.parse('2026-11-20T05:30:00Z');
+  const today = dateAt(now);
+  const history = Array.from({ length: 200 }, (_, index) => ({
+    date: dateAt(now - (200 - index) * DAY), price: 800 * Math.exp(index * .003),
+  }));
+  const input = { instrument: 'ctf', priceHistory: history, goldHistory: history, today,
+    quote: { date: today, price: 1500 }, marketIsClosed };
+  const result = forecast(input);
+  const available = result.days.filter(day => day.probabilities);
+  assert.equal(available.length, 7);
+  assert(available.every(day => day.mid === 1500 && day.pointMethod === 'persistence'));
+  assert(available.every(day => day.direction === 'up' && day.low < day.mid && day.high > day.mid));
+  assert.deepEqual(forecast({ ...input, instrument: 'gold' }),
+    forecast({ ...input, instrument: 'gold', modelMode: 'history' }));
+});
+
 test('使用最多历史情景选出预计方向与可信度，预计价与方向保持一致', () => {
   const rising = estimateDirection(0, [.01, .015, .003, -.01, 0], 1);
   const falling = estimateDirection(0, [-.01, -.015, -.003, .01, 0], 1);

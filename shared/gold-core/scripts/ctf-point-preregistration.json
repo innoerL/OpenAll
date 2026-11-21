@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "instrument": "ctf",
+  "dataLimitInclusive": "2026-11-20",
+  "developmentOriginBefore": "2026-09-01",
+  "holdoutOriginFrom": "2026-09-01",
+  "minimumPriorPricePoints": 120,
+  "horizonsCalendarDays": [1,3,7],
+  "selectionCriterion": "开发集1日MAE最低；其余期限与概率诊断全部报告；结果出来后不增删候选或改参数",
+  "candidates": [
+    {"id":"history_old","description":"生产history：最多84个同期限历史收益，先选多数方向后取该组中位数"},
+    {"id":"persistence","description":"点价格固定为当日anchor；概率与80%区间用历史收益分布校准"},
+    {"id":"history_median","description":"history原情景分布全体中位数，保留原多数方向概率定义"},
+    {"id":"price_median","description":"生产price模型选择与拟合不变，仅将点价格改为全情景中位数"},
+    {"id":"momentum1_damped","description":"最近一个观测间隔的日均对数变化，半强度，未来逐日phi=.6衰减","strength":0.5,"phi":0.6},
+    {"id":"momentum3_damped","description":"最近3个观测间隔总对数变化除以跨度天数，未来逐日phi=.7衰减","intervals":3,"phi":0.7},
+    {"id":"trend7_damped","description":"最近7个观测价格对数对日历天数OLS斜率，未来逐日phi=.8衰减","points":7,"phi":0.8}
+  ],
+  "simpleCandidateCalibration": "使用当时已结束且结束日期严格早于origin的同期限滚动预测误差，最多84条；给当前固定候选中心加残差后取全情景中位数",
+  "anchor": "历史日牌价作为origin当天已知anchor代理；不能验证历史表的当时发布时间或修订版本",
+  "leakageRules": ["预测输入只含CTF date<origin及单个origin anchor", "gold只含date<origin", "所有训练目标结束日期<origin", "开发集目标日期必须<2026-09-01，避免标签穿越holdout边界", "所有目标日期<=2026-11-20", "不读取或使用2026-11-21实际价格"],
+  "directionMetric": "主要方向命中率取情景概率最高的方向；另报点价格隐含方向命中率。涨跌阈值沿用±0.2%",
+  "brierMetric": "三分类概率平方误差之和，取均值，范围0..2，越小越好",
+  "intervalMetric": "沿用原10/90分位区间及0.4%*sqrt(h)最低半宽；标称80%，同时报告覆盖率及均宽"
+}

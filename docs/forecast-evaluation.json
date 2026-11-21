@@ -1,0 +1,918 @@
+{
+  "schemaVersion": 1,
+  "reference": {
+    "originalName": "shared/gold-core/outlook.cjs",
+    "sourceCommit": "30e6a49",
+    "modelVersion": "2.0.0",
+    "sha256": "ff18664a35d0ebc244bc35247f4d7a31c29eb06aad706f751a903bf450fa28e9"
+  },
+  "production": {
+    "modelVersion": "3.0.0",
+    "sha256": "d0e3553108f037299da3d4fd8327e3ce60fccf0b55a926159c499ec48dc29799",
+    "ctfAutoMatchesFrozenPersistence": true,
+    "strictEquality": true
+  },
+  "protocol": {
+    "version": 1,
+    "instrument": "ctf",
+    "dataLimitInclusive": "2026-11-20",
+    "developmentOriginBefore": "2026-09-01",
+    "holdoutOriginFrom": "2026-09-01",
+    "minimumPriorPricePoints": 120,
+    "horizonsCalendarDays": [
+      1,
+      3,
+      7
+    ],
+    "selectionCriterion": "开发集1日MAE最低；其余期限与概率诊断全部报告；结果出来后不增删候选或改参数",
+    "candidates": [
+      {
+        "id": "history_old",
+        "description": "生产history：最多84个同期限历史收益，先选多数方向后取该组中位数"
+      },
+      {
+        "id": "persistence",
+        "description": "点价格固定为当日anchor；概率与80%区间用历史收益分布校准"
+      },
+      {
+        "id": "history_median",
+        "description": "history原情景分布全体中位数，保留原多数方向概率定义"
+      },
+      {
+        "id": "price_median",
+        "description": "生产price模型选择与拟合不变，仅将点价格改为全情景中位数"
+      },
+      {
+        "id": "momentum1_damped",
+        "description": "最近一个观测间隔的日均对数变化，半强度，未来逐日phi=.6衰减",
+        "strength": 0.5,
+        "phi": 0.6
+      },
+      {
+        "id": "momentum3_damped",
+        "description": "最近3个观测间隔总对数变化除以跨度天数，未来逐日phi=.7衰减",
+        "intervals": 3,
+        "phi": 0.7
+      },
+      {
+        "id": "trend7_damped",
+        "description": "最近7个观测价格对数对日历天数OLS斜率，未来逐日phi=.8衰减",
+        "points": 7,
+        "phi": 0.8
+      }
+    ],
+    "simpleCandidateCalibration": "使用当时已结束且结束日期严格早于origin的同期限滚动预测误差，最多84条；给当前固定候选中心加残差后取全情景中位数",
+    "anchor": "历史日牌价作为origin当天已知anchor代理；不能验证历史表的当时发布时间或修订版本",
+    "leakageRules": [
+      "预测输入只含CTF date<origin及单个origin anchor",
+      "gold只含date<origin",
+      "所有训练目标结束日期<origin",
+      "开发集目标日期必须<2026-09-01，避免标签穿越holdout边界",
+      "所有目标日期<=2026-11-20",
+      "不读取或使用2026-11-21实际价格"
+    ],
+    "directionMetric": "主要方向命中率取情景概率最高的方向；另报点价格隐含方向命中率。涨跌阈值沿用±0.2%",
+    "brierMetric": "三分类概率平方误差之和，取均值，范围0..2，越小越好",
+    "intervalMetric": "沿用原10/90分位区间及0.4%*sqrt(h)最低半宽；标称80%，同时报告覆盖率及均宽"
+  },
+  "protocolSha256": "20b3f5d411d78296e325dd3a36887400b974c87f87e78fd17bc45f6f28fe1ef2",
+  "selection": {
+    "id": "persistence",
+    "chosenBeforeHoldout": true,
+    "developmentRuleConfirmed": true,
+    "rule": "开发集1日MAE最低；其余期限与概率诊断全部报告；结果出来后不增删候选或改参数",
+    "tieBreak": "相等时按预注册候选顺序保留较简单的在先候选，不参考留出结果"
+  },
+  "data": {
+    "databaseSha256": "9d020da4ef1d08741edfb7a28c1a7e51405b4728181a267fb136ac8c5064e63b",
+    "historySha256": "00c276d49481f562205f018c0fd17946a33d9055590c5a70d9bb61c94f9f821c",
+    "history": {
+      "ctf": {
+        "count": 314,
+        "firstDate": "2025-11-20",
+        "lastDate": "2026-11-20"
+      },
+      "gold": {
+        "count": 302,
+        "firstDate": "2025-11-20",
+        "lastDate": "2026-11-20"
+      }
+    },
+    "historicalQuoteProxy": true,
+    "trueTenAMReplay": false,
+    "excludes20261121Actual": true
+  },
+  "bootstrap": {
+    "type": "circular-moving-block",
+    "blockOrigins": 7,
+    "replicates": 5000,
+    "randomGenerator": "Mulberry32",
+    "seed": "20261120 + horizon",
+    "confidence": 0.95,
+    "pairedImprovementSign": "旧 history MAE 减当前候选 MAE；正值表示改善，区间跨零不能视为显著"
+  },
+  "development": {
+    "eligibleOriginCount": 124,
+    "productionAutoPairsChecked": 321,
+    "evaluatedOriginRange": [
+      "2026-04-09",
+      "2026-08-28"
+    ],
+    "byCandidate": {
+      "history_old": {
+        "1": {
+          "n": 102,
+          "mae": 16.860584382355906,
+          "rmse": 21.935175544307427,
+          "directionAccuracy": 0.39215686274509803,
+          "pointDirectionAccuracy": 0.39215686274509803,
+          "brier": 0.6643274035733993,
+          "coverage80": 0.8235294117647058,
+          "maeCI95": [
+            13.692858034945417,
+            20.22762065342883
+          ],
+          "maeImprovementVsOld": 0,
+          "maeImprovementVsOldCI95": [
+            0,
+            0
+          ]
+        },
+        "3": {
+          "n": 101,
+          "mae": 30.899706854245682,
+          "rmse": 37.24997208218954,
+          "directionAccuracy": 0.36633663366336633,
+          "pointDirectionAccuracy": 0.36633663366336633,
+          "brier": 0.6504174793222487,
+          "coverage80": 0.7821782178217822,
+          "maeCI95": [
+            26.15283040307388,
+            35.90685292900289
+          ],
+          "maeImprovementVsOld": 0,
+          "maeImprovementVsOldCI95": [
+            0,
+            0
+          ]
+        },
+        "7": {
+          "n": 118,
+          "mae": 41.02612694777579,
+          "rmse": 50.96741117261472,
+          "directionAccuracy": 0.5254237288135594,
+          "pointDirectionAccuracy": 0.5254237288135594,
+          "brier": 0.5662503834776556,
+          "coverage80": 0.7966101694915254,
+          "maeCI95": [
+            31.75060249313265,
+            50.83630022723884
+          ],
+          "maeImprovementVsOld": 0,
+          "maeImprovementVsOldCI95": [
+            0,
+            0
+          ]
+        }
+      },
+      "persistence": {
+        "1": {
+          "n": 102,
+          "mae": 12.990196078431373,
+          "rmse": 17.884981102019868,
+          "directionAccuracy": 0.39215686274509803,
+          "pointDirectionAccuracy": 0.27450980392156865,
+          "brier": 0.6643274035733993,
+          "coverage80": 0.8235294117647058,
+          "maeCI95": [
+            10.970588235294118,
+            15.264705882352942
+          ],
+          "maeImprovementVsOld": 3.8703883039245337,
+          "maeImprovementVsOldCI95": [
+            1.9678866580696255,
+            5.827687152162195
+          ]
+        },
+        "3": {
+          "n": 101,
+          "mae": 20.524752475247524,
+          "rmse": 27.853755279464867,
+          "directionAccuracy": 0.36633663366336633,
+          "pointDirectionAccuracy": 0.1782178217821782,
+          "brier": 0.6504174793222487,
+          "coverage80": 0.7821782178217822,
+          "maeCI95": [
+            16.485148514851485,
+            24.96039603960396
+          ],
+          "maeImprovementVsOld": 10.374954378998158,
+          "maeImprovementVsOldCI95": [
+            6.257394668182737,
+            14.55710761993366
+          ]
+        },
+        "7": {
+          "n": 118,
+          "mae": 32.855932203389834,
+          "rmse": 40.8028538383767,
+          "directionAccuracy": 0.5254237288135594,
+          "pointDirectionAccuracy": 0.00847457627118644,
+          "brier": 0.5662503834776556,
+          "coverage80": 0.7966101694915254,
+          "maeCI95": [
+            26.28813559322034,
+            40.09322033898305
+          ],
+          "maeImprovementVsOld": 8.17019474438596,
+          "maeImprovementVsOldCI95": [
+            -1.0172094135885779,
+            16.569870777404763
+          ]
+        }
+      },
+      "history_median": {
+        "1": {
+          "n": 102,
+          "mae": 12.990196078431373,
+          "rmse": 17.884981102019868,
+          "directionAccuracy": 0.39215686274509803,
+          "pointDirectionAccuracy": 0.27450980392156865,
+          "brier": 0.6643274035733993,
+          "coverage80": 0.8235294117647058,
+          "maeCI95": [
+            10.970588235294118,
+            15.264705882352942
+          ],
+          "maeImprovementVsOld": 3.8703883039245337,
+          "maeImprovementVsOldCI95": [
+            1.9678866580696255,
+            5.827687152162195
+          ]
+        },
+        "3": {
+          "n": 101,
+          "mae": 20.71523191462683,
+          "rmse": 27.87383806700867,
+          "directionAccuracy": 0.36633663366336633,
+          "pointDirectionAccuracy": 0.21782178217821782,
+          "brier": 0.6504174793222487,
+          "coverage80": 0.7821782178217822,
+          "maeCI95": [
+            16.71357642615393,
+            25.168645212682954
+          ],
+          "maeImprovementVsOld": 10.184474939618852,
+          "maeImprovementVsOldCI95": [
+            6.235624862975531,
+            14.253830615580949
+          ]
+        },
+        "7": {
+          "n": 118,
+          "mae": 35.03811950950215,
+          "rmse": 44.182540900742715,
+          "directionAccuracy": 0.5254237288135594,
+          "pointDirectionAccuracy": 0.3983050847457627,
+          "brier": 0.5662503834776556,
+          "coverage80": 0.7966101694915254,
+          "maeCI95": [
+            27.443128525065177,
+            43.325360236771374
+          ],
+          "maeImprovementVsOld": 5.988007438273641,
+          "maeImprovementVsOldCI95": [
+            -0.31071115012109374,
+            11.578251574247986
+          ]
+        }
+      },
+      "price_median": {
+        "1": {
+          "n": 102,
+          "mae": 12.990196078431373,
+          "rmse": 17.884981102019868,
+          "directionAccuracy": 0.4019607843137255,
+          "pointDirectionAccuracy": 0.27450980392156865,
+          "brier": 0.6610729055485867,
+          "coverage80": 0.7549019607843137,
+          "maeCI95": [
+            10.970588235294118,
+            15.264705882352942
+          ],
+          "maeImprovementVsOld": 3.8703883039245337,
+          "maeImprovementVsOldCI95": [
+            1.9678866580696255,
+            5.827687152162195
+          ]
+        },
+        "3": {
+          "n": 101,
+          "mae": 20.92002789486571,
+          "rmse": 27.99699916084307,
+          "directionAccuracy": 0.46534653465346537,
+          "pointDirectionAccuracy": 0.24752475247524752,
+          "brier": 0.6450097226214957,
+          "coverage80": 0.6732673267326733,
+          "maeCI95": [
+            16.81216365028754,
+            25.36694178453858
+          ],
+          "maeImprovementVsOld": 9.97967895937997,
+          "maeImprovementVsOldCI95": [
+            5.935187612512401,
+            14.153090085274776
+          ]
+        },
+        "7": {
+          "n": 118,
+          "mae": 34.7928320769738,
+          "rmse": 43.17119506504621,
+          "directionAccuracy": 0.4915254237288136,
+          "pointDirectionAccuracy": 0.4745762711864407,
+          "brier": 0.5594092410457533,
+          "coverage80": 0.711864406779661,
+          "maeCI95": [
+            27.800898295776225,
+            42.26710288127854
+          ],
+          "maeImprovementVsOld": 6.233294870801991,
+          "maeImprovementVsOldCI95": [
+            -1.7846327414238914,
+            13.38501040052736
+          ]
+        }
+      },
+      "momentum1_damped": {
+        "1": {
+          "n": 102,
+          "mae": 15.22141270398461,
+          "rmse": 19.56728859468158,
+          "directionAccuracy": 0.37254901960784315,
+          "pointDirectionAccuracy": 0.3627450980392157,
+          "brier": 0.745942557231639,
+          "coverage80": 0.8137254901960784,
+          "maeCI95": [
+            12.958688052532386,
+            17.901642043072105
+          ],
+          "maeImprovementVsOld": 1.6391716783712962,
+          "maeImprovementVsOldCI95": [
+            -0.483365494567634,
+            3.8407666536746152
+          ]
+        },
+        "3": {
+          "n": 101,
+          "mae": 25.57667514692764,
+          "rmse": 32.42218003107686,
+          "directionAccuracy": 0.40594059405940597,
+          "pointDirectionAccuracy": 0.36633663366336633,
+          "brier": 0.7399646028812152,
+          "coverage80": 0.8217821782178217,
+          "maeCI95": [
+            21.549910133423943,
+            30.089888255540043
+          ],
+          "maeImprovementVsOld": 5.323031707318041,
+          "maeImprovementVsOldCI95": [
+            0.45371145859252593,
+            10.258370387307192
+          ]
+        },
+        "7": {
+          "n": 118,
+          "mae": 37.17046914794064,
+          "rmse": 47.77833177880757,
+          "directionAccuracy": 0.5508474576271186,
+          "pointDirectionAccuracy": 0.5084745762711864,
+          "brier": 0.5848901966316663,
+          "coverage80": 0.7372881355932204,
+          "maeCI95": [
+            30.523735493310557,
+            44.18164146813121
+          ],
+          "maeImprovementVsOld": 3.85565779983515,
+          "maeImprovementVsOldCI95": [
+            -2.55611302831295,
+            10.22840687405553
+          ]
+        }
+      },
+      "momentum3_damped": {
+        "1": {
+          "n": 102,
+          "mae": 16.010273249562132,
+          "rmse": 20.514082453002455,
+          "directionAccuracy": 0.3431372549019608,
+          "pointDirectionAccuracy": 0.3137254901960784,
+          "brier": 0.7709931376434839,
+          "coverage80": 0.7941176470588235,
+          "maeCI95": [
+            13.852769157646412,
+            18.575299025401407
+          ],
+          "maeImprovementVsOld": 0.8503111327937738,
+          "maeImprovementVsOldCI95": [
+            -1.4629723914239943,
+            3.187995085999738
+          ]
+        },
+        "3": {
+          "n": 101,
+          "mae": 27.102153363055226,
+          "rmse": 32.98521040322513,
+          "directionAccuracy": 0.3465346534653465,
+          "pointDirectionAccuracy": 0.297029702970297,
+          "brier": 0.7265356737814093,
+          "coverage80": 0.7920792079207921,
+          "maeCI95": [
+            22.422274335032867,
+            32.16871749116766
+          ],
+          "maeImprovementVsOld": 3.797553491190456,
+          "maeImprovementVsOldCI95": [
+            -0.9066454493994982,
+            9.10463843267079
+          ]
+        },
+        "7": {
+          "n": 118,
+          "mae": 41.92814995674922,
+          "rmse": 51.606602119870296,
+          "directionAccuracy": 0.4576271186440678,
+          "pointDirectionAccuracy": 0.4406779661016949,
+          "brier": 0.6235066764299516,
+          "coverage80": 0.8050847457627118,
+          "maeCI95": [
+            35.066249098591676,
+            48.85842859196997
+          ],
+          "maeImprovementVsOld": -0.9020230089734298,
+          "maeImprovementVsOldCI95": [
+            -9.476656676697129,
+            7.2455691554992825
+          ]
+        }
+      },
+      "trend7_damped": {
+        "1": {
+          "n": 102,
+          "mae": 14.513369197022381,
+          "rmse": 18.69903639606259,
+          "directionAccuracy": 0.3431372549019608,
+          "pointDirectionAccuracy": 0.3333333333333333,
+          "brier": 0.7397433805071769,
+          "coverage80": 0.8431372549019608,
+          "maeCI95": [
+            12.557335454418794,
+            16.617773549131442
+          ],
+          "maeImprovementVsOld": 2.347215185333525,
+          "maeImprovementVsOldCI95": [
+            0.04470503621639743,
+            4.6842837776549775
+          ]
+        },
+        "3": {
+          "n": 101,
+          "mae": 24.29946707962449,
+          "rmse": 31.66105175494507,
+          "directionAccuracy": 0.4158415841584158,
+          "pointDirectionAccuracy": 0.33663366336633666,
+          "brier": 0.7178185119344276,
+          "coverage80": 0.7722772277227723,
+          "maeCI95": [
+            19.82575534288725,
+            29.01587696664006
+          ],
+          "maeImprovementVsOld": 6.600239774621194,
+          "maeImprovementVsOldCI95": [
+            2.108756702943829,
+            11.434531832392633
+          ]
+        },
+        "7": {
+          "n": 118,
+          "mae": 40.40531023687819,
+          "rmse": 50.15480502909279,
+          "directionAccuracy": 0.4830508474576271,
+          "pointDirectionAccuracy": 0.4576271186440678,
+          "brier": 0.5987782457884636,
+          "coverage80": 0.8220338983050848,
+          "maeCI95": [
+            33.38088818467711,
+            47.738318024843174
+          ],
+          "maeImprovementVsOld": 0.620816710897607,
+          "maeImprovementVsOldCI95": [
+            -8.183651374669868,
+            8.99970885068334
+          ]
+        }
+      }
+    }
+  },
+  "holdout": {
+    "eligibleOriginCount": 70,
+    "productionAutoPairsChecked": 178,
+    "evaluatedOriginRange": [
+      "2026-09-01",
+      "2026-11-19"
+    ],
+    "byCandidate": {
+      "history_old": {
+        "1": {
+          "n": 58,
+          "mae": 13.682098969313705,
+          "rmse": 17.174352908238852,
+          "directionAccuracy": 0.5172413793103449,
+          "pointDirectionAccuracy": 0.5172413793103449,
+          "brier": 0.6441929649523235,
+          "coverage80": 0.8103448275862069,
+          "maeCI95": [
+            11.13264653251961,
+            16.531105241440503
+          ],
+          "maeImprovementVsOld": 0,
+          "maeImprovementVsOldCI95": [
+            0,
+            0
+          ]
+        },
+        "3": {
+          "n": 56,
+          "mae": 21.156359064138506,
+          "rmse": 26.168368021273793,
+          "directionAccuracy": 0.5714285714285714,
+          "pointDirectionAccuracy": 0.5714285714285714,
+          "brier": 0.5852773531132629,
+          "coverage80": 0.75,
+          "maeCI95": [
+            16.030727309660488,
+            27.072006492462833
+          ],
+          "maeImprovementVsOld": 0,
+          "maeImprovementVsOldCI95": [
+            0,
+            0
+          ]
+        },
+        "7": {
+          "n": 64,
+          "mae": 31.81614896693831,
+          "rmse": 39.35171216979276,
+          "directionAccuracy": 0.515625,
+          "pointDirectionAccuracy": 0.515625,
+          "brier": 0.5540816158012944,
+          "coverage80": 0.734375,
+          "maeCI95": [
+            22.727042488443754,
+            42.03377453347292
+          ],
+          "maeImprovementVsOld": 0,
+          "maeImprovementVsOldCI95": [
+            0,
+            0
+          ]
+        }
+      },
+      "persistence": {
+        "1": {
+          "n": 58,
+          "mae": 11.051724137931034,
+          "rmse": 15.714587995301338,
+          "directionAccuracy": 0.5172413793103449,
+          "pointDirectionAccuracy": 0.25862068965517243,
+          "brier": 0.6441929649523235,
+          "coverage80": 0.8103448275862069,
+          "maeCI95": [
+            7.379310344827586,
+            15.206896551724139
+          ],
+          "maeImprovementVsOld": 2.630374831382671,
+          "maeImprovementVsOldCI95": [
+            -0.43610121652958966,
+            5.348881406956833
+          ]
+        },
+        "3": {
+          "n": 56,
+          "mae": 18.607142857142858,
+          "rmse": 25.064203273080228,
+          "directionAccuracy": 0.5714285714285714,
+          "pointDirectionAccuracy": 0.10714285714285714,
+          "brier": 0.5852773531132629,
+          "coverage80": 0.75,
+          "maeCI95": [
+            12.785714285714286,
+            25
+          ],
+          "maeImprovementVsOld": 2.5492162069956485,
+          "maeImprovementVsOldCI95": [
+            -2.781610117298708,
+            7.805930242566948
+          ]
+        },
+        "7": {
+          "n": 64,
+          "mae": 28.640625,
+          "rmse": 35.530576620707976,
+          "directionAccuracy": 0.515625,
+          "pointDirectionAccuracy": 0.0625,
+          "brier": 0.5540816158012944,
+          "coverage80": 0.734375,
+          "maeCI95": [
+            20.015625,
+            38.4375
+          ],
+          "maeImprovementVsOld": 3.175523966938311,
+          "maeImprovementVsOldCI95": [
+            -7.03537074422788,
+            12.54954763662677
+          ]
+        }
+      },
+      "history_median": {
+        "1": {
+          "n": 58,
+          "mae": 11.051724137931034,
+          "rmse": 15.714587995301338,
+          "directionAccuracy": 0.5172413793103449,
+          "pointDirectionAccuracy": 0.25862068965517243,
+          "brier": 0.6441929649523235,
+          "coverage80": 0.8103448275862069,
+          "maeCI95": [
+            7.379310344827586,
+            15.206896551724139
+          ],
+          "maeImprovementVsOld": 2.630374831382671,
+          "maeImprovementVsOldCI95": [
+            -0.43610121652958966,
+            5.348881406956833
+          ]
+        },
+        "3": {
+          "n": 56,
+          "mae": 18.65826958349874,
+          "rmse": 25.024671837752493,
+          "directionAccuracy": 0.5714285714285714,
+          "pointDirectionAccuracy": 0.125,
+          "brier": 0.5852773531132629,
+          "coverage80": 0.75,
+          "maeCI95": [
+            12.758790874021068,
+            25.182539439378818
+          ],
+          "maeImprovementVsOld": 2.4980894806397664,
+          "maeImprovementVsOldCI95": [
+            -2.655940559186181,
+            7.618976629071545
+          ]
+        },
+        "7": {
+          "n": 64,
+          "mae": 28.248517739853266,
+          "rmse": 34.539895227232044,
+          "directionAccuracy": 0.515625,
+          "pointDirectionAccuracy": 0.296875,
+          "brier": 0.5540816158012944,
+          "coverage80": 0.734375,
+          "maeCI95": [
+            19.97600397876705,
+            37.255812641515774
+          ],
+          "maeImprovementVsOld": 3.5676312270850445,
+          "maeImprovementVsOldCI95": [
+            -5.232555425501374,
+            11.95425763508581
+          ]
+        }
+      },
+      "price_median": {
+        "1": {
+          "n": 58,
+          "mae": 11.222581286934789,
+          "rmse": 15.608270340228476,
+          "directionAccuracy": 0.41379310344827586,
+          "pointDirectionAccuracy": 0.25862068965517243,
+          "brier": 0.6549262548975359,
+          "coverage80": 0.7931034482758621,
+          "maeCI95": [
+            7.740686768729771,
+            15.31700238989416
+          ],
+          "maeImprovementVsOld": 2.459517682378916,
+          "maeImprovementVsOldCI95": [
+            -0.5425153763785762,
+            4.988501854951508
+          ]
+        },
+        "3": {
+          "n": 56,
+          "mae": 18.962582935405614,
+          "rmse": 24.946717366423872,
+          "directionAccuracy": 0.4642857142857143,
+          "pointDirectionAccuracy": 0.42857142857142855,
+          "brier": 0.596647403756268,
+          "coverage80": 0.7142857142857143,
+          "maeCI95": [
+            13.340401818329939,
+            25.121688128633856
+          ],
+          "maeImprovementVsOld": 2.1937761287328925,
+          "maeImprovementVsOldCI95": [
+            -2.593584764517228,
+            6.664095686642424
+          ]
+        },
+        "7": {
+          "n": 64,
+          "mae": 29.298739689749166,
+          "rmse": 35.96105222421511,
+          "directionAccuracy": 0.515625,
+          "pointDirectionAccuracy": 0.515625,
+          "brier": 0.5429245984533015,
+          "coverage80": 0.703125,
+          "maeCI95": [
+            21.12588080141573,
+            37.90112611345593
+          ],
+          "maeImprovementVsOld": 2.517409277189145,
+          "maeImprovementVsOldCI95": [
+            -5.801526075179986,
+            11.029246328080482
+          ]
+        }
+      },
+      "momentum1_damped": {
+        "1": {
+          "n": 58,
+          "mae": 12.194226070728554,
+          "rmse": 16.286470764197066,
+          "directionAccuracy": 0.46551724137931033,
+          "pointDirectionAccuracy": 0.41379310344827586,
+          "brier": 0.6702292928050443,
+          "coverage80": 0.8793103448275862,
+          "maeCI95": [
+            8.534663578771333,
+            16.159050994310448
+          ],
+          "maeImprovementVsOld": 1.4878728985851506,
+          "maeImprovementVsOldCI95": [
+            -0.8273916151073735,
+            3.866130852645698
+          ]
+        },
+        "3": {
+          "n": 56,
+          "mae": 22.04278379974581,
+          "rmse": 28.281056256370846,
+          "directionAccuracy": 0.4107142857142857,
+          "pointDirectionAccuracy": 0.4107142857142857,
+          "brier": 0.6357746824453125,
+          "coverage80": 0.7857142857142857,
+          "maeCI95": [
+            16.321506952553197,
+            27.962875203448906
+          ],
+          "maeImprovementVsOld": -0.886424735607303,
+          "maeImprovementVsOldCI95": [
+            -6.160767013348206,
+            4.396379229155176
+          ]
+        },
+        "7": {
+          "n": 64,
+          "mae": 30.893476167778676,
+          "rmse": 37.28647415564896,
+          "directionAccuracy": 0.515625,
+          "pointDirectionAccuracy": 0.40625,
+          "brier": 0.5956079072532698,
+          "coverage80": 0.78125,
+          "maeCI95": [
+            22.994098225532053,
+            39.700530228803686
+          ],
+          "maeImprovementVsOld": 0.9226727991596348,
+          "maeImprovementVsOldCI95": [
+            -7.447293915598735,
+            9.8646698977565
+          ]
+        }
+      },
+      "momentum3_damped": {
+        "1": {
+          "n": 58,
+          "mae": 12.61410022431069,
+          "rmse": 16.191785266902347,
+          "directionAccuracy": 0.4482758620689655,
+          "pointDirectionAccuracy": 0.3620689655172414,
+          "brier": 0.6911585824210368,
+          "coverage80": 0.8448275862068966,
+          "maeCI95": [
+            8.97600671393561,
+            16.56683507923637
+          ],
+          "maeImprovementVsOld": 1.067998745003015,
+          "maeImprovementVsOldCI95": [
+            -1.4518581680047546,
+            3.5154635709725124
+          ]
+        },
+        "3": {
+          "n": 56,
+          "mae": 23.905224236459333,
+          "rmse": 30.195524265928384,
+          "directionAccuracy": 0.44642857142857145,
+          "pointDirectionAccuracy": 0.4107142857142857,
+          "brier": 0.6408093161957611,
+          "coverage80": 0.8035714285714286,
+          "maeCI95": [
+            16.242224035251656,
+            31.980427841547424
+          ],
+          "maeImprovementVsOld": -2.7488651723208264,
+          "maeImprovementVsOldCI95": [
+            -8.410984154941954,
+            3.442702834739819
+          ]
+        },
+        "7": {
+          "n": 64,
+          "mae": 33.1764600095994,
+          "rmse": 41.62625293000771,
+          "directionAccuracy": 0.4375,
+          "pointDirectionAccuracy": 0.421875,
+          "brier": 0.6274028933808962,
+          "coverage80": 0.84375,
+          "maeCI95": [
+            23.16562278011967,
+            45.2677656798368
+          ],
+          "maeImprovementVsOld": -1.3603110426610918,
+          "maeImprovementVsOldCI95": [
+            -11.581206653984843,
+            7.976794115211909
+          ]
+        }
+      },
+      "trend7_damped": {
+        "1": {
+          "n": 58,
+          "mae": 11.787569307269493,
+          "rmse": 16.408916456536993,
+          "directionAccuracy": 0.41379310344827586,
+          "pointDirectionAccuracy": 0.3793103448275862,
+          "brier": 0.6892588188664287,
+          "coverage80": 0.8275862068965517,
+          "maeCI95": [
+            8.221500152384198,
+            15.608822619041238
+          ],
+          "maeImprovementVsOld": 1.8945296620442118,
+          "maeImprovementVsOldCI95": [
+            -0.3702705895458429,
+            4.222708978085409
+          ]
+        },
+        "3": {
+          "n": 56,
+          "mae": 22.052878139343903,
+          "rmse": 29.231904749638336,
+          "directionAccuracy": 0.4107142857142857,
+          "pointDirectionAccuracy": 0.39285714285714285,
+          "brier": 0.6813175924353094,
+          "coverage80": 0.8035714285714286,
+          "maeCI95": [
+            15.134285736905996,
+            29.723988452110166
+          ],
+          "maeImprovementVsOld": -0.8965190752053971,
+          "maeImprovementVsOldCI95": [
+            -5.933179710507655,
+            4.661880178185051
+          ]
+        },
+        "7": {
+          "n": 64,
+          "mae": 34.88232221228269,
+          "rmse": 42.97378435383099,
+          "directionAccuracy": 0.421875,
+          "pointDirectionAccuracy": 0.421875,
+          "brier": 0.6237077222882812,
+          "coverage80": 0.8125,
+          "maeCI95": [
+            24.167724101407288,
+            47.83505028779979
+          ],
+          "maeImprovementVsOld": -3.066173245344377,
+          "maeImprovementVsOldCI95": [
+            -13.97629226784846,
+            6.505055420365991
+          ]
+        }
+      }
+    }
+  }
+}

@@ -115,16 +115,22 @@ class Store {
     }
   }
 
-  issueForecast(instrument, origin, quote, forecast, issuedAt) {
-    if (quote?.date !== origin || quote.slot !== origin || dateAt(quote.fetchedAt) !== origin ||
-        dateAt(issuedAt) !== origin || !forecast?.anchor.fromQuote) return forecast;
+  issueForecast(instrument, origin, quote, forecast, issuedAt, canIssue = true) {
+    // 同一基准日只沿用最早发行的版本，升级或历史刷新不能替换用户已看过的预测。
+    const first = this.db.prepare(`
+      SELECT model_version AS version FROM forecast_checks
+      WHERE instrument = ? AND origin = ? ORDER BY issued_at, rowid LIMIT 1
+    `).get(instrument, origin);
+    const version = first?.version ?? MODEL_VERSION;
     const getIssued = this.db.prepare(`
       SELECT estimate, origin_price AS price FROM forecast_checks
       WHERE model_version = ? AND instrument = ? AND origin = ? ORDER BY target
     `);
-    const get = () => getIssued.all(MODEL_VERSION, instrument, origin);
+    const get = () => getIssued.all(version, instrument, origin);
     let existing = get();
-    if (!existing.length && forecast.days.some((day) => day.probabilities)) {
+    const ready = canIssue && quote?.date === origin && quote.slot === origin && dateAt(quote.fetchedAt) === origin &&
+      dateAt(issuedAt) === origin && forecast?.anchor.fromQuote && forecast.days.some((day) => day.probabilities);
+    if (!existing.length && ready) {
       this.commit(() => {
         const save = this.db.prepare(`
           INSERT OR IGNORE INTO forecast_checks
@@ -137,29 +143,46 @@ class Store {
       });
       existing = get();
     }
-    if (!existing.length) return forecast;
+    if (!existing.length) return forecast ? { ...forecast, provisional: true } : forecast;
     return {
       ...forecast,
-      anchor: { date: origin, price: existing[0].price, fromQuote: existing[0].price === quote.price },
+      version, provisional: false,
+      anchor: { date: origin, price: existing[0].price, fromQuote: existing[0].price === quote?.price && quote?.date === origin },
+      factors: forecast?.factors ?? [],
       days: existing.map((row) => JSON.parse(row.estimate)),
     };
   }
 
-  forecastStats(instrument) {
+  forecastStats(instrument, version = MODEL_VERSION) {
     const offsets = [1, 3, 7];
     const rows = this.db.prepare(`
       SELECT origin, target, issued_at AS issuedAt, origin_fetched_at AS originFetchedAt, estimate, actual,
+        origin_price AS originPrice, target_price AS targetPrice,
         target_fetched_at AS targetFetchedAt, (julianday(target) - julianday(origin)) AS horizon
       FROM forecast_checks WHERE model_version = ? AND instrument = ? AND actual IS NOT NULL
-    `).all(MODEL_VERSION, instrument).filter(({ horizon }) => offsets.includes(horizon));
-    const scheduled = rows.filter((row) =>
-      onSchedule(row.origin, row.originFetchedAt) && onSchedule(row.origin, row.issuedAt) && onSchedule(row.target, row.targetFetchedAt));
-    const byHorizon = Object.fromEntries(offsets.map((days) => [
+      ORDER BY target DESC, issued_at DESC
+    `).all(version, instrument).filter(({ horizon }) => offsets.includes(horizon));
+    const checks = rows.map(row => ({ ...JSON.parse(row.estimate), ...row, onSchedule:
+      onSchedule(row.origin, row.originFetchedAt) && onSchedule(row.origin, row.issuedAt) && onSchedule(row.target, row.targetFetchedAt) }));
+    const scheduled = checks.filter(row => row.onSchedule);
+    const delayed = checks.filter(row => !row.onSchedule);
+    const summarize = values => Object.fromEntries(offsets.map((days) => [
       days,
-      summarizeChecks(scheduled.filter(({ horizon }) => horizon === days)
-        .map((row) => ({ ...JSON.parse(row.estimate), actual: row.actual }))),
+      summarizeChecks(values.filter(({ horizon }) => horizon === days)),
     ]));
-    return { byHorizon, late: rows.length - scheduled.length };
+    const valid = checks.filter(row => [row.originPrice, row.targetPrice, row.mid].every(value => Number.isFinite(value) && value > 0));
+    // 优先展示最近到期的明日价，以各自原始基准的变化百分比跨币种比较。
+    const recent = valid.find(row => row.horizon === 1) ?? valid[0];
+    return {
+      byHorizon: summarize(scheduled), late: delayed.length, lateByHorizon: summarize(delayed),
+      version, units: ({ gold: 'USD/troy-oz', ctf: 'CNY/g' })[instrument] ?? null,
+      recent: recent ? {
+        origin: recent.origin, target: recent.target, horizon: recent.horizon, onSchedule: recent.onSchedule,
+        predictedReturn: recent.mid / recent.originPrice - 1,
+        actualReturn: recent.targetPrice / recent.originPrice - 1,
+        errorRate: Math.abs(recent.mid - recent.targetPrice) / recent.targetPrice,
+      } : null,
+    };
   }
 
   latestQuote(instrument) {

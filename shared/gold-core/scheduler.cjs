@@ -2,7 +2,7 @@ const { dateAt, dateBeforeYear, latestSlot, scheduledAt, DAY, HALF_HOUR } = requ
 const { isConnectionError, marketIsClosed } = require('./sources.cjs');
 const { convertGold, earlier } = require('./currency.cjs');
 const { getChanges } = require('./changes.cjs');
-const { forecast } = require('./outlook.cjs');
+const { forecast, MODEL_VERSION } = require('./outlook.cjs');
 const { upcomingCalendar } = require('./macro-calendar.cjs');
 
 const INSTRUMENTS = ['gold', 'ctf'];
@@ -83,10 +83,17 @@ class Scheduler {
           instrument: id, priceHistory: data.history, goldHistory: instruments.gold.history,
           quote: data.quote, today, marketIsClosed, macro: context.macro,
         });
-        if (value) value.anchor.fromQuote = data.quote?.date === value.anchor.date && data.quote?.price === value.anchor.price;
+        const latestHistory = data.history.filter(point => point.date < today).at(-1);
+        const ready = data.status === 'done' && !['loading', 'pending'].includes(data.historyStatus) &&
+          latestHistory?.date >= earlier(today, 4);
+        if (value) {
+          value.anchor.fromQuote = data.quote?.date === value.anchor.date && data.quote?.price === value.anchor.price;
+          value.provisional = !ready;
+        }
+        // 历史尚在加载时仅展示暂估；已有同日存档继续沿用，不因刷新或升级改价。
         forecasts[id] = id === 'gold' && marketIsClosed(scheduledAt(today)) ? value :
-          this.store.issueForecast(id, today, data.quote, value, now);
-        verification[id] = this.store.forecastStats(id);
+          this.store.issueForecast(id, today, data.quote, value, now, ready);
+        verification[id] = this.store.forecastStats(id, forecasts[id]?.version ?? MODEL_VERSION);
       }
       const events = (context.news ?? []).filter((event) => event.timestamp <= now && now - event.timestamp <= 4 * DAY)
         .sort((a, b) => Number(b.tag.endsWith('风险')) - Number(a.tag.endsWith('风险')) || b.timestamp - a.timestamp);

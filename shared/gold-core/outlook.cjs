@@ -8,7 +8,7 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const RISE_THRESHOLD = Math.log1p(0.002);
 const FALL_THRESHOLD = Math.log1p(-0.002);
 const DIRECTIONS = ['up', 'down', 'flat'];
-const MODEL_VERSION = '2.0.0';
+const MODEL_VERSION = '3.0.0';
 const dateAfter = (date, days) => dateAt(scheduledAt(date) + days * DAY);
 
 function quantile(values, rank) {
@@ -22,7 +22,7 @@ function classifyReturn(logReturn) {
   return 'flat';
 }
 
-function estimateDirection(centre, residuals, horizon) {
+function estimateDirection(centre, residuals, horizon, pointMode = 'directional') {
   const scenarios = residuals.map((residual) => centre + residual);
   const groups = { up: [], down: [], flat: [] };
   for (const change of scenarios) groups[classifyReturn(change)].push(change);
@@ -31,7 +31,7 @@ function estimateDirection(centre, residuals, horizon) {
     const difference = groups[candidate].length - groups[selected].length;
     return difference > 0 || (difference === 0 && candidate === preferred) ? candidate : selected;
   });
-  const mid = quantile(groups[direction], .5);
+  const mid = quantile(pointMode === 'median' ? scenarios : groups[direction], .5);
   const floor = .004 * Math.sqrt(horizon);
   const probabilities = Object.fromEntries(DIRECTIONS.map((label) => [label, (groups[label].length + 1) / (scenarios.length + 3)]));
   return {
@@ -145,23 +145,27 @@ function chooseModel(returns, feature, featureCount) {
 }
 
 function forecast({
-  instrument, priceHistory, goldHistory, quote, macro, today, marketIsClosed, modelMode = 'history', offsets = [1, 2, 3, 4, 5, 6, 7],
+  instrument, priceHistory, goldHistory, quote, macro, today, marketIsClosed, modelMode = 'auto', offsets = [1, 2, 3, 4, 5, 6, 7],
 }) {
   const points = priceHistory.filter(({ date, price }) =>
     date < today && price > 0 && (instrument !== 'gold' || !marketIsClosed(scheduledAt(date))));
   if (points.length < 30 || points.at(-1).date < earlier(today, 10)) return null;
   const last = points.at(-1);
-  const anchor = quote && quote.date >= last.date && quote.date <= today ? quote : last;
+  const anchor = quote && Number.isFinite(quote.price) && quote.price > 0 && quote.date >= last.date && quote.date <= today ? quote : last;
+  // 周大福点价使用开发段选定、留出段验证的保守基准；方向与区间仍独立估计。
+  const conservative = modelMode === 'auto' && instrument === 'ctf';
+  const effectiveMode = modelMode === 'auto' ? 'history' : modelMode;
+  const featurePoints = instrument === 'ctf' && anchor.date > last.date ? [...points, anchor] : points;
   const factors = Object.keys(FACTORS).flatMap((id) => {
     const latest = marketFactor(macro?.[id] ?? [], today, id);
     return latest ? [{ id, ...FACTORS[id], ...latest }] : [];
   });
   const features = (date) => [
-    ...[1, 5, 15].map((window) => momentum(points, earlier(date, 1), window)),
-    ...(modelMode === 'macro' ? factors.map(({ id }) => marketFactor(macro[id], date, id)?.value ?? 0) : []),
-    ...(modelMode === 'macro' && instrument === 'ctf' ? [momentum(goldHistory, earlier(date, 1), 5)] : []),
+    ...[1, 5, 15].map((window) => momentum(featurePoints, instrument === 'ctf' ? date : earlier(date, 1), window)),
+    ...(effectiveMode === 'macro' ? factors.map(({ id }) => marketFactor(macro[id], date, id)?.value ?? 0) : []),
+    ...(effectiveMode === 'macro' && instrument === 'ctf' ? [momentum(goldHistory, earlier(date, 1), 5)] : []),
   ];
-  const current = modelMode === 'history' ? [] : features(today);
+  const current = effectiveMode === 'history' ? [] : features(anchor.date);
   const days = [];
   const ctfHasSundays = instrument === 'ctf' &&
     points.filter((point) => new Date(point.date).getUTCDay() === 0).length > 5;
@@ -175,15 +179,25 @@ function forecast({
       days.push({ date, sparse: true });
       continue;
     }
-    const returns = historicalReturns(points, offset);
+    // 基准报价可能早于展示日；预测跨度必须从真实基准日算到目标日。
+    const horizon = Math.round((scheduledAt(date) - scheduledAt(anchor.date)) / DAY);
+    const returns = historicalReturns(points, horizon);
     const recent = returns.slice(-84).map(({ target }) => target);
     if (recent.length < 30) {
       days.push({ date, sparse: true });
       continue;
     }
-    const model = modelMode === 'history' ? null : chooseModel(returns, features, current.length);
+    const model = effectiveMode === 'history' ? null : chooseModel(returns, features, current.length);
     const mid = model ? clamp(model.predict(current), -.07, .07) : 0;
-    const estimate = estimateDirection(mid, model?.residuals ?? recent, offset);
+    const estimate = estimateDirection(mid, model?.residuals ?? recent, horizon,
+      conservative || effectiveMode !== 'history' ? 'median' : 'directional');
+    if (conservative) {
+      // 保守基准不是“保证价格不变”；避免把最多方向组的典型涨跌冒充整体点价。
+      const floor = .004 * Math.sqrt(horizon);
+      estimate.mid = 0;
+      estimate.low = Math.min(estimate.low, -floor);
+      estimate.high = Math.max(estimate.high, floor);
+    }
     days.push({
       date,
       mid: anchor.price * Math.exp(estimate.mid),
@@ -192,11 +206,12 @@ function forecast({
       direction: estimate.direction,
       confidence: estimate.confidence,
       probabilities: estimate.probabilities,
-      model: model?.label ?? '同期限历史频率',
+      model: conservative ? '保守基准＋历史方向分布' : model?.label ?? '同期限历史频率',
+      pointMethod: conservative ? 'persistence' : effectiveMode === 'history' ? 'directional-median' : 'median',
       sample: model?.residuals.length ?? recent.length,
     });
   }
-  return { anchor: { date: anchor.date, price: anchor.price }, factors, days };
+  return { version: MODEL_VERSION, anchor: { date: anchor.date, price: anchor.price }, factors, days };
 }
 
 module.exports = { MODEL_VERSION, DIRECTIONS, forecast, classifyReturn, estimateDirection, dateAfter };

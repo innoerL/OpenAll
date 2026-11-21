@@ -1,0 +1,31 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { Store } = require('../store.cjs');
+const { Scheduler } = require('../scheduler.cjs');
+const { createFixture } = require('../fixture.cjs');
+const { dateAt } = require('../time.cjs');
+
+test('历史仍在加载时不冻结预测，依赖完成后正式发行且不被后续快照替换', async context => {
+  const store = new Store(':memory:');
+  context.after(() => store.close());
+  const fixture = createFixture();
+  const today = dateAt(fixture.clock());
+  const rows = await fixture.sources.ctf.history();
+  store.saveHistory('ctf', '2026-11-19', rows.filter(row => row.date < today));
+  let complete;
+  fixture.sources.ctf.history = () => new Promise(resolve => { complete = () => resolve(rows); });
+  let current;
+  const scheduler = new Scheduler({ store, sources: fixture.sources, clock: fixture.clock, online: () => true,
+    publish: () => { current = scheduler.snapshot(); } });
+  context.after(() => scheduler.stop());
+  const running = scheduler.tick('startup');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(current.outlook.forecasts.ctf.provisional, true);
+  assert.equal(store.db.prepare("SELECT count(*) AS n FROM forecast_checks WHERE instrument='ctf'").get().n, 0);
+  complete(); await running;
+  assert.equal(current.outlook.forecasts.ctf.provisional, false);
+  assert.equal(store.db.prepare("SELECT count(*) AS n FROM forecast_checks WHERE instrument='ctf'").get().n, 7);
+  const saved = current.outlook.forecasts.ctf.days;
+  scheduler.forecastCache = null;
+  assert.deepEqual(scheduler.snapshot().outlook.forecasts.ctf.days, saved);
+});
