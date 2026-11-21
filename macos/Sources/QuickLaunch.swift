@@ -736,25 +736,28 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 }
             }
             guard sidebarShows(0) else { throw NSError(domain: "SettingsInitialFocus", code: 1) }
-            // 由 AppKit 的实际键序寻找前项，不假设分类与内容控件的排列顺序。
             window.recalculateKeyViewLoop()
-            guard let previous = appearance.previousValidKeyView, window.makeFirstResponder(previous) else {
-                throw NSError(domain: "SettingsKeyLoop", code: 1)
+            // 以实际键序为准。关闭系统键盘导航时，普通按钮可被 Tab 正常跳过。
+            let canTabToSidebar = appearance.canBecomeKeyView
+            print("设置侧栏可用 Tab 遍历：\(canTabToSidebar)，系统完整键盘访问：\(NSApp.isFullKeyboardAccessEnabled)")
+            if canTabToSidebar {
+                for _ in 0..<64 {
+                    try key(48, "\t")
+                    if window.firstResponder === appearance { break }
+                }
+                guard sidebarShows(0, focus: appearance) else { throw NSError(domain: "SettingsTabFocus", code: 1) }
+                try key(48, "\u{19}", shift: true)
+                guard !appearance.showsKeyboardFocus, settingsTabIndex == 0 else { throw NSError(domain: "SettingsBacktab", code: 1) }
+                try key(48, "\t")
+                guard sidebarShows(0, focus: appearance) else { throw NSError(domain: "SettingsTabReturn", code: 1) }
+                try key(49, " ")
+                guard sidebarShows(7, focus: appearance) else { throw NSError(domain: "SettingsSpace", code: 1) }
+            } else {
+                try key(48, "\t")
+                guard sidebarShows(0) else { throw NSError(domain: "SettingsSkippedButton", code: 1) }
+                appearance.performClick(nil)
+                guard settingsTabIndex == 7 else { throw NSError(domain: "SettingsPointerSelection", code: 1) }
             }
-            try key(48, "\t")
-            guard sidebarShows(0, focus: appearance) else { throw NSError(domain: "SettingsTabFocus", code: 1) }
-            // AppKit 的反向 Tab 字符为 U+0019，移除修饰符后的字符也保留该值。
-            try key(48, "\u{19}", shift: true)
-            // 文本框由共享 field editor 接收焦点，回退后不要求 firstResponder 等于控件本身。
-            guard let back = window.firstResponder, back !== appearance, back !== window,
-                  !appearance.showsKeyboardFocus, settingsTabIndex == 0 else {
-                throw NSError(domain: "SettingsBacktab", code: 1, userInfo: [NSLocalizedDescriptionKey:
-                    "回退后焦点为 \(String(describing: window.firstResponder))，前一控件为 \(previous)"])
-            }
-            try key(48, "\t")
-            guard sidebarShows(0, focus: appearance) else { throw NSError(domain: "SettingsTabReturn", code: 1) }
-            try key(49, " ")
-            guard sidebarShows(7, focus: appearance) else { throw NSError(domain: "SettingsSpace", code: 1) }
 
             // NSButton 在鼠标按下时进入跟踪循环，预先放入抬起事件使这次点击完整结束。
             let location = general.convert(NSPoint(x: general.bounds.midX, y: general.bounds.midY), to: nil)
@@ -768,14 +771,15 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             }
             NSApp.postEvent(try mouse(.leftMouseUp), atStart: true)
             window.sendEvent(try mouse(.leftMouseDown))
-            guard sidebarShows(0), window.firstResponder === general, settingsNavigation.map(\.frame) == originalFrames else {
+            guard sidebarShows(0), (!general.acceptsFirstResponder || window.firstResponder === general), settingsNavigation.map(\.frame) == originalFrames else {
                 throw NSError(domain: "SettingsPointerFocus", code: 1)
             }
             try DesignPreview.capture(window, name: "settings-mouse-general")
             window.orderOut(nil)
             performCommand("diagnostics")
             window.makeKeyAndOrderFront(nil)
-            guard sidebarShows(6), (window.firstResponder as? SettingsNavItem)?.tag == 6 else {
+            guard let diagnostics = settingsNavigation.first(where: { $0.tag == 6 }), sidebarShows(6),
+                  (!diagnostics.acceptsFirstResponder || window.firstResponder === diagnostics) else {
                 throw NSError(domain: "SettingsReopenFocus", code: 1)
             }
             appearance.performClick(nil)
