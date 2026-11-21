@@ -78,6 +78,13 @@ jobs:
           OPENALL_PREVIEW_OUTPUT="$PWD/macos/.build/ci-logs/gold-ui" \
           OPENALL_GOLD_CHECK=1 \
           macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot 2>&1 | tee macos/.build/ci-logs/gold-ui.log
+      - name: 外观材质与剪贴板原生窗口验收
+        timeout-minutes: 3
+        run: |
+          OPENALL_PREVIEW_ROOT="$RUNNER_TEMP/openall-material-preview" \
+          OPENALL_PREVIEW_OUTPUT="$PWD/macos/.build/ci-logs/material-ui" \
+          OPENALL_MATERIAL_CHECK=1 \
+          macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot -NSApplicationCrashOnExceptions YES 2>&1 | tee macos/.build/ci-logs/material-ui.log
       - name: JSON 折叠删除与大文本验收
         timeout-minutes: 5
         env:

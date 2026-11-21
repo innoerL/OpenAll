@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import QuartzCore
 
 final class SettingsNavItem: NSButton {
     let titleText: String
@@ -27,10 +28,6 @@ final class SettingsNavItem: NSButton {
 
     @objc private func choose() { onChoose?() }
     override func draw(_ dirtyRect: NSRect) {
-        if selected {
-            OpenAllTheme.raised.setFill()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 2), xRadius: 6, yRadius: 6).fill()
-        }
         (titleText as NSString).draw(in: NSRect(x: 46, y: 9, width: bounds.width - 56, height: 23),
                                      withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: selected ? .medium : .regular),
                                                       .foregroundColor: selected ? OpenAllTheme.ink : OpenAllTheme.muted])
@@ -228,4 +225,68 @@ final class PermissionsView: NSView {
     }
     @objc private func openAccessibility() { openSettings("Privacy_Accessibility") }
     @objc private func openFiles() { openSettings("Privacy_FilesAndFolders") }
+}
+
+// 指示器位于按钮与文字之后，中间形状只牵连正在移动的两端。
+final class SettingsIndicator: NSView, WindowThemeRefreshing {
+    private let shape = CAShapeLayer()
+    private var current: CGRect?
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        setAccessibilityElement(false)
+        layer?.addSublayer(shape)
+        refreshWindowTheme()
+    }
+    required init?(coder: NSCoder) { fatalError("不支持从归档创建") }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    func refreshWindowTheme() {
+        shape.fillColor = OpenAllTheme.accent.withAlphaComponent(OpenAllTheme.isLight ? 0.19 : 0.18).cgColor
+    }
+
+    private func capsule(_ rect: CGRect, waist: CGFloat = 0) -> CGPath {
+        let p = CGMutablePath()
+        let left = rect.minX, right = rect.maxX, bot = rect.minY, top = rect.maxY
+        let r = min(17, rect.height / 2), waistX = rect.width * waist
+        let mid = rect.midY
+        p.move(to: CGPoint(x: left+r, y: top))
+        p.addLine(to: CGPoint(x: right-r, y: top))
+        p.addQuadCurve(to: CGPoint(x: right, y: top-r), control: CGPoint(x: right, y: top))
+        p.addCurve(to: CGPoint(x: right, y: bot+r), control1: CGPoint(x: right-waistX, y: mid), control2: CGPoint(x: right-waistX, y: mid))
+        p.addQuadCurve(to: CGPoint(x: right-r, y: bot), control: CGPoint(x: right, y: bot))
+        p.addLine(to: CGPoint(x: left+r, y: bot))
+        p.addQuadCurve(to: CGPoint(x: left, y: bot+r), control: CGPoint(x: left, y: bot))
+        p.addCurve(to: CGPoint(x: left, y: top-r), control1: CGPoint(x: left+waistX, y: mid), control2: CGPoint(x: left+waistX, y: mid))
+        p.addQuadCurve(to: CGPoint(x: left+r, y: top), control: CGPoint(x: left, y: top))
+        p.closeSubpath()
+        return p
+    }
+
+    func move(to rect: CGRect) {
+        guard current != rect else { return }
+        let start = shape.presentation()?.path ?? shape.path
+        let end = capsule(rect)
+        let previous = current
+        current = rect
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shape.path = end
+        shape.removeAnimation(forKey: "selection")
+        let direct = NSApp.currentEvent?.type == .leftMouseUp || NSApp.currentEvent?.type == .leftMouseDown
+        if let previous, let start, direct, window?.isVisible == true, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            // 跨多行时连接长度设上限；快速折返直接沿用合成器此刻显示的轮廓。
+            let origin = start.boundingBoxOfPath.isEmpty ? previous : start.boundingBoxOfPath
+            let dy = rect.midY - origin.midY
+            let middle = CGRect(x: rect.minX, y: (rect.midY + origin.midY) / 2 - rect.height / 2,
+                                width: rect.width, height: rect.height).insetBy(dx: 0, dy: -min(abs(dy) / 2, 36))
+            let motion = CAKeyframeAnimation(keyPath: "path")
+            motion.values = [start, capsule(middle, waist: 0.26), end]
+            motion.keyTimes = [0, 0.39, 1]
+            motion.duration = 0.6
+            motion.timingFunctions = [CAMediaTimingFunction(controlPoints: 0.24, 0.72, 0.32, 1),
+                                      CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)]
+            shape.add(motion, forKey: "selection")
+        }
+        CATransaction.commit()
+    }
 }

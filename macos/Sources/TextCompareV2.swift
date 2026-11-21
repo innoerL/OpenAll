@@ -132,6 +132,7 @@ final class TextCompareV2Window: NSObject, WKNavigationDelegate, NSWindowDelegat
             "secondary": OpenAllTheme.hex(OpenAllTheme.ink.blended(withFraction: 0.26, of: OpenAllTheme.editorCanvas) ?? OpenAllTheme.ink),
             "accent": OpenAllTheme.hex(OpenAllTheme.accentText),
             "rule": OpenAllTheme.isLight ? "rgba(0,0,0,.09)" : "rgba(255,255,255,.065)",
+            "glass": OpenAllTheme.usesGlass,
             "light": OpenAllTheme.isLight
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: palette),

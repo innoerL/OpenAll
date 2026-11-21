@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src blob:; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src blob:; style-src 'self' 'unsafe-inline'; img-src 'none'; connect-src 'none'">
   <title>文本对比</title>
+  <link rel="stylesheet" href="gold-ui/surface-effects.css">
   <style>
     :root { color-scheme: dark; --canvas:#1b1c1d; --surface:#202425; --raised:#30332f; --ink:#efeee6; --muted:#a2a69e; --secondary:#b8b7b2; --rule:rgba(255,255,255,.065); --accent:#cfb58d; --removed:rgba(197,92,105,.22); --added:rgba(65,164,112,.22); --changed-left:rgba(197,92,105,.12); --changed-right:rgba(65,164,112,.12); --removed-token:rgba(197,92,105,.50); --added-token:rgba(65,164,112,.50); --removed-ink:#d99b9e; --added-ink:#8dbea1; font:13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
     * { box-sizing:border-box; }
@@ -88,6 +89,15 @@
     footer { flex:none; height:30px; padding:0 20px; display:flex; align-items:center; color:var(--secondary); font-size:12px; }
     #hint { margin-left:auto; text-align:right; }
     @media (max-width:850px) { .toolbar,.comparison-status,#summary { gap:8px; } .options { gap:12px; } #hint { max-width:40%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; } }
+    :root[data-glass="true"] body {
+      background: radial-gradient(ellipse at 5% 0%, rgba(77,145,155,.14), transparent 55%),
+                  radial-gradient(ellipse at 95% 100%, rgba(186,128,95,.13), transparent 55%), var(--canvas);
+    }
+    :root[data-glass="true"] .editors {
+      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.32);
+    }
+    :root[data-glass="true"] .heading { -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+    :root[data-glass="true"] .editor { background: var(--surface); }
   </style>
 </head>
 <body>
@@ -116,6 +126,7 @@
     </section>
   </div>
   <footer><span id="footer-status" role="status" aria-live="polite">已对齐</span><span id="hint">⌘1 / ⌘2 切换左右</span></footer>
+  <script src="gold-ui/surface-effects.js"></script>
   <script src="diff-core.js"></script>
   <script src="comparison-editor.js"></script>
   <script src="diff-v2.js"></script>

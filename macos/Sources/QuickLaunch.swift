@@ -614,6 +614,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     private var updateSettingsExpanded = false
     private var chromeAdvancedExpanded = false
     private var settingsNavigation: [SettingsNavItem] = []
+    private weak var settingsIndicator: SettingsIndicator?
     private weak var clipboardStatus: NSTextField?
     private var previousApplication: NSRunningApplication?
     private var refreshTimer: Timer?
@@ -702,6 +703,30 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             }
             try await goldTool.verifyForDesign()
             print("金价原生入口与内置组件专项检查通过")
+            return
+        }
+        if ProcessInfo.processInfo.environment["OPENALL_MATERIAL_CHECK"] == "1" {
+            let originalGlass = OpenAllTheme.glass
+            defer { OpenAllTheme.setGlass(originalGlass); WindowChrome.refreshAllWindows() }
+            OpenAllTheme.setGlass(false)
+            settingsTabIndex = 7
+            showSettings()
+            guard let window = settingsWindow,
+                  let toggle = settingsBody?.subviews.compactMap({ $0 as? NSButton }).first(where: { $0.title == "毛玻璃背景" }) else {
+                throw NSError(domain: "MissingMaterialControl", code: 1)
+            }
+            toggle.performClick(nil)
+            guard OpenAllTheme.glass, toggle.state == .on else { throw NSError(domain: "MaterialToggle", code: 1) }
+            try DesignPreview.capture(window, name: "settings-glass")
+            clipboardStore.seedPreviewRecords()
+            clipboardWindow.show(target: nil)
+            guard let shelf = DesignPreview.lastWindow else { throw NSError(domain: "MissingClipboard", code: 1) }
+            try DesignPreview.capture(shelf, name: "clipboard-glass")
+            guard clipboardWindow.verifySearchAppearanceForDesign() else { throw NSError(domain: "MaterialInputFocus", code: 1) }
+            toggle.performClick(nil)
+            guard !OpenAllTheme.glass, toggle.state == .off else { throw NSError(domain: "MaterialReset", code: 1) }
+            try DesignPreview.capture(window, name: "settings-solid")
+            print("毛玻璃开关、剪贴板搜索主题往返与窗口预览通过")
             return
         }
         if ProcessInfo.processInfo.environment["OPENALL_APPEARANCE_CHECK"] == "1" {
@@ -1145,6 +1170,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         darkSurface.wantsLayer = true
         darkSurface.layer?.backgroundColor = OpenAllTheme.canvas.withAlphaComponent(0.96).cgColor
         root.addSubview(darkSurface)
+        PanelMaterial.install(on: panel, artworkSurface: darkSurface)
         let icon = NSImageView(frame: NSRect(x: 25, y: 26, width: 24, height: 24))
         icon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "搜索")
         icon.contentTintColor = OpenAllTheme.ink.withAlphaComponent(0.82)
@@ -2261,6 +2287,9 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             sidebarRule.wantsLayer = true
             sidebarRule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
             root.addSubview(sidebarRule)
+            let indicator = SettingsIndicator(frame: sidebar.bounds)
+            sidebar.addSubview(indicator)
+            settingsIndicator = indicator
             settingsNavigation = []
             let navigation = [("通用", "gearshape.fill", 0), ("搜索", "magnifyingglass", 1),
                               ("剪贴板", "square.on.square", 2), ("网址别名", "link", 3),
@@ -2281,7 +2310,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             }
             let body = NSView(frame: NSRect(x: 196, y: -12, width: 708, height: 536))
             body.wantsLayer = true
-            body.layer?.backgroundColor = OpenAllTheme.canvas.cgColor
+            body.layer?.backgroundColor = NSColor.clear.cgColor
             root.addSubview(body)
             WindowChrome.installControls(on: window)
             settingsWindow = window
@@ -2320,6 +2349,9 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         defer { WindowChrome.refineSettingsTypography(in: body) }
         body.subviews.forEach { $0.removeFromSuperview() }
         for button in settingsNavigation { button.selected = button.tag == settingsTabIndex }
+        if let item = settingsNavigation.first(where: { $0.selected }) {
+            settingsIndicator?.move(to: item.frame.insetBy(dx: 4, dy: 3))
+        }
         switch settingsTabIndex {
         case 0:
             func label(_ text: String, _ x: CGFloat, _ y: CGFloat, _ width: CGFloat, secondary: Bool = false) {
@@ -2658,6 +2690,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             customTitle.frame = NSRect(x: 28, y: 283, width: 130, height: 28)
             WindowChrome.styleOutputAction(customTitle)
             body.addSubview(customTitle)
+            let glass = WindowChrome.checkbox("毛玻璃背景", target: self, action: #selector(changeGlass(_:)))
+            glass.frame = NSRect(x: 530, y: 283, width: 134, height: 28)
+            glass.state = OpenAllTheme.glass ? .on : .off
+            glass.setAccessibilityLabel("毛玻璃背景")
+            body.addSubview(glass)
             let controls = NSView(frame: NSRect(x: 28, y: 202, width: 640, height: 76))
             controls.isHidden = !appearanceCustomExpanded
             WindowChrome.styleSettingsSection(controls)
@@ -2697,11 +2734,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 else { accentHexLabel = hex; accentSwatch = swatch }
             }
             let preview = NSView(frame: NSRect(x: 28, y: appearanceCustomExpanded ? 62 : 154, width: 640, height: 124))
-            preview.wantsLayer = true
-            preview.layer?.cornerRadius = 12
-            preview.layer?.backgroundColor = OpenAllTheme.canvas.cgColor
-            preview.layer?.borderWidth = 1
-            preview.layer?.borderColor = OpenAllTheme.rule.cgColor
+            WindowChrome.styleCard(preview, radius: 12)
             body.addSubview(preview)
             appearancePreview = preview
             let previewTitle = NSTextField(labelWithString: "⌕  搜索 JSON")
@@ -2754,6 +2787,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         default:
             break
         }
+    }
+
+    @objc private func changeGlass(_ sender: NSButton) {
+        OpenAllTheme.setGlass(sender.state == .on)
+        WindowChrome.refreshAllWindows()
     }
 
     @objc private func toggleAppearanceCustom() { appearanceCustomExpanded.toggle(); renderSettings() }
@@ -2908,8 +2946,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             if let swatch = button as? AppearancePresetButton { swatch.chosen = selected }
             button.layer?.borderWidth = 0
         }
-        appearancePreview?.layer?.backgroundColor = OpenAllTheme.canvas.cgColor
-        appearancePreview?.layer?.borderColor = OpenAllTheme.rule.cgColor
+        if let preview = appearancePreview { PanelMaterial.refreshCard(preview) }
         appearancePreview?.subviews.compactMap { $0 as? NSTextField }.forEach { field in
             field.textColor = (field.font?.pointSize ?? 0) >= 15 ? OpenAllTheme.ink : OpenAllTheme.muted
         }

@@ -10,12 +10,12 @@ OpenAll 支持 **macOS 和 Windows**。用快捷键搜索应用、文件或工�
 
 ## 下载安装
 
-当前版本：**0.26.2**。安装包和 SHA-256 校验文件见 [Releases](https://github.com/innoerL/OpenAll/releases/latest)。
+当前版本：**0.27.0**。可在设置的“外观”页启用毛玻璃卡片。安装包和 SHA-256 校验文件见 [Releases](https://github.com/innoerL/OpenAll/releases/latest)。
 
 | 平台 | 安装包 | 运行要求 |
 | --- | --- | --- |
-| macOS | [下载通用版](https://github.com/innoerL/OpenAll/releases/download/v0.26.2/OpenAll-macOS-0.26.2.zip) | macOS 13 或更新版本，Intel / Apple Silicon |
-| Windows | [下载安装版](https://github.com/innoerL/OpenAll/releases/download/v0.26.2/OpenAll-Windows-0.26.2-x64-setup.exe) | Windows x64 |
+| macOS | [下载通用版](https://github.com/innoerL/OpenAll/releases/download/v0.27.0/OpenAll-macOS-0.27.0.zip) | macOS 13 或更新版本，Intel / Apple Silicon |
+| Windows | [下载安装版](https://github.com/innoerL/OpenAll/releases/download/v0.27.0/OpenAll-Windows-0.27.0-x64-setup.exe) | Windows x64 |
 
 macOS 解压后将 `OpenAll.app` 放入“应用程序”；Windows 双击安装器，按向导完成安装。安装包尚未经过 Apple 公证或 Windows 代码签名，系统可能提示未知开发者。
 
