@@ -141,32 +141,32 @@
     "金价 CI 使用隔离离线样例；实时行情及新闻日历服务可用性依赖网络。"
   ],
   "verification": {
-    "commit": "877c34a29be968bd198641fa1f43efe7a0ee1c79",
-    "run": "44711290725",
+    "commit": "6e577205a68446145b1fab6dccf541e190933afd",
+    "run": "44899774301",
     "checks": 144,
     "screenshots": 41,
     "performance": {
       "search": {
         "queries": 50,
-        "elapsedMS": 215.29999999993015
+        "elapsedMS": 266.9000000000233
       },
       "json": {
         "bytes": 6564891,
-        "elapsedMS": 719.5,
-        "heartbeats": 61,
+        "elapsedMS": 772.7000000000116,
+        "heartbeats": 64,
         "renderedLines": 43,
         "valid": true
       },
       "comparison": {
         "passed": true,
-        "ticks": 10,
-        "loadMilliseconds": 570.9000000000233,
-        "compareMilliseconds": 675.1999999999534,
-        "workerMilliseconds": 55.59999999997672,
-        "searchMilliseconds": 9.699999999953434,
-        "sortMilliseconds": 219.5,
-        "sortWorkerMilliseconds": 74.60000000009313,
-        "sortTicks": 15
+        "ticks": 7,
+        "loadMilliseconds": 384.70000000001164,
+        "compareMilliseconds": 479,
+        "workerMilliseconds": 51.100000000034925,
+        "searchMilliseconds": 7.399999999965075,
+        "sortMilliseconds": 197.10000000003492,
+        "sortWorkerMilliseconds": 54,
+        "sortTicks": 10
       }
     },
     "systemIndex": {
@@ -178,9 +178,13 @@
     "installed": true,
     "uninstalled": true,
     "gold": {
+      "checks": 36,
+      "screenshots": 3
+    },
+    "installedGoldSmoke": {
       "checks": 30,
       "screenshots": 3
     }
   },
-  "verifiedVersion": "0.26.1"
+  "verifiedVersion": "0.26.2"
 }

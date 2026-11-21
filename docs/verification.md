@@ -1,38 +1,33 @@
-# 0.26.1 发布验证
+# 0.26.2 发布验证
 
-金价改为 OpenAll 内置工具，背景及强调色实时跟随宿主，曲线与涨跌保留独立语义颜色。JSON 全选删除直接清空折叠内容，局部删除仍先展开，支持撤销恢复正文及原折叠状态。
+本次调整金价参考估计并增加到期价格误差、区间覆盖率和样本量。周大福使用固定开发段选择的保守基准；方向概率与点价分开说明。原有已发行预测不会被新版替换。
 
 | 平台 | 验证提交 | 云端结果 |
 | --- | --- | --- |
-| macOS | `7f1fee9acbac6247daa4513edb29d52794f95c77` | [通用构建、金价与 JSON 原生窗口回归通过](https://github.com/innoerL/OpenAll/actions/runs/44729212731) |
-| Windows | `877c34a29be968bd198641fa1f43efe7a0ee1c79` | [完整回归、实际安装与卸载通过](https://github.com/innoerL/OpenAll/actions/runs/44711290725) |
+| macOS | `6e577205a68446145b1fab6dccf541e190933afd` | [通用构建、金价与 JSON 原生窗口回归通过](https://github.com/innoerL/OpenAll/actions/runs/44899774338) |
+| Windows | `6e577205a68446145b1fab6dccf541e190933afd` | [完整回归、实际安装与卸载通过](https://github.com/innoerL/OpenAll/actions/runs/44899774301) |
 
-后一个 macOS 修复只改变原生文本布局与 macOS 工作流，Windows 源码和资源与上述验证提交一致。后续验证文档提交不改变安装包内容。
+后续验证文档提交不改变安装包内容。
 
 ## 已验证
 
-- 金价共享模型与外观 26 项：调度、重试、断网重连、币种、预测、只读 WAL 迁移及现有库优先；32 组背景／强调色组合中，语义文字及两种曲线保持对比度。
-- macOS 原生后台：JavaScriptCore 与 Node 快照 3,639 个字段一致，fixture 强制内存隔离。原生窗口 26 项通过，包含外观即时刷新、查看状态保留、旧位置转换、桥接隔离、贴边及最小化恢复。
-- macOS JSON：折叠编辑、搜索、内部剪贴板、混合撤销历史、全选 Backspace／Delete、根折叠及局部删除规则通过；后台旧结果不会覆盖清空后的文档。
-- Windows：工具检查 144 项、编辑器 21 项、跨窗集成 9 项、金价 30 项通过；实际安装包再次通过安装、运行与卸载检查。详细结果见 [Windows 验证记录](../windows/docs/cloud-verification.json)。
-- macOS Universal 包同时包含 Intel／Apple Silicon，签名完整性通过；归档已确认不包含独立金价应用或 Electron 运行时。两端安装包 SHA-256 与 Actions 产物一致。
+- 金价共享模型与外观 42 项通过。新增覆盖：时间截断、过期基准的实际预测跨度、当日报价特征、历史未就绪时暂估、同日最早发行版本保留、准时与迟到统计分离、价格误差及缺失值单位口径。
+- 固定评估中，生产 CTF 默认模型与冻结的 persistence 在开发 321 对、留出 178 对上，点价、区间及方向概率逐值一致。结果与局限见 [预测评估记录](forecast-evaluation.md)。
+- macOS 原生后台：JavaScriptCore 与 Node 快照 3,753 个字段一致；fixture 内存隔离与只读 WAL 迁移通过。原生窗口 26 项通过，包含外观、币种、曲线、展望、贴边及关闭重开。
+- Windows 金价集成 36 项通过，新增验证方向概率文案、无样本不显示零误差、保守基准说明、MAPE/覆盖率/样本量、迟到分离与暂估状态。合成统计仅注入页面内存，恢复后宿主数据不变。
+- 两平台既有编辑器、大文本、折叠删除及内部剪贴板回归通过；Windows 安装包完成实际安装、运行与卸载。详细记录见 [Mac 金价验证](gold-macos-verification.json) 和 [Windows 验证](../windows/docs/cloud-verification.json)。
+- macOS Universal 同时包含 Intel／Apple Silicon；本地签名完整性通过，无独立金价应用或 Electron 运行时。两端本地安装包的 SHA-256 均与 Actions 产物一致。
 
-## 大文件清空实测
+## 预测效果与边界
 
-| 环境 | 文档场景 | 全选清空 | 撤销／重做 |
-| --- | --- | --- | --- |
-| macOS 云端优化构建 | 5,100,002 字节，5,000 个折叠节点 | 2.95 ms | 撤销 0.91 s，重做 1.08 ms；未展开隐藏正文 |
-| macOS 云端优化构建 | 仅一个节点折叠，可见投影仍约 5 MB | 直接清空 | 撤销 60.6 ms，提前恢复大文本布局 |
-| Windows 原生 Electron | 5,026,001 字节 | 3.10 ms，仅渲染 1 行 | 撤销正文保真、重做清空通过 |
+58 个固定留出次日样本中，平均绝对误差由 13.682 降至 11.052 元／克，但配对改善的 95% 时间块 bootstrap 区间为 [-0.436, 5.349]，跨过零，不能证明未来稳定改善。此次采用历史日线代理，不能当作当时 10:00 实盘可得数据的回放。
 
-这些时间对应本次测试机器和样例，不能表示任意大小文档的固定耗时。大文本限制、后台计算及过期结果取消继续保留。
+没有使用 11/21 已知实际价格调参；不声称这一单次预测更准。保守点价沿用基准，不保证价格保持不变。方向概率仍未完成实盘校准，国际现货点价仍使用原历史情景方法。
 
-## 联网核验
+本轮 GUI 与安装验证均使用隔离目录及合成数据。历史评估只读取一致性数据库副本，不改写用户原库。历史发行保留另在副本中核实，升级前后已存档记录逐行一致。外部行情接口的后续实时可用性不由这些离线测试保证。
 
-2026-11-20 使用独立临时库验证 macOS 原生后台：报价、历史、汇率及市场背景共 6 项任务全部完成。国际金价 301 个历史点、周大福 314 个历史点；当天周大福来源为官方商城。CNY／EUR 汇率各 263 条，国际事件 5 条，FOMC／BLS／EIA 日历全部可用。没有读取用户正式数据，外部接口后续可用性仍随网络与服务变化。
+## 安装包
 
-## 安装包与边界
+安装包及 SHA-256 文件见 [v0.26.2 Release](https://github.com/innoerL/OpenAll/releases/tag/v0.26.2)。macOS ZIP 约 5.6 MB，使用系统 AppKit、WebKit、JavaScriptCore 与 SQLite；Windows 复用 OpenAll 的 Electron。
 
-安装包及校验文件见 [v0.26.1 Release](https://github.com/innoerL/OpenAll/releases/tag/v0.26.1)。macOS ZIP 约 5.6 MB，使用系统 AppKit、WebKit、JavaScriptCore 与 SQLite；Windows 复用 OpenAll 的 Electron。
-
-价格口径和预测算法沿用金价桌台 v1.4.0，预测可信度仍待校准。macOS 为临时签名且未经过 Apple 公证；Windows 安装器未代码签名。使用方式和数据迁移见 [金价说明](../shared/gold-core/README.md)。
+macOS 为临时签名且未经过 Apple 公证；Windows 安装器未代码签名。使用方式和数据迁移见 [金价说明](../shared/gold-core/README.md)。
