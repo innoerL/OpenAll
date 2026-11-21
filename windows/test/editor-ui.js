@@ -126,6 +126,20 @@ app.whenReady().then(async () => {
     await run(async () => renderEditorTest('configFormat', 'server:\n    port: 8080'));
     check(await run(async () => (await controller.format()) && controller.getResult() === 'server:\n  port: 8080'), '配置格式化');
     await screenshot('config-format');
+    check(await run(async () => {
+      const copy = document.querySelector('.editor-formatter-pane.output button');
+      const counts = document.querySelectorAll('.formatter-count');
+      if (copy.disabled || counts[1].textContent !== '2 行') return false;
+      controller.setText('');
+      if (!copy.disabled || counts[0].textContent !== '0 行' || counts[1].textContent !== '等待重新处理') return false;
+      controller.setText('name = first');
+      const first = controller.format();
+      controller.setText('name = second');
+      await first;
+      if (!copy.disabled || !await controller.format()) return false;
+      copy.click();
+      return !copy.disabled && window.testClipboard === controller.getResult() && window.testClipboard.includes('second');
+    }), '修改原文后区分旧结果，重新处理后复制最新内容');
     await run(async () => renderEditorTest('sqlFormat', 'select a,b from t where id=1'));
     check(await run(async () => (await controller.format()) && controller.getResult().startsWith('SELECT\n')), 'SQL 格式化');
     await screenshot('sql-format');

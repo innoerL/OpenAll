@@ -1408,19 +1408,22 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         root.layer?.backgroundColor = OpenAllTheme.canvas.cgColor
         root.appearance = OpenAllTheme.appearance
         window.contentView = root
-        let heading = NSTextField(labelWithString: item.title)
+        let format = ClipboardFormat.label(for: item)
+        let heading = NSTextField(labelWithString: format + "预览")
         heading.font = .systemFont(ofSize: 17, weight: .semibold)
         heading.textColor = OpenAllTheme.ink
-        heading.frame = NSRect(x: 24, y: 386, width: 700, height: 28)
+        heading.frame = NSRect(x: 24, y: 386, width: 482, height: 28)
         heading.autoresizingMask = [.width, .minYMargin]
         root.addSubview(heading)
-        let source = NSTextField(labelWithString: "来源：\(item.sourceName) · \(item.kind == "files" ? "文件" : item.kind == "image" ? "图片" : "文本")")
-        source.font = .systemFont(ofSize: 11)
+        let source = NSTextField(labelWithString: item.sourceName)
+        source.alignment = .right
+        source.lineBreakMode = .byTruncatingMiddle
+        source.font = .systemFont(ofSize: 12)
         source.textColor = OpenAllTheme.muted
-        source.frame = NSRect(x: 24, y: 360, width: 700, height: 19)
-        source.autoresizingMask = [.width, .minYMargin]
+        source.frame = NSRect(x: 516, y: 389, width: 220, height: 20)
+        source.autoresizingMask = [.minXMargin, .minYMargin]
         root.addSubview(source)
-        let scroll = NSScrollView(frame: NSRect(x: 24, y: 50, width: 712, height: 298))
+        let scroll = NSScrollView(frame: NSRect(x: 24, y: 55, width: 712, height: 321))
         scroll.autoresizingMask = [.width, .height]
         scroll.hasVerticalScroller = true
         let text = NSTextView(frame: scroll.bounds)
@@ -1431,7 +1434,8 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         text.isVerticallyResizable = true
         text.autoresizingMask = [.width]
         text.textContainer?.widthTracksTextView = true
-        text.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        text.font = ["JSON", "Markdown", "HTML"].contains(format) ?
+            .monospacedSystemFont(ofSize: 14, weight: .regular) : .systemFont(ofSize: 14)
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = 22
         paragraph.maximumLineHeight = 22
@@ -1442,9 +1446,9 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         scroll.documentView = text
         root.addSubview(scroll)
         let hint = NSTextField(labelWithString: "Esc 关闭预览")
-        hint.font = .systemFont(ofSize: 10)
+        hint.font = .systemFont(ofSize: 12)
         hint.textColor = OpenAllTheme.muted
-        hint.frame = NSRect(x: 24, y: 10, width: 440, height: 16)
+        hint.frame = NSRect(x: 24, y: 14, width: 448, height: 20)
         hint.autoresizingMask = [.width]
         root.addSubview(hint)
         previewHint = hint
@@ -1459,8 +1463,32 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         ClipboardShelfStyle.action(copy)
         root.addSubview(copy)
         WindowChrome.installControls(on: window)
+        if item.kind == "image" {
+            let imageView = NSImageView(frame: scroll.frame)
+            imageView.autoresizingMask = [.width, .height]
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            imageView.setAccessibilityLabel("剪贴板图片")
+            root.addSubview(imageView)
+            text.string = "正在载入图片…"
+            if let url = store.imageURL(for: item) {
+                // 独立预览仅解码适合窗口的缩略图，原图仍用于复制和粘贴。
+                DispatchQueue.global(qos: .userInitiated).async { [weak imageView, weak text] in
+                    let options = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                   kCGImageSourceCreateThumbnailWithTransform: true,
+                                   kCGImageSourceThumbnailMaxPixelSize: 2048] as CFDictionary
+                    let source = CGImageSourceCreateWithURL(url as CFURL, nil)
+                    let thumbnail = source.flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, options) }
+                    DispatchQueue.main.async {
+                        if let thumbnail {
+                            text?.string = ""
+                            imageView?.image = NSImage(cgImage: thumbnail, size: .zero)
+                        } else { text?.string = "无法载入这张图片" }
+                    }
+                }
+            } else { text.string = "无法载入这张图片" }
+        }
         let estimatedLines = String(text.string.prefix(12_000)).components(separatedBy: "\n").reduce(0) { $0 + max(1, Int(ceil(Double($1.count) / 65))) }
-        window.setContentSize(NSSize(width: 760, height: min(720, max(380, 204 + estimatedLines * 22))))
+        window.setContentSize(NSSize(width: 760, height: item.kind == "image" ? 500 : min(720, max(380, 204 + estimatedLines * 22))))
         previewWindow = window
         WindowChrome.present(window)
         WindowChrome.activate()

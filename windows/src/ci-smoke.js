@@ -22,6 +22,9 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
   }
   async function open(id, value = '') {
     await evaluate((page, value) => openall.openTool(page, value), id, value);
+    await focusPage(id);
+  }
+  async function focusPage(id) {
     const target = ['permissions', 'diagnostics', 'snippets', 'linkAliases', 'commandAliases'].includes(id) ? 'settings' : id;
     await until(async () => {
       const win = BrowserWindow.getAllWindows().find(w => new URL(w.webContents.getURL() || 'about:blank').searchParams.get('page') === target);
@@ -124,6 +127,19 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     check(await evaluate(() => document.querySelectorAll('.clip-card').length === 5 && document.querySelectorAll('.clip-type-bar').length === 5), '剪贴板大卡片与彩色类型栏');
     await capture('05-clipboard');
     const before = await evaluate(() => openall.history());
+    const previewText = await evaluate(() => {
+      const current = OpenAllApp.controller;
+      return current.getItems().find(item => current.getSelected().includes(item.id)).text;
+    });
+    await click('预览卡片');
+    await focusPage('clipboardPreview');
+    check(await evaluate(expected => document.querySelector('.clip-preview .preview-content')?.textContent === expected
+      && [...document.querySelectorAll('.clip-preview-tools button')].filter(button => !button.disabled).length === 4, previewText), '从剪贴板打开独立预览并显示所选全文与可用工具');
+    await click('复制全文');
+    await until(() => evaluate(() => document.querySelector('.clip-preview-status')?.textContent === '已复制'), '预览复制全文');
+    await capture('tool-clipboard-preview');
+    active.close();
+    await focusPage('clipboard');
     check(await evaluate(() => {
       const input = document.querySelector('.clipboard-search');
       input.focus();
@@ -194,6 +210,22 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       if (id === 'explain') { await click('分析计划'); await until(() => evaluate(() => document.querySelector('tbody')?.textContent.includes('Seq Scan')), '执行计划'); }
       if (id === 'logTimeline') { await click('识别字段'); await until(() => evaluate(() => document.querySelector('.aux-status')?.textContent.includes('2 条日志')), '日志识别'); }
       if (id === 'sqlRestore') { await evaluate(() => document.querySelectorAll('.aux-editor')[1].value = '[42]'); await click('还原 SQL'); await until(() => evaluate(() => document.querySelectorAll('.aux-editor')[2]?.value.includes('42')), 'SQL 还原'); }
+      if (id === 'manual') {
+        check(await evaluate(() => {
+          const toolbar = document.querySelector('.manual-toolbar'), article = document.querySelector('.manual-article');
+          const field = toolbar?.querySelector('input[type=search]');
+          if (!field || !article || getComputedStyle(toolbar).display !== 'flex') return false;
+          const rows = [...article.querySelectorAll('tbody tr')];
+          if (rows.length < 20) return false;
+          field.value = 'pwd';
+          field.dispatchEvent(new Event('input', { bubbles: true }));
+          const matches = rows.filter(row => row.getClientRects().length);
+          const filtered = matches.length > 0 && matches.length < rows.length && matches.every(row => row.textContent.includes('pwd'));
+          field.value = '';
+          field.dispatchEvent(new Event('input', { bubbles: true }));
+          return filtered && rows.every(row => row.getClientRects().length);
+        }), '安装后手册的共享脚本、样式与命令筛选');
+      }
       if (id === 'markdown') await until(() => evaluate(() => !!document.querySelector('.aux-diagram svg')), 'Mermaid 渲染');
       await capture('tool-' + id);
     }

@@ -10,11 +10,11 @@
     const title = h('h2', {}, '正在连接有道翻译'), detail = h('p', {}, '连接完成后，即可输入或粘贴内容进行翻译。');
     const retry = button('重新连接', () => invoke('retry').then(paint)), browser = button('在浏览器打开 ↗', () => invoke('browser'));
     retry.disabled = true;
-    const panel = h('section', { class: 'translation-state', role: 'status' }, h('div', { class: 'translation-card' }, spinner, icon, title, detail, h('div', { class: 'translation-actions' }, retry, browser)));
+    const panel = h('section', { class: 'translation-state', role: 'status' }, h('div', { class: 'translation-card' }, h('div', {class:'translation-symbol'}, spinner, icon), h('div', {class:'translation-message'}, title, detail, h('div', { class: 'translation-actions' }, retry, browser))));
     root.append(panel);
     let dead = false, timer, layoutFrame, state = { phase: 'loading' };
     const invoke = (command, payload = {}) => api.windowAction('translation', { command, ...payload });
-    function paint(next) { if (dead || !next?.phase) return; state = next; panel.hidden = next.phase === 'ready'; spinner.hidden = next.phase === 'failed'; icon.hidden = next.phase !== 'failed'; title.textContent = next.title || '正在连接有道翻译'; detail.textContent = next.detail || '连接完成后，即可输入或粘贴内容进行翻译。'; retry.disabled = ['loading', 'idle'].includes(next.phase); retry.classList.toggle('primary', !retry.disabled); }
+    function paint(next) { if (dead || !next?.phase) return; state = next; panel.hidden = next.phase === 'ready'; spinner.hidden = next.phase === 'failed'; icon.hidden = next.phase !== 'failed'; title.textContent = next.title || '正在连接有道翻译'; detail.textContent = next.detail || '连接完成后，即可输入或粘贴内容进行翻译。'; retry.disabled = ['loading', 'idle'].includes(next.phase); retry.hidden = retry.disabled; retry.classList.toggle('primary', !retry.disabled); }
     async function poll() { if (dead) return; try { paint(await invoke('status')); } catch (error) { paint({ phase: 'failed', title: '暂时无法连接有道翻译', detail: error.message }); } finally { if (!dead) timer = setTimeout(poll, state.phase === 'loading' ? 400 : 1000); } }
     function bounds() { const box = root.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) }; }
     const observer = new ResizeObserver(() => { cancelAnimationFrame(layoutFrame); layoutFrame = requestAnimationFrame(() => { if (!dead) invoke('layout', { bounds: bounds() }).catch(() => {}); }); }); observer.observe(root);

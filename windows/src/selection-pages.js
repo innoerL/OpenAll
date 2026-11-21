@@ -25,7 +25,7 @@
     const {api,h,button,icon,notify}=ctx;
     let content=normalize(ctx.initialValue||await api.selection('get')),actions=[],selected=0,dead=false,busy=false,revision=0;
     const host=h('section',{class:'context-selection'}),heading=h('h1',{},'对选中内容执行操作'),summary=h('div',{class:'selection-summary'}),preview=h('div',{class:'selection-preview',tabIndex:0}),actionHeading=h('h2',{},'可用操作'),list=h('div',{class:'selection-action-list',role:'listbox',tabIndex:0,'aria-label':'可用操作'}),status=h('div',{class:'selection-key-hint',role:'status'}),loading=h('div',{class:'selection-loading',hidden:true},h('span',{class:'selection-spinner'}),h('span',{},'正在从图片中提取文字…')),cancel=button('取消识别',()=>{revision++;api.windowAction('close');});
-    root.append(host);host.append(heading,summary,preview,actionHeading,list,loading,cancel,status);cancel.hidden=true;
+    root.append(host);host.append(h('header', {class:'selection-heading'}, heading, summary),preview,actionHeading,list,loading,cancel,status);cancel.hidden=true;
     const close=()=>api.windowAction('close');
     function actionIcon(action){const shapes={unicode:'M9 2 6 22M18 2 15 22M3 8h18M2 16h18',translate:'M5 3h14v17H5zM5 20l-2 2M19 20l2 2M8 15l4-9 4 9M10 12h4',recognizeText:'M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M6 9h12M6 13h9M6 17h6'};if(!shapes[action.id])return icon(action.icon,18);const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [key,value]of Object.entries({viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'}))svg.setAttribute(key,value);const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',shapes[action.id]);svg.append(path);return svg;}
 
@@ -39,12 +39,45 @@
       preview.replaceChildren();preview.classList.toggle('image',content.kind==='image');
       if(content.kind==='image'){const image=h('img',{src:content.dataUrl,alt:'选中的图片'});image.onload=()=>{if(token===revision)summary.textContent='选中的图片 · '+image.naturalWidth+' × '+image.naturalHeight;};image.onerror=()=>fail(Error('图片预览读取失败'));preview.append(image);}
       else preview.textContent=content.kind==='files'?content.files.map(basename).join('\n'):content.text||'暂未读取到选中内容';
-      status.textContent=content.message||'↑↓ 选择 · 回车执行 · Esc 关闭';paint();
+      status.textContent=content.message||(nonempty?'↑↓ 选择　双击或回车执行　Esc 关闭':'Esc 关闭');paint();
       if(!nonempty)list.append(h('div',{class:'selection-empty'},'请在原应用中选择文本、图片或文件后重试'));
-      const height=content.kind==='image'?410:Math.max(360,222+34*Math.min(7,actions.length));await api.windowAction('resize',{width:640,height});
+      const height=content.kind==='image'?410:Math.max(360,204+34*Math.min(7,actions.length));await api.windowAction('resize',{width:640,height});
     }
-    function paint(){list.replaceChildren(...actions.map((action,index)=>{const row=button('',()=>select(index),'selection-action'+(index===selected?' selected':''));row.dataset.action=action.id;row.setAttribute('role','option');row.setAttribute('aria-selected',String(index===selected));row.tabIndex=-1;row.append(actionIcon(action),h('span',{class:'selection-action-title'},action.title),h('span',{class:'selection-action-detail'},action.detail));row.ondblclick=()=>perform(action);row.oncontextmenu=event=>{event.preventDefault();select(index);if(ctx.menu)ctx.menu([{label:'上移此操作',disabled:index===0,action:()=>move(-1)},{label:'下移此操作',disabled:index===actions.length-1,action:()=>move(1)}],{clientX:event.clientX,clientY:event.clientY});};return row;}));}
-    function select(index){selected=Math.max(0,Math.min(actions.length-1,index));paint();list.focus();list.children[selected]?.scrollIntoView({block:'nearest'});}
+    function paint() {
+      list.replaceChildren(...actions.map((action, index) => {
+        const row = button('', () => select(index), 'selection-action');
+        row.id = 'selection-option-' + index;
+        row.dataset.action = action.id;
+        row.setAttribute('role', 'option');
+        row.tabIndex = -1;
+        row.append(actionIcon(action), h('span', {class:'selection-action-title'}, action.title),
+          h('span', {class:'selection-action-detail'}, action.detail), h('kbd', {'aria-hidden':'true'}, '↵'));
+        row.ondblclick = () => perform(action);
+        row.oncontextmenu = event => {
+          event.preventDefault(); select(index);
+          ctx.menu?.([
+            {label:'上移此操作', disabled:index === 0, action:() => move(-1)},
+            {label:'下移此操作', disabled:index === actions.length - 1, action:() => move(1)}
+          ], {clientX:event.clientX, clientY:event.clientY});
+        };
+        return row;
+      }));
+      syncSelection();
+    }
+    function syncSelection() {
+      for (const [index, row] of Array.from(list.children).entries()) {
+        row.classList.toggle('selected', index === selected);
+        row.setAttribute('aria-selected', String(index === selected));
+      }
+      const current = list.children[selected];
+      if (current) list.setAttribute('aria-activedescendant', current.id);
+      else list.removeAttribute('aria-activedescendant');
+    }
+    function select(index) {
+      if (!actions.length) return;
+      selected = Math.max(0, Math.min(actions.length - 1, index));
+      syncSelection(); list.focus(); list.children[selected].scrollIntoView({block:'nearest'});
+    }
     async function move(delta){const target=selected+delta;if(target<0||target>=actions.length||busy)return;[actions[selected],actions[target]]=[actions[target],actions[selected]];selected=target;paint();try{await api.selection('order',{category:category(content),order:actions.map(x=>x.id)});status.textContent='已保存此类内容的操作顺序';}catch(error){fail(error);}}
     async function imageData(){if(content.kind==='image')return {dataUrl:content.dataUrl};if(content.kind==='files')return api.fileAction('readImage',{path:content.files[0]});throw Error('当前内容不是图片');}
     async function perform(action=actions[selected]){
@@ -70,7 +103,7 @@
     const keydown=event=>{
       if(event.defaultPrevented||document.querySelector('.context-menu,dialog[open]'))return;
       if(event.key==='Escape'){event.preventDefault();event.stopPropagation();revision++;close();return;}
-      if(event.target.closest('.selection-preview'))return;
+      if (busy || !actions.length || event.target.closest('.selection-preview') || event.target === cancel) return;
       if(event.key==='ArrowUp'||event.key==='ArrowDown'){event.preventDefault();event.stopPropagation();const delta=event.key==='ArrowUp'?-1:1;if(event.altKey)move(delta);else select(selected+delta);}
       if(event.key==='Home'||event.key==='End'){event.preventDefault();select(event.key==='Home'?0:actions.length-1);}
       if(event.key==='Enter'){event.preventDefault();event.stopPropagation();perform();}
@@ -81,13 +114,13 @@
   pages.stack=async(root,ctx)=>{
     const {api,h,button}=ctx;let state=await api.stack('get'),dead=false,selected=0,busy=false;
     const host=h('section',{class:'paste-queue'}),title=h('h1',{},'复制堆栈'),end=button('结束堆栈',async()=>{await api.stack('stop');await api.windowAction('close');},'queue-end'),list=h('div',{class:'queue-list',role:'listbox',tabIndex:0,'aria-label':'待粘贴队列'}),status=h('div',{class:'queue-status',role:'status'}),next=button('粘贴下一项',async()=>{if(busy)return;busy=true;next.disabled=true;try{state=await api.stack('next');await paint();if(!state.active)await api.windowAction('close');}catch(error){status.textContent=error.message;}finally{busy=false;next.disabled=!(state.items||[]).length;}},'primary');
-    root.append(host);host.append(h('div',{class:'queue-heading'},title,end),list,status,h('div',{class:'queue-actions'},next));
+    root.append(host);host.append(h('div',{class:'queue-heading'},title,end),list,h('div',{class:'queue-actions'},status,next));
     async function action(name,payload){if(busy)return;try{state=await api.stack(name,payload);await paint();}catch(error){status.textContent=error.message;}}
     async function paint(){if(dead)return;const items=state.items||[],shown=items.slice(0,6);selected=Math.max(0,Math.min(selected,shown.length-1));list.replaceChildren(...shown.map((item,index)=>{
-      const text=item.kind==='image'?'图片':item.title||item.text||item.value||'文件',row=h('div',{class:'queue-row'+(!index?' next':'')+(index===selected?' focused':''),role:'option','aria-selected':String(index===selected),tabIndex:-1,onclick:()=>{selected=0;action('move',{id:item.id||item.hash,index,to:0});},ondblclick:()=>next.click(),title:String(text)});
-      const remove=button('×',event=>{event.stopPropagation();action('remove',{id:item.id||item.hash,index});},'queue-remove');remove.title='从待粘贴队列中移除此项';remove.setAttribute('aria-label','移除第 '+(index+1)+' 项');row.append(h('span',{class:'queue-index'},index+1),h('span',{class:'queue-text'},text),remove);return row;
-    }));if(!shown.length)list.append(h('div',{class:'queue-empty'},state.active?'等待 Ctrl+C 复制内容…':'本次队列已结束'));status.textContent=items.length?'下一项：第 1 条 · 共 '+items.length+' 条待粘贴':'Ctrl+C 连续复制 · Ctrl+V 依次取出';next.disabled=!items.length;await api.windowAction('resize',{width:340,height:130+Math.max(1,shown.length)*44});}
-    const keydown=event=>{if(event.defaultPrevented)return;const items=(state.items||[]).slice(0,6);if(['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const delta=event.key==='ArrowUp'?-1:1;if(event.altKey&&items[selected]){const to=Math.max(0,Math.min(items.length-1,selected+delta));action('move',{id:items[selected].id,index:selected,to});selected=to;}else{selected=Math.max(0,Math.min(items.length-1,selected+delta));paint();}}else if(event.key==='Enter'){event.preventDefault();next.click();}else if(['Backspace','Delete'].includes(event.key)&&items[selected]){event.preventDefault();action('remove',{id:items[selected].id,index:selected});}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();api.windowAction('close');}};
-    root.addEventListener('keydown',keydown);const off=api.onStackChanged?.(value=>{state=value;if(!dead)paint();});if(!state.active)state=await api.stack('start');await paint();return {focus(){},getState:()=>state,dispose(){dead=true;off?.();root.removeEventListener('keydown',keydown);}};
+      const text=item.kind==='image'?'图片':item.title||item.text||item.value||'文件',row=h('div',{class:'queue-row'+(!index?' next':'')+(index===selected?' focused':''),role:'option',id:'queue-option-'+index,'aria-selected':String(index===selected),tabIndex:-1,onclick:()=>{selected=0;action('move',{id:item.id||item.hash,index,to:0});},ondblclick:()=>next.click(),title:String(text)});
+      const remove=button('×',event=>{event.stopPropagation();action('remove',{id:item.id||item.hash,index});},'queue-remove');remove.title='从待粘贴队列中移除此项';remove.setAttribute('aria-label','移除第 '+(index+1)+' 项');row.append(h('span',{class:'queue-index'},index===0?'下一项':index+1),h('span',{class:'queue-text'},text),remove);return row;
+    }));if(!shown.length)list.append(h('div',{class:'queue-empty'},state.active?'等待 Ctrl+C 复制内容…':'本次队列已结束'));if (shown.length) list.setAttribute('aria-activedescendant', 'queue-option-'+selected); else list.removeAttribute('aria-activedescendant');status.textContent=items.length?items.length+' 项待粘贴 · Ctrl+V':'0 项待粘贴';next.disabled=!items.length;await api.windowAction('resize',{width:340,height:104+Math.max(1,shown.length)*44});}
+    const keydown=event=>{if(event.defaultPrevented || event.target.closest('button') && event.key !== 'Escape')return;const items=(state.items||[]).slice(0,6);if(['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const delta=event.key==='ArrowUp'?-1:1;if(event.altKey&&items[selected]){const to=Math.max(0,Math.min(items.length-1,selected+delta));action('move',{id:items[selected].id,index:selected,to});selected=to;}else{selected=Math.max(0,Math.min(items.length-1,selected+delta));paint();}}else if(event.key==='Enter'){event.preventDefault();next.click();}else if(['Backspace','Delete'].includes(event.key)&&items[selected]){event.preventDefault();action('remove',{id:items[selected].id,index:selected});}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();api.windowAction('close');}};
+    root.addEventListener('keydown',keydown);const off=api.onStackChanged?.(value=>{state=value;if(!dead)paint();});if(!state.active)state=await api.stack('start');await paint();return {focus:()=>list.focus(),getState:()=>state,dispose(){dead=true;off?.();root.removeEventListener('keydown',keydown);}};
   };
 })();

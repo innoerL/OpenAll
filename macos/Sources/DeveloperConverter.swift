@@ -128,7 +128,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         for mode in ConversionMode.allCases {
             let button = NSButton(title: mode.title, target: self, action: #selector(changeMode(_:)))
             button.tag = mode.rawValue
-            button.frame = NSRect(x: 28 + mode.rawValue * 310, y: 512, width: 302, height: 42)
+            button.frame = NSRect(x: 26 + mode.rawValue * 122, y: 518, width: 118, height: 32)
             surface.addSubview(button)
             tabs.append(button)
         }
@@ -149,7 +149,11 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
 
     private func rebuildContent() {
         guard content != nil else { return }
-        for button in tabs { WindowChrome.styleToolMode(button, active: button.tag == selectedMode.rawValue) }
+        for button in tabs {
+            let selected = button.tag == selectedMode.rawValue
+            WindowChrome.styleToolMode(button, active: selected)
+            button.setAccessibilityValue(selected ? "已选中" : "未选中")
+        }
         content.subviews.forEach { $0.removeFromSuperview() }
         durationInput = nil
         durationUnit = nil
@@ -207,10 +211,10 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         let order = Array(0..<10)
         for (position, index) in order.enumerated() {
             let row = durationRows[index]
-            let card = NSView(frame: NSRect(x: 0, y: CGFloat(333 - position * 37), width: 470, height: 35))
+            let card = NSView(frame: NSRect(x: 0, y: CGFloat(333 - position * 37), width: holder.bounds.width, height: 35))
             card.wantsLayer = true
             card.layer?.backgroundColor = (index == units.indexOfSelectedItem ? OpenAllTheme.accent.withAlphaComponent(0.10) : NSColor.clear).cgColor
-            let rule = NSView(frame: NSRect(x: 12, y: 0, width: 446, height: 0.5))
+            let rule = NSView(frame: NSRect(x: 12, y: 0, width: card.bounds.width - 24, height: 0.5))
             rule.wantsLayer = true
             rule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
             card.addSubview(rule)
@@ -221,16 +225,16 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
                 let superscript: [Character: String] = ["-":"⁻","0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹"]
                 display = parts[0] + " × 10" + String(exponent).map { superscript[$0] ?? String($0) }.joined()
             }
-            let number = label(display, frame: NSRect(x: 146, y: 6, width: 244, height: 24), size: 15)
+            let number = label(display, frame: NSRect(x: 146, y: 6, width: card.bounds.width - 214, height: 24), size: 15)
             number.toolTip = row.value
             number.alignment = .right
-            number.font = .monospacedDigitSystemFont(ofSize: 15, weight: .regular)
+            number.font = .monospacedDigitSystemFont(ofSize: 15, weight: index == units.indexOfSelectedItem ? .semibold : .regular)
             card.addSubview(number)
             card.addSubview(label(row.title, frame: NSRect(x: 14, y: 8, width: 132, height: 20),
                                   size: 11, color: OpenAllTheme.muted))
             let copy = NSButton(title: "复制", target: self, action: #selector(copyDuration(_:)))
             copy.tag = index
-            copy.frame = NSRect(x: 414, y: 5, width: 40, height: 25)
+            copy.frame = NSRect(x: card.bounds.width - 52, y: 4, width: 40, height: 27)
             WindowChrome.styleOutputAction(copy)
             copy.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "复制完整数值")
             copy.imagePosition = .imageOnly
@@ -322,8 +326,11 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             calendar.timeZone = zone
             let weekdays = ["", "星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"]
             let weekday = weekdays[calendar.component(.weekday, from: date)]
-            row.addSubview(label("\(TimeResults.format(date, "yyyy-MM-dd HH:mm:ss", zone)) \(weekday)",
-                                 frame: NSRect(x: 100, y: 6, width: 520, height: 23), size: 13))
+            let timestamp = label("\(TimeResults.format(date, "yyyy-MM-dd HH:mm:ss", zone)) \(weekday)",
+                                  frame: NSRect(x: 100, y: 6, width: 414, height: 23), size: 13)
+            timestamp.font = .monospacedDigitSystemFont(ofSize: 13, weight: index == 0 ? .semibold : .regular)
+            timestamp.isSelectable = true
+            row.addSubview(timestamp)
             holder.addSubview(row)
         }
     }
@@ -347,6 +354,8 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         let status = label("", frame: NSRect(x: 614, y: 346, width: 300, height: 20),
                            size: 11, color: OpenAllTheme.muted)
         content.addSubview(status)
+        status.alignment = .right
+        status.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         asciiStatus = status
         let header = NSView(frame: NSRect(x: 12, y: 301, width: 904, height: 30))
         WindowChrome.styleCard(header, radius: 6)
@@ -374,7 +383,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         let rows = DeveloperConversion.asciiRows(query: search.stringValue).filter {
             !search.stringValue.isEmpty || asciiCategory == 2 || (asciiCategory == 0 ? (32..<127).contains($0.number) : $0.number < 32 || $0.number == 127)
         }
-        asciiStatus?.stringValue = "\(rows.count) 字符 · 数值可选中复制"
+        asciiStatus?.stringValue = "\(rows.count) 个字符"
         let height = max(CGFloat(283), CGFloat(rows.count * 29 + 4))
         let document = NSView(frame: NSRect(x: 0, y: 0, width: 886, height: height))
         for (index, item) in rows.enumerated() {
@@ -387,6 +396,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             for (value, x, width) in [(String(item.number), 16, 100), (item.hex, 126, 120),
                                       (item.character, 266, 120), (asciiDescription(item.number), 426, 300)] {
                 let field = label(value, frame: NSRect(x: x, y: 4, width: width, height: 20), size: 12)
+                if x < 426 { field.font = .monospacedSystemFont(ofSize: 12, weight: .regular) }
                 field.isSelectable = true
                 row.addSubview(field)
             }

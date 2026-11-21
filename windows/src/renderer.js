@@ -241,10 +241,50 @@
     };
     window.addEventListener('keydown',keydown);const off=api.onClipboard(items=>{all=Array.isArray(items)?items:items?.items||all;if(!disposed)paint();});boards();paint();return {focus:()=>search.focus(),dispose(){disposed=true;window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(){boards();paint();},refresh,paste:text=>{search.value+=text;paint();}};
   };
-  window.OpenAllPages.clipboardPreview=async(host,ctx)=>{
-    const r=ctx.initialValue&&typeof ctx.initialValue==='object'?ctx.initialValue:{text:ctx.initialValue};const text=r.text||r.value||'',content=h('div',{class:'preview-content',tabIndex:0});
-    if(r.kind==='image')content.append(h('img',{src:r.dataUrl||'data:image/png;base64,'+r.value,alt:'剪贴板图片'}));else if(r.kind==='files')for(const file of r.files||[])content.append(button(file,()=>api.fileAction('reveal',{path:file})));else content.textContent=text;
-    host.append(h('div',{class:'preview-page'},h('div',{class:'toolbar'},button('复制全文',()=>api.copyText(text),'primary'),...['json','comparison','markdown','translate'].map(id=>button(titles[id],()=>openTool(id,text))),h('span',{class:'spacer'}),h('span',{class:'muted small'},r.sourceName||'')),content));return {focus:()=>content.focus()};
+  window.OpenAllPages.clipboardPreview = async (host, ctx) => {
+    const record = ctx.initialValue && typeof ctx.initialValue === 'object' ? ctx.initialValue : {text:ctx.initialValue};
+    const image = record.kind === 'image', files = record.kind === 'files' ? record.files || [] : null;
+    const text = files ? files.join('\n') : image ? '' : record.text || record.value || '';
+    const format = record.type || (image ? '图片' : files ? '文件' : record.kind === 'link' ? '链接' : '文本');
+    const title = h('h1', {}, format + '预览');
+    const source = h('span', {class:'clip-preview-source', title:record.sourceName || ''}, record.sourceName || '');
+    const content = h('div', {class:'preview-content', tabIndex:0, 'aria-label':'卡片内容'});
+    const status = h('span', {class:'clip-preview-status', role:'status'}, 'Esc 关闭预览');
+    const tools = h('div', {class:'clip-preview-tools'});
+    const warn = error => { status.textContent = error.message || '操作失败，请重试'; };
+    let copy;
+    if (image) {
+      const dataUrl = record.dataUrl || ('data:image/png;base64,' + record.value);
+      const img = h('img', {src:dataUrl, alt:'剪贴板图片'});
+      img.onerror = () => { content.textContent = '无法载入这张图片'; };
+      content.classList.add('is-image'); content.append(img);
+      copy = () => api.fileAction('copyImage', {dataUrl});
+      tools.append(button('图片处理', () => openTool('image', {dataUrl})));
+    } else {
+      if (files) {
+        content.classList.add('is-files');
+        for (const file of files) {
+          const name = String(file);
+          const link = button(name, () => api.fileAction('reveal', {path:name}).catch(warn));
+          link.title = '在资源管理器中显示 ' + name;
+          content.append(link);
+        }
+      } else {
+        content.textContent = text;
+        if (['JSON', 'HTML', 'Markdown'].includes(format)) content.classList.add('is-code');
+      }
+      copy = () => api.copyText(text);
+      for (const id of ['json','comparison','markdown','translate']) {
+        tools.append(button(titles[id], () => openTool(id, text)));
+      }
+    }
+    const copyButton = button(image ? '复制图片' : files ? '复制路径' : '复制全文', async () => {
+      try { await copy(); status.textContent = '已复制'; } catch (error) { warn(error); }
+    }, 'primary');
+    host.append(h('section', {class:'preview-page clip-preview'},
+      h('header', {class:'clip-preview-heading'}, title, source), content,
+      h('footer', {class:'clip-preview-footer'}, tools, h('div', {class:'clip-preview-action'}, status, copyButton))));
+    return {focus:() => content.focus()};
   };
   (async()=>{if(!api)throw Error('应用桥接未加载');settings=await api.settings();applyTheme(settings);const initial=await call('context').catch(()=>null);const params=new URLSearchParams(location.search);await render(initial?.page||params.get('page')||'search',initial?.initialValue||'');window.OpenAllApp.ready=true;})();
 })();

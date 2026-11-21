@@ -30,6 +30,9 @@ class Chart {
   constructor(card) {
     this.canvas = $('canvas', card);
     this.label = $('.hover', card);
+    this.label.id = card.id + '-chart-value';
+    this.canvas.setAttribute('aria-describedby', this.label.id);
+    this.label.setAttribute('aria-atomic', 'true');
     this.empty = $('.chart-empty', card);
     this.context = this.canvas.getContext('2d');
     new ResizeObserver(() => this.paint()).observe(this.canvas);
@@ -51,7 +54,6 @@ class Chart {
         id, name: SERIES[id], unit, byTime: new Map(rows.filter(({ date, price }) => Number.isFinite(Date.parse(date)) && Number.isFinite(price)).map(({ date, price }) => [Date.parse(date), price]).sort((a, b) => a[0] - b[0])),
       }));
       this.times = [...new Set(this.series.flatMap(({ byTime }) => [...byTime.keys()]))].sort((a, b) => a - b);
-      this.paint();
     }
     this.paint();
     this.empty.hidden = this.times.length > 0;
@@ -71,10 +73,12 @@ class Chart {
     if (!width || !height) return;
     this.height = height;
     const density = window.devicePixelRatio || 1;
-    this.canvas.width = Math.round(width * density);
-    this.canvas.height = Math.round(height * density);
+    const pixelWidth = Math.round(width * density), pixelHeight = Math.round(height * density);
+    if (this.canvas.width !== pixelWidth) this.canvas.width = pixelWidth;
+    if (this.canvas.height !== pixelHeight) this.canvas.height = pixelHeight;
     const draw = this.context;
-    draw.scale(density, density);
+    draw.setTransform(density, 0, 0, density, 0, 0);
+    draw.clearRect(0, 0, width, height);
     if (!this.times?.length) {
       this.label.hidden = true;
       return;
@@ -88,7 +92,7 @@ class Chart {
     }
     const shared = this.dualAxis ? null : chartBounds(prices);
     const axes = this.series.map(({ byTime }) => shared || (byTime.size ? chartBounds([...byTime.values()]) : null));
-    draw.font = '9px system-ui, sans-serif';
+    draw.font = '10px system-ui, sans-serif';
     const axisWidth = (axis) => axis ? Math.max(30, draw.measureText(whole.format(axis[1])).width + 7) : 7;
     this.left = axisWidth(axes[0]);
     const right = width - (this.dualAxis ? axisWidth(axes[1]) : 5);
@@ -114,7 +118,7 @@ class Chart {
     this.series.forEach((serie, index) => {
       if (axes[index]) this.paintSeries(serie, axes[index]);
     });
-    this.paintSelection(width);
+    this.paintSelection(width, axes, theme.getPropertyValue('--surface').trim());
   }
 
   paintSeries(serie, axis) {
@@ -159,7 +163,7 @@ class Chart {
     }
   }
 
-  paintSelection(width) {
+  paintSelection(width, axes, surface) {
     const time = this.times[this.selected];
     this.label.hidden = !Number.isFinite(time);
     if (this.label.hidden) return;
@@ -172,12 +176,24 @@ class Chart {
     draw.lineWidth = 1;
     draw.stroke();
     const date = new Date(time).toISOString().slice(0, 10);
-    const prices = this.series.map(({ name, unit, byTime }) => {
+    const prices = this.series.map(({ name, unit, byTime, accent }, index) => {
       const price = byTime.get(time);
+      if (price !== undefined && axes[index]) {
+        draw.beginPath();
+        draw.arc(x, this.vertical(price, axes[index]), 3.25, 0, Math.PI * 2);
+        draw.fillStyle = accent;
+        draw.fill();
+        draw.lineWidth = 1.5;
+        draw.strokeStyle = surface;
+        draw.stroke();
+      }
       return `${name} ${price === undefined ? '—' : amount.format(price) + ' ' + unit}`;
     });
-    this.label.textContent = [date, ...prices].join('\n');
-    this.label.style.left = `${Math.max(0, Math.min(width - this.label.offsetWidth, x + 8))}px`;
+    const description = [date, ...prices].join('\n');
+    if (this.label.textContent !== description) this.label.textContent = description;
+    const labelWidth = this.label.offsetWidth;
+    const left = x + 8 + labelWidth <= width ? x + 8 : x - 8 - labelWidth;
+    this.label.style.left = `${Math.max(0, left)}px`;
   }
 
   select(index) {
@@ -189,6 +205,7 @@ class Chart {
   onKey(event) {
     if (!this.times?.length || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
+    this.label.setAttribute('aria-live', 'polite');
     const last = this.times.length - 1;
     const current = this.selected ?? last;
     if (event.key === 'Home') this.select(0);
@@ -198,6 +215,7 @@ class Chart {
 
   pick(x) {
     if (!this.times?.length) return;
+    if (this.label.getAttribute('aria-live') === 'polite') this.label.setAttribute('aria-live', 'off');
     const target = this.first + (x - this.left) / this.plotWidth * (this.last - this.first);
     const nearest = this.times.reduce((best, time, index) =>
       Math.abs(target - time) < Math.abs(target - this.times[best]) ? index : best, 0);

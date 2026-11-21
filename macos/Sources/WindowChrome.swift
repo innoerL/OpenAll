@@ -271,6 +271,7 @@ final class QuietSplitView: NSSplitView {
 
 final class ToolPane: NSView {
     private let heading: NSTextField
+    func setTitle(_ title: String) { heading.stringValue = title }
     private let content: NSView
     private let actions: [NSButton]
     private let headerBand = NSView()

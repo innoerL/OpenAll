@@ -75,6 +75,21 @@ module.exports = async function verifyGold(searchWindow, output) {
     await until(() => execute(gold, () => !document.querySelector('#outlook').hidden && document.querySelectorAll('#forecast-rows tr').length === 7), '七日展望');
     await click('forecast-ctf');
     await until(() => execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true'), '周大福展望');
+    const normalSize = gold.getContentSize();
+    try {
+      gold.setContentSize(345, normalSize[1]);
+      await until(() => execute(gold, () => window.innerWidth <= 345), '调整至最小行情窗口');
+      check(await execute(gold, () => {
+        const table = document.querySelector('#forecast-table');
+        const card = document.querySelector('#outlook').getBoundingClientRect();
+        return document.querySelector('.forecast-baseline strong')?.textContent.includes('/克') &&
+          table.querySelectorAll('tbody time[datetime]').length === 7 &&
+          table.getBoundingClientRect().right <= card.right &&
+          document.querySelector('#close').getBoundingClientRect().right <= document.documentElement.clientWidth;
+      }), '最窄窗口可同时查看七行日期、完整情景区间和窗口操作');
+    } finally {
+      gold.setContentSize(...normalSize);
+    }
     check(await execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true' && document.querySelectorAll('#forecast-rows tr').length === 7), '两品种七日展望切换');
     check(await execute(gold, () => !!document.querySelector('#verification-note').textContent && document.querySelector('#drivers').children.length > 0 && document.querySelector('#events').children.length > 0 && document.querySelector('#calendar').children.length > 0), '报价验证、市场因素、国际事件与财经日历');
     check(await execute(gold, () => ['gold', 'goldHistory', 'ctf', 'ctfHistory', 'fx', 'news'].every(key => !!document.querySelector('[data-source="' + key + '"]'))), '报价与新闻来源链接保留');

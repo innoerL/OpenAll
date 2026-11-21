@@ -189,9 +189,9 @@ final class PasteStackWindow: NSObject {
         list = NSView(frame: NSRect(x: 16, y: 56, width: 308, height: 78))
         root.addSubview(list)
         status = NSTextField(labelWithString: "")
-        status.font = .systemFont(ofSize: 11)
+        status.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         status.textColor = OpenAllTheme.muted
-        status.frame = NSRect(x: 18, y: 46, width: 290, height: 22)
+        status.frame = NSRect(x: 18, y: 15, width: 188, height: 22)
         status.tag = 44
         root.addSubview(status)
         let next = NSButton(title: "粘贴下一项", target: self, action: #selector(takeNext))
@@ -213,16 +213,16 @@ final class PasteStackWindow: NSObject {
         let records = store.stackRecords()
         let shown = Array(records.prefix(6))
         let rowHeight: CGFloat = 44
-        let height = CGFloat(130) + CGFloat(max(1, shown.count)) * rowHeight
+        let height = CGFloat(104) + CGFloat(max(1, shown.count)) * rowHeight
         let root = panel.contentView!
         root.frame.size.height = height
         root.viewWithTag(41)?.frame.origin.y = height - 40
         root.viewWithTag(42)?.frame.origin.y = height - 42
-        list.frame = NSRect(x: 16, y: 79, width: 308, height: CGFloat(max(1, shown.count)) * rowHeight)
+        list.frame = NSRect(x: 16, y: 53, width: 308, height: CGFloat(max(1, shown.count)) * rowHeight)
         list.subviews.forEach { $0.removeFromSuperview() }
         if shown.isEmpty {
             let waiting = NSTextField(labelWithString: "等待 ⌘C 复制内容…")
-            waiting.textColor = .secondaryLabelColor
+            waiting.textColor = OpenAllTheme.muted
             waiting.frame = NSRect(x: 8, y: 8, width: 290, height: 22)
             list.addSubview(waiting)
         }
@@ -237,34 +237,28 @@ final class PasteStackWindow: NSObject {
             row.wantsLayer = true
             row.layer?.cornerRadius = 7
             row.layer?.backgroundColor = (index == 0 ? OpenAllTheme.accent.withAlphaComponent(0.13) : NSColor.clear).cgColor
-            if index == 0 {
-                let marker = NSView(frame: NSRect(x: 0, y: 5, width: 3, height: 30))
-                marker.wantsLayer = true
-                marker.layer?.backgroundColor = OpenAllTheme.accent.cgColor
-                marker.toolTip = "下一项将粘贴此内容"
-                row.addSubview(marker)
-            }
-            let indexLabel = NSTextField(labelWithString: "\(index + 1)")
-            indexLabel.font = .systemFont(ofSize: 11, weight: .semibold)
-            indexLabel.textColor = .secondaryLabelColor
-            indexLabel.frame = NSRect(x: 10, y: 9, width: 18, height: 18)
+            let indexLabel = NSTextField(labelWithString: index == 0 ? "下一项" : "\(index + 1)")
+            indexLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+            indexLabel.textColor = index == 0 ? OpenAllTheme.accentText : OpenAllTheme.muted
+            indexLabel.frame = NSRect(x: 10, y: 10, width: 39, height: 18)
             row.addSubview(indexLabel)
             let preview = NSTextField(labelWithString: item.kind == "image" ? "图片" : item.title)
             preview.lineBreakMode = .byWordWrapping
             preview.maximumNumberOfLines = 2
             preview.textColor = OpenAllTheme.ink
-            preview.frame = NSRect(x: 36, y: 4, width: 218, height: 32)
+            preview.frame = NSRect(x: 55, y: 4, width: 210, height: 32)
             row.addSubview(preview)
             let remove = NSButton(title: "×", target: self, action: #selector(removeRow(_:)))
             remove.tag = index
             remove.isBordered = false
+            remove.contentTintColor = OpenAllTheme.muted
+            remove.setAccessibilityLabel("移除第 \(index + 1) 项")
             remove.toolTip = "从待粘贴队列中移除此项"
             remove.frame = NSRect(x: 271, y: 8, width: 28, height: 25)
             row.addSubview(remove)
             list.addSubview(row)
         }
         refreshStatus()
-        if !shown.isEmpty { status.stringValue = "下一项：第 1 条 · 共 \(records.count) 条待粘贴" }
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         if let visible = screen?.visibleFrame {
             panel.setFrame(NSRect(x: visible.maxX - 360, y: visible.maxY - height - 20,
@@ -277,16 +271,16 @@ final class PasteStackWindow: NSObject {
         let count = store.stackIDs.count
         if let next = panel?.contentView?.viewWithTag(45) as? NSButton {
             let authorized = AXIsProcessTrusted()
-            next.isEnabled = authorized
+            next.isEnabled = authorized && count > 0
             next.title = authorized ? "粘贴下一项" : "授权后可粘贴"
-            WindowChrome.styleAction(next, primary: authorized)
+            WindowChrome.styleAction(next, primary: next.isEnabled)
         }
         if pasteHotkeyAvailable || tapAvailable {
-            status.stringValue = "待粘贴 \(count) 项 · ⌘V 依次取出"
+            status.stringValue = "\(count) 项待粘贴 · ⌘V"
         } else if AXIsProcessTrusted() {
-            status.stringValue = "待粘贴 \(count) 项 · 点击下方按钮取出"
+            status.stringValue = "\(count) 项待粘贴"
         } else {
-            status.stringValue = "\(count) 项 · 请授权辅助功能后重开堆栈"
+            status.stringValue = "请授权辅助功能后重开堆栈"
         }
     }
 

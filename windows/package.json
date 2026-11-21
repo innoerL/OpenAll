@@ -1,7 +1,7 @@
 {
   "name": "openall-windows",
   "productName": "OpenAll",
-  "version": "0.27.4",
+  "version": "0.27.5",
   "description": "OpenAll Windows 效率工具",
   "main": "src/main.js",
   "scripts": {
@@ -36,6 +36,11 @@
       "!assets/editor-test.*"
     ],
     "extraResources": [
+      {
+        "from": "../shared/manual-ui",
+        "to": "shared/manual-ui",
+        "filter": ["reader.js", "reader.css"]
+      },
       {
         "from": "../shared/gold-core",
         "to": "gold-core",

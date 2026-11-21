@@ -1,0 +1,22 @@
+/* finesse · register=product · shell=可筛选的命令手册 */
+.manual-reader { display:flex; flex-direction:column; min-height:0; box-sizing:border-box; gap:10px; font:13px system-ui,sans-serif; }
+.manual-toolbar { display:flex; flex:none; align-items:center; gap:8px; }
+.manual-toolbar input, .manual-toolbar button { box-sizing:border-box; height:30px; border:1px solid var(--rule); border-radius:5px; color:var(--ink); font:inherit; }
+.manual-toolbar input { flex:1; min-width:76px; padding:0 9px; background:var(--surface); }
+.manual-toolbar button { flex:none; padding:0 9px; background:transparent; cursor:pointer; }
+.manual-toolbar button:hover { background:var(--raised); }
+.manual-reader :is(input,button,.aux-copyable):focus-visible { outline:2px solid var(--accent-text,var(--ink)); outline-offset:-2px; }
+.manual-count { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.manual-count:empty { display:none; }
+.manual-reader .manual-article { flex:1; min-height:0; overflow:auto; color:var(--ink); background:var(--surface); border:1px solid var(--rule); border-radius:7px; padding:16px clamp(14px,3vw,30px) 24px; font:14px/1.6 system-ui,sans-serif; overflow-wrap:anywhere; }
+.manual-article h1 { font-size:21px; margin:0 0 10px; }
+.manual-article h2 { font-size:16px; margin:24px 0 8px; }
+.manual-article p { margin:8px 0; }
+.manual-article table { border-collapse:collapse; width:100%; font-size:13px; }
+.manual-reader .manual-article :is(th,td) { padding:7px 9px; text-align:left; vertical-align:top; border:0; border-bottom:1px solid var(--rule); }
+.manual-article th { color:var(--muted); background:var(--surface); }
+.manual-article code { font:12px/1.55 ui-monospace,Consolas,monospace; }
+.manual-article .aux-copyable { color:var(--accent-text,var(--ink)); cursor:copy; }
+.manual-article pre { white-space:pre-wrap; background:var(--canvas); border:1px solid var(--rule); border-radius:5px; padding:12px; }
+.manual-article a { color:var(--accent-text,var(--ink)); }
+.manual-reader [hidden] { display:none!important; }

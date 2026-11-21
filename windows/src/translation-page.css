@@ -1,2 +1,25 @@
-.translation-state{height:100%;display:flex;align-items:center;justify-content:center;background:var(--canvas);color:var(--ink)}.translation-state[hidden]{display:none}.translation-card{width:440px;max-width:calc(100% - 48px);text-align:center;padding:20px 0}.translation-card h2{font-size:18px;line-height:30px;font-weight:500;margin:18px 0 4px}.translation-card p{font-size:13px;line-height:22px;color:var(--muted);margin:0}.translation-spinner{display:block;width:28px;height:28px;border:2px solid var(--rule);border-top-color:var(--accent);border-radius:50%;margin:0 auto;animation:translation-spin .8s linear infinite}.translation-spinner[hidden],.translation-offline[hidden]{display:none}.translation-offline{height:30px;line-height:30px;font-size:44px;color:var(--accent);font-weight:500}.translation-actions{margin-top:26px;display:flex;align-items:center;justify-content:center;gap:14px}.translation-actions button{height:34px;padding:0 16px;border:1px solid var(--rule);border-radius:6px;color:var(--ink);background:var(--surface);font-size:13px}.translation-actions button.primary{background:var(--accent);border-color:var(--accent);color:#20201e;font-weight:500}.translation-actions button:disabled{opacity:.4}@keyframes translation-spin{to{transform:rotate(360deg)} }
-.translation-offline svg{display:block;margin:auto;transform:translateY(-5px)}
+/* finesse · register=product · shell=翻译连接状态 */
+.translation-state {
+  height: 100%; display: grid; place-items: center;
+  color: var(--ink); background: var(--canvas);
+}
+.translation-state[hidden], .translation-state [hidden] { display: none; }
+.translation-card {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 18px;
+  align-items: start; width: min(440px, calc(100% - 48px));
+}
+.translation-symbol { display: grid; justify-items: center; padding-top: 2px; }
+.translation-offline svg { display: block; width: 40px; height: 33px; color: var(--accent-text); }
+.translation-spinner {
+  width: 28px; height: 28px; border: 2px solid var(--rule);
+  border-top-color: var(--accent-text); border-radius: 50%; animation: translation-spin .8s linear infinite;
+}
+.translation-message h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.4; }
+.translation-message p { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.translation-actions { display: flex; gap: 10px; margin-top: 20px; }
+.translation-actions button { height: 32px; border-color: transparent; padding: 0 10px; color: var(--muted); background: transparent; }
+.translation-actions button:not(.primary):hover { color: var(--ink); background: var(--raised); }
+.translation-actions button.primary { padding: 0 15px; color: var(--on-accent); background: var(--accent); font-weight: 600; }
+.translation-actions button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@keyframes translation-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .translation-spinner { animation: none; } }

@@ -47,8 +47,8 @@ cat > "$appPath/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>OpenAll</string>
 <key>CFBundleIconFile</key><string>OpenAll.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.27.4</string>
-<key>CFBundleVersion</key><string>85</string>
+<key>CFBundleShortVersionString</key><string>0.27.5</string>
+<key>CFBundleVersion</key><string>86</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
@@ -64,5 +64,6 @@ for module in store scheduler sources time currency changes outlook market-conte
     cp "$macosRoot/../shared/gold-core/$module.cjs" "$appPath/Contents/Resources/gold-backend/"
 done
 cp "$macosRoot/../shared/gold-ui/"* "$appPath/Contents/Resources/gold-ui/"
+cp -R "$macosRoot/../shared/manual-ui" "$appPath/Contents/Resources/"
 codesign --force --deep --sign - "$appPath"
 print "已构建 $appPath"

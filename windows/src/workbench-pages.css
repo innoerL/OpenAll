@@ -1,0 +1,75 @@
+/* 开发工具的标签、输入与结果区共用同一套层级。 */
+:is(.aux-backend,.aux-converter) .aux-tabs.wide {
+  flex: none;
+  justify-content: flex-start;
+  gap: 4px;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+}
+:is(.aux-backend,.aux-converter) .aux-tabs.wide .aux-button {
+  flex: 0 1 auto;
+  min-width: 100px;
+  min-height: 33px;
+  padding: 5px 14px 9px;
+}
+:is(.aux-backend,.aux-converter) .aux-tabs.wide .active {
+  color: var(--accent-text,var(--ink));
+  font-weight: 600;
+}
+:is(.aux-backend,.aux-converter) .aux-tabs.wide .active::after {
+  left: 12px;
+  bottom: 0;
+  width: calc(100% - 24px);
+  transform: none;
+}
+:is(.aux-backend,.aux-converter,.editor-formatter) :is(button,select,input):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+.aux-backend .aux-report-heading { justify-content: flex-start; margin: 0; }
+.aux-report-heading strong { flex: none; }
+.aux-backend .aux-report-heading .aux-status { min-width: 0; flex: 1; font-variant-numeric: tabular-nums; }
+.aux-backend .aux-report { border: 1px solid var(--rule); background: var(--surface); }
+.aux-backend .aux-report td { border-bottom: 1px solid var(--rule); }
+.aux-backend-body[data-mode=explain] .aux-report :is(td,th):is(:nth-child(3),:nth-child(4),:nth-child(5)) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.aux-backend .aux-report tr.changed td:last-child { color: var(--accent-text,var(--ink)); }
+.aux-converter .aux-conversion-row.source code,
+.aux-converter .aux-cron-row:first-of-type code { font-weight: 650; }
+.aux-converter .aux-cron-row code,
+.aux-converter .aux-report :is(td,th):nth-child(-n+2) { font-variant-numeric: tabular-nums; }
+.editor-formatter .editor-pane-heading { gap: 9px; min-height: 36px; }
+.formatter-count { font-size: 12px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+.editor-formatter .editor-pane-heading button {
+  margin-left: auto; height: 27px; padding: 0 9px; border: 0; border-radius: 5px;
+  font: inherit; font-size: 12px; font-weight: 500; color: var(--ink); background: transparent; cursor: pointer;
+}
+.editor-formatter .editor-pane-heading button:hover:enabled { background: var(--raised); }
+.editor-formatter .editor-formatter-footer { gap: 16px; height: 48px; }
+.editor-formatter-footer .primary { display: inline-flex; align-items: center; gap: 8px; }
+.editor-formatter-footer kbd { font: inherit; font-size: 11px; font-weight: 400; }
+@media (max-width: 740px) {
+  :is(.aux-backend,.aux-converter) .aux-tabs.wide { gap: 0; }
+  :is(.aux-backend,.aux-converter) .aux-tabs.wide .aux-button { min-width: 0; padding-inline: 9px; }
+  .aux-backend { padding: 12px; }
+  .aux-backend .aux-actions { flex-wrap: wrap; }
+  .aux-backend-body { overflow: auto; }
+  .aux-backend-body > .aux-report { min-height: 132px; }
+  .aux-backend-body > .aux-report.summary { min-height: 72px; }
+  .aux-backend .aux-report-heading .aux-status { white-space: normal; }
+  .aux-backend .aux-report:not(.summary) table { min-width: 590px; }
+  .aux-converter-body:has(.aux-duration-fields) { display: block; }
+  .aux-duration-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-bottom: 16px; }
+  .aux-duration-fields p { grid-column: 1/-1; }
+  .aux-converter .aux-conversion-row { grid-template-columns: minmax(0,1fr) minmax(90px,1fr) 38px; gap: 6px; }
+  .aux-converter .aux-conversion-row code { grid-column: auto; text-align: right; }
+  .aux-converter .aux-conversion-row .aux-button { grid-area: auto; }
+  .aux-converter .aux-cron-grid { display: block; }
+  .aux-converter .aux-cron-fields { margin-top: 16px; }
+  .editor-formatter .editor-pane-heading { padding-inline: 12px; gap: 4px; }
+  .editor-formatter .editor-formatter-footer { padding-inline: 12px; }
+  .editor-formatter-status { white-space: normal; }
+}

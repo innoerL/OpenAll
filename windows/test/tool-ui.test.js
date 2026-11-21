@@ -44,7 +44,7 @@ async function mount(id,value='',width,height){if(!width)[width,height]=({unicod
 app.whenReady().then(async()=>{
   fs.mkdirSync(destination,{recursive:true});
   const base=pathToFileURL(path.join(root,'src/')).href;
-  const html='<!doctype html><html><head><meta charset="utf-8"><base href="'+base+'"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="tool-pages.css"><link rel="stylesheet" href="editor-pages.css"><link rel="stylesheet" href="selection-pages.css"></head><body><div id="chrome" class="window-chrome"><span id="title" class="window-title">OpenAll</span><div class="window-controls"><button class="window-minimize" aria-label="最小化">−</button><button class="window-maximize" aria-label="最大化">□</button><button class="window-close" aria-label="关闭">×</button></div></div><main id="app"></main><script>window.module=undefined;window.exports=undefined;</script><script src="../assets/marked.umd.js"></script><script src="../assets/id-regions.js"></script><script src="tool-core.js"></script><script src="../assets/tool-manual.js"></script><script src="tool-pages.js"></script><script src="ui.js"></script><script src="selection-pages.js"></script></body></html>';
+  const html='<!doctype html><html><head><meta charset="utf-8"><base href="'+base+'"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="tool-pages.css"><link rel="stylesheet" href="content-tools.css"><link rel="stylesheet" href="editor-pages.css"><link rel="stylesheet" href="selection-pages.css"><link rel="stylesheet" href="workbench-pages.css"></head><body><div id="chrome" class="window-chrome"><span id="title" class="window-title">OpenAll</span><div class="window-controls"><button class="window-minimize" aria-label="最小化">−</button><button class="window-maximize" aria-label="最大化">□</button><button class="window-close" aria-label="关闭">×</button></div></div><main id="app"></main><script>window.module=undefined;window.exports=undefined;</script><script src="../assets/marked.umd.js"></script><script src="../assets/id-regions.js"></script><script src="tool-core.js"></script><script src="../assets/tool-manual.js"></script><script src="../../shared/manual-ui/reader.js"></script><script src="tool-pages.js"></script><script src="ui.js"></script><script src="selection-pages.js"></script></body></html>';
   const file=path.join(temporary,'index.html');fs.writeFileSync(file,html);
   win=new BrowserWindow({show:false,width:1000,height:700,frame:false,webPreferences:{nodeIntegration:true,contextIsolation:false,offscreen:true}});
   win.webContents.on('console-message',event=>{if(event.level==='error'||event.level>=3)errors.push(event.message);});
@@ -55,6 +55,11 @@ app.whenReady().then(async()=>{
   assert.match(await js('return document.querySelectorAll("textarea,.aux-editor-frame")[1].value'),/\\u4F60/);
   await click('填回输入');await until('document.querySelectorAll("textarea,.aux-editor-frame")[1].value==="你好，OpenAll 👋"','Unicode 回填');
   await capture('unicode');
+  await fill('textarea', '');
+  await until('document.querySelector(".aux-status").textContent.includes("自动解码")','空输入提示');
+  assert.equal(await js('return [...document.querySelectorAll(".aux-pane-bar button")].every(button=>button.disabled)'),true);
+  await fill('textarea',String.fromCharCode(92)+'u00ZZ');
+  await until('document.querySelector(".aux-status").classList.contains("error")','无效转义提示');
 
   await mount('id','',660,520);assert.equal(await js('return document.querySelectorAll(".aux-id-row").length'),5);await click('复制全部');assert.equal((await js('return window.copied')).split('\n').length,5);
   assert.equal(await js('return document.querySelector("[data-id-part=city]").disabled&&document.querySelector("[data-id-part=region]").disabled;'),true,'未选省份时禁用城市和区县');await capture('id');
@@ -100,7 +105,19 @@ app.whenReady().then(async()=>{
 
   await mount('logTimeline','{"time":"2026-11-16T12:01:20Z","traceId":"req-001","level":"INFO","message":"request started"}\n{"time":"2026-11-16T12:01:22Z","traceId":"req-001","level":"INFO","message":"request completed"}\n{"time":"2026-11-16T12:02:10Z","traceId":"req-002","level":"ERROR","message":"database timeout"}');await click('识别字段');await until('document.querySelector(".aux-status").textContent.includes("3 条日志")','日志解析');await js('const select=document.querySelectorAll("select")[0];select.value="traceId";select.dispatchEvent(new Event("change"));');await until('document.querySelector(".aux-status").textContent.includes("2 个分组")','日志分组');await capture('logTimeline');
 
-  await mount('manual');assert.ok((await js('return document.querySelectorAll("tbody tr").length'))>20);await fill('.aux-input','java');assert.ok((await js('return [...document.querySelectorAll("tbody tr")].filter(x=>!x.hidden).length'))>0);await capture('manual');
+  await mount('manual');
+  const manualRowCount=await js('return document.querySelectorAll("tbody tr").length');
+  assert.ok(manualRowCount>20);
+  await fill('input[type=search]','journalctl');
+  const visibleRows=await js('return [...document.querySelectorAll("tbody tr")].filter(row=>!row.closest("[hidden]")).length');
+  assert.ok(visibleRows>0&&visibleRows<manualRowCount);
+  await js('const entry=[...document.querySelectorAll("td code[role=button]")].find(item=>!item.closest("[hidden]"));entry.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}));');
+  await until('window.copied.includes("journalctl")','键盘复制命令');
+  await fill('input[type=search]','OpenAll-无此命令');
+  assert.equal(await js('return document.querySelector(".manual-count").textContent'),'没有匹配项');
+  await fill('input[type=search]','');
+  assert.equal(await js('return [...document.querySelectorAll("tbody tr")].filter(row=>!row.closest("[hidden]")).length'),manualRowCount);
+  await capture('manual');
 
   await mount('markdown','# OpenAll 笔记\n\n在一处编辑与预览。\n\n- [x] Markdown\n- [x] Mermaid 图表\n\n```mermaid\nflowchart LR\nA[输入] --> B[编辑]\nB --> C[导出]\n```\n\n| 工具 | 状态 |\n| --- | --- |\n| JSON | 可用 |');await until('document.querySelector(".aux-diagram svg")!==null','Mermaid 图表');await capture('markdown');await js('document.querySelector(".aux-editor-frame").focus();');win.webContents.sendInputEvent({type:'keyDown',keyCode:'F',modifiers:[process.platform==='darwin'?'meta':'control']});await until('!document.querySelector(".aux-findbar").hidden','Markdown 搜索框');await fill('.aux-findbar input','OpenAll');await until('document.querySelector(".aux-findbar span").textContent.includes("1 / 1")','Markdown 内容搜索');await js('document.querySelector(".aux-findbar button:last-child").click();');await click('复制 Markdown');assert.match(await js('return window.copied'),/# OpenAll/);await click('导出 HTML…');await until('window.saved.length===1','HTML 导出');assert.match(await js('return window.saved[0].text'),/<svg/);
   await fill('textarea,.aux-editor-frame','<script>window.hacked=1</script>\n<img src=x onerror="window.hacked=1">\n[bad](javascript:alert(1))');await until('document.querySelector(".aux-status").textContent.includes("预览已更新")','Markdown 安全预览');assert.equal(await js('return Boolean(window.hacked||document.querySelector(".aux-markdown-preview script")||document.querySelector(".aux-markdown-preview [onerror]"))'),false);
@@ -108,6 +125,13 @@ app.whenReady().then(async()=>{
   const image=await js('const canvas=document.createElement("canvas");canvas.width=800;canvas.height=500;const ctx=canvas.getContext("2d"),g=ctx.createLinearGradient(0,0,800,500);g.addColorStop(0,"#d8c19e");g.addColorStop(1,"#49716b");ctx.fillStyle=g;ctx.fillRect(0,0,800,500);ctx.fillStyle="#f8f7ef";ctx.font="42px sans-serif";ctx.fillText("OpenAll",60,100);ctx.strokeStyle="#ffffff90";ctx.lineWidth=3;ctx.strokeRect(60,150,680,290);return canvas.toDataURL();');
   await mount('image',image);await until('document.querySelector(".aux-image-size").textContent.includes("PNG")','图片编码');await capture('image');await click('↷ 右转');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="500" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片旋转');await click('⌗ 裁剪');await js('const fields=document.querySelectorAll(".aux-crop-fields input");fields[0].value="20";fields[1].value="30";fields[2].value="100";fields[3].value="120";');await click('裁剪');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="100" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片裁剪');await click('保存文件…');await until('window.saved.length===2','图片保存');await click('复制图片');await until('Boolean(window.copiedImage)','图片复制');
   const copied=await js('return window.copiedImage');assert.ok(copied.startsWith('data:image/png;'));
+
+  for(const id of ['id','markdown','unicode','image','manual']){
+    await mount(id,id==='image'?image:'',480,430);
+    assert.equal(await js('const page=document.querySelector("main");return page.scrollWidth<=page.clientWidth+1'),true,id+' 窄窗口不能横向溢出');
+    if(id==='id')await capture('id-compact');
+    if(id==='image')await capture('image-compact');
+  }
 
 
   await mount('selection','第一行：这段选中的内容会完整显示在可滚动区域中。\n第二行：即使文字较长，也不会被压缩成一条难以阅读的摘要。\n第三行：选择操作后即可继续处理。');

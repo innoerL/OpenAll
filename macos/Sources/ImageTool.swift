@@ -175,7 +175,7 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
     private var window: NSWindow?
     private var preview: NSImageView!
     private var previewCanvas: ImagePreviewCanvas!
-    private var previewHint: NSTextField?
+    private var previewHint: NSButton?
     private var previewCaption: NSTextField?
     private var previewScale: NSTextField?
     private var chooseButton: NSButton?
@@ -237,11 +237,11 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         preview = NSImageView(frame: NSRect(x: 36, y: 100, width: 528, height: 334))
         preview.imageScaling = .scaleProportionallyUpOrDown
         root.addSubview(preview)
-        let empty = NSTextField(labelWithString: "选择图片开始处理")
-        empty.font = .systemFont(ofSize: 15, weight: .regular)
-        empty.textColor = OpenAllTheme.muted
-        empty.alignment = .center
-        empty.frame = NSRect(x: 24, y: 248, width: 552, height: 24)
+        let empty = NSButton(title: "选择图片…", target: self, action: #selector(chooseImage))
+        empty.frame = NSRect(x: 238, y: 251, width: 124, height: 32)
+        WindowChrome.styleAction(empty)
+        empty.image = NSImage(systemSymbolName: "photo", accessibilityDescription: nil)
+        empty.imagePosition = .imageLeading
         root.addSubview(empty)
         previewHint = empty
 
@@ -254,6 +254,7 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         choose.imagePosition = .imageLeading
         choose.font = .systemFont(ofSize: 12)
         root.addSubview(choose)
+        choose.isHidden = true
         chooseButton = choose
         for (title, symbol, x, buttonWidth, action) in [
             ("裁剪", "crop", 150.0, 68.0, #selector(cropImage)),
@@ -370,9 +371,9 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         exportRule.wantsLayer = true
         exportRule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
         root.addSubview(exportRule)
-        outputLabel = NSTextField(labelWithString: "已生成")
+        outputLabel = NSTextField(labelWithString: "导出结果")
         outputLabel.frame = NSRect(x: 624, y: 158, width: 252, height: 14)
-        outputLabel.font = .systemFont(ofSize: 10)
+        outputLabel.font = .systemFont(ofSize: 11, weight: .medium)
         outputLabel.textColor = OpenAllTheme.muted
         outputLabel.isHidden = true
         root.addSubview(outputLabel)
@@ -390,7 +391,7 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         root.addSubview(copy)
         let save = NSButton(title: "保存文件…", target: self, action: #selector(saveResult))
         save.frame = NSRect(x: 740, y: 54, width: 136, height: 32)
-        WindowChrome.styleAction(save)
+        WindowChrome.styleAction(save, primary: true)
         save.font = .systemFont(ofSize: 12, weight: .medium)
         save.isEnabled = false
         saveButton = save
@@ -418,6 +419,7 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
     private func load(image: NSImage, data: Data?, url: URL?, preserveMetadata: Bool = false) {
         sourceImage = image
         previewHint?.isHidden = true
+        chooseButton?.isHidden = false
         chooseButton?.title = "更换图片…"
         if let chooseButton { chooseButton.font = .systemFont(ofSize: 12) }
         sourceData = data

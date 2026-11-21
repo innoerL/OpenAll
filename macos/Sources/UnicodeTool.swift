@@ -120,6 +120,8 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
     private var selectedDirection = 0
     private var directionButtons: [NSButton] = []
     private var status: NSTextField!
+    private var panes: [ToolPane] = []
+    private var resultActions: [NSButton] = []
     private var converted = false
 
     func show(_ initial: String = "", decode: Bool? = nil) {
@@ -141,7 +143,7 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
         WindowChrome.apply(w, title: "文本 ↔ Unicode 转义")
-        w.minSize = NSSize(width: 800, height: 380)
+        w.minSize = NSSize(width: 720, height: 380)
         w.center()
         let root = NSView(frame: w.contentView!.bounds)
         root.wantsLayer = true
@@ -200,8 +202,10 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
             copy.frame.size.width = 82
             WindowChrome.styleOutputAction(copy)
             actions = [fill, copy]
+            resultActions = actions
         }
         let pane = ToolPane(title: title, content: scroll, actions: actions, size: NSSize(width: width, height: 225))
+        panes.append(pane)
         split.addSubview(pane)
         return scroll.documentView as! NSTextView
     }
@@ -216,7 +220,7 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
         WindowChrome.styleEditor(scroll, text: text)
         text.isEditable = editable
         text.isSelectable = true
-        text.textContainerInset = NSSize(width: 15, height: 5)
+        text.textContainerInset = NSSize(width: 12, height: 12)
         text.isVerticallyResizable = true
         text.isHorizontallyResizable = false
         text.textContainer?.widthTracksTextView = true
@@ -231,7 +235,11 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
     }
 
     private func updateDirectionButtons() {
-        for button in directionButtons { WindowChrome.styleToolMode(button, active: button.tag == selectedDirection) }
+        for button in directionButtons {
+            let active = button.tag == selectedDirection
+            WindowChrome.styleToolMode(button, active: active)
+            button.setAccessibilityValue(active)
+        }
     }
 
     @objc private func changeDirection(_ sender: NSButton) {
@@ -255,6 +263,20 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
     }
     private func update() {
         guard input != nil, output != nil else { return }
+        let titles = selectedDirection == 0 ? ["原文", "Unicode 转义"] : ["Unicode 转义", "解码文本"]
+        for (pane, title) in zip(panes, titles) { pane.setTitle(title) }
+        input.setAccessibilityLabel(titles[0])
+        output.setAccessibilityLabel(titles[1])
+        defer {
+            for action in resultActions { action.isEnabled = converted && !output.string.isEmpty }
+        }
+        if input.string.isEmpty {
+            converted = false
+            output.string = ""
+            status.stringValue = selectedDirection == 0 ? "输入文本后自动编码" : "输入 Unicode 转义后自动解码"
+            status.textColor = OpenAllTheme.muted
+            return
+        }
         if selectedDirection == 0 {
             output.string = UnicodeCodec.encode(input.string)
             converted = true

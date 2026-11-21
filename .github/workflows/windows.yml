@@ -14,6 +14,7 @@ on:
       - 'macos/comparison-editor/**'
       - 'shared/gold-core/**'
       - 'shared/gold-ui/**'
+      - 'shared/manual-ui/**'
       - '.github/workflows/windows.yml'
   pull_request:
     paths:
@@ -26,6 +27,7 @@ on:
       - 'macos/comparison-editor/**'
       - 'shared/gold-core/**'
       - 'shared/gold-ui/**'
+      - 'shared/manual-ui/**'
       - '.github/workflows/windows.yml'
 
 permissions:

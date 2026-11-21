@@ -217,7 +217,11 @@ private final class SelectionRowView: NSTableRowView {
         guard isSelected else { return }
         OpenAllTheme.accent.withAlphaComponent(0.18).setFill()
         let highlight = NSRect(x: 8, y: 3, width: max(0, bounds.width - 16), height: max(0, bounds.height - 6))
-        NSBezierPath(roundedRect: highlight, xRadius: 13, yRadius: 13).fill()
+        NSBezierPath(roundedRect: highlight, xRadius: 6, yRadius: 6).fill()
+        let mark = NSAttributedString(string: "↵", attributes: [
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: OpenAllTheme.accentText
+        ])
+        mark.draw(at: NSPoint(x: highlight.maxX - 26, y: round(highlight.midY - mark.size().height / 2)))
     }
 }
 
@@ -260,10 +264,10 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         actions = content.map { orderStore.sorted(Self.availableActions(for: $0), category: $0.category) } ?? []
         let loading = message?.hasPrefix("正在识别") == true
         let hasImage = image != nil || content?.category == "image"
-        let height: CGFloat = loading ? 360 : hasImage && actions.count <= 3 ? 410 : max(360, 222 + CGFloat(min(7, actions.count)) * 34)
+        let height: CGFloat = loading ? 360 : hasImage && actions.count <= 3 ? 410 : max(360, 204 + CGFloat(min(7, actions.count)) * 34)
         panel?.setContentSize(NSSize(width: 640, height: height))
         panel?.contentView?.viewWithTag(301)?.frame.origin.y = height - 43
-        contextLabel.frame.origin.y = height - 68
+        contextLabel.frame.origin.y = height - 35
         if case .image(let selectedImage) = content {
             contextLabel.stringValue = "选中的图片 · \(Int(selectedImage.size.width)) × \(Int(selectedImage.size.height))"
         } else {
@@ -285,16 +289,16 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
             cancelButton.frame.origin.y = 49
         } else if imagePreview.image != nil {
             emptyState.alignment = .center
-            imagePreview.frame = NSRect(x: 20, y: height - 220, width: 600, height: 140)
-            actionHeading.frame.origin.y = height - 246
+            imagePreview.frame = NSRect(x: 20, y: height - 196, width: 600, height: 140)
+            actionHeading.frame.origin.y = height - 224
             actionHeading.isHidden = false
-            actionScroll.frame = NSRect(x: 14, y: 42, width: 612, height: height - 294)
+            actionScroll.frame = NSRect(x: 14, y: 42, width: 612, height: height - 272)
             actionScroll.isHidden = false
         } else {
-            previewScroll.frame = NSRect(x: 20, y: height - 154, width: 600, height: 80)
-            actionHeading.frame.origin.y = height - 178
+            previewScroll.frame = NSRect(x: 20, y: height - 134, width: 600, height: 80)
+            actionHeading.frame.origin.y = height - 160
             actionHeading.isHidden = false
-            actionScroll.frame = NSRect(x: 14, y: 42, width: 612, height: height - 222)
+            actionScroll.frame = NSRect(x: 14, y: 42, width: 612, height: height - 204)
             actionScroll.isHidden = false
         }
         if let image = imagePreview.image {
@@ -303,7 +307,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
             imagePreview.frame.size.width = width
         }
         status.stringValue = loading ? "Esc 取消 · 识别完成后自动显示文字与可用操作" :
-            (message ?? "↑↓ 选择 · 回车执行 · Esc 关闭")
+            (message ?? (actions.isEmpty ? "Esc 关闭" : "↑↓ 选择　双击或回车执行　Esc 关闭"))
         table.deselectAll(nil)
         table.reloadData()
         emptyState.isHidden = !actions.isEmpty
@@ -348,14 +352,15 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         ButtonPressFeedback.install(on: window)
         let title = NSTextField(labelWithString: "对选中内容执行操作")
         title.tag = 301
-        title.font = .systemFont(ofSize: 14, weight: .medium)
+        title.font = .systemFont(ofSize: 16, weight: .semibold)
         title.textColor = OpenAllTheme.ink
-        title.frame = NSRect(x: 24, y: 467, width: 500, height: 30)
+        title.frame = NSRect(x: 24, y: 467, width: 278, height: 30)
         root.addSubview(title)
         contextLabel = NSTextField(labelWithString: "当前选中内容")
-        contextLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        contextLabel.textColor = OpenAllTheme.accentText
-        contextLabel.frame = NSRect(x: 24, y: 442, width: 570, height: 20)
+        contextLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        contextLabel.alignment = .right
+        contextLabel.textColor = OpenAllTheme.muted
+        contextLabel.frame = NSRect(x: 308, y: 475, width: 308, height: 20)
         root.addSubview(contextLabel)
         let previewScroll = NSScrollView(frame: NSRect(x: 20, y: 330, width: 600, height: 105))
         previewScroll.drawsBackground = true
@@ -401,9 +406,10 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         table.intercellSpacing = .zero
         table.backgroundColor = .clear
         table.selectionHighlightStyle = .none
+        table.setAccessibilityLabel("可用操作")
         table.allowsMultipleSelection = false
         table.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier("action")))
-        table.tableColumns.first?.width = 580
+        table.tableColumns.first?.width = 610
         table.delegate = self
         table.dataSource = self
         table.target = self
@@ -522,7 +528,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         detail.font = .systemFont(ofSize: 12)
         detail.textColor = OpenAllTheme.muted
         detail.alignment = .left
-        detail.frame = NSRect(x: 240, y: 9, width: 324, height: 21)
+        detail.frame = NSRect(x: 240, y: 9, width: 316, height: 21)
         cell.addSubview(title)
         cell.addSubview(detail)
         return cell

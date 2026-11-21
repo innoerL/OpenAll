@@ -195,17 +195,34 @@
     const grid = h('div', { class: 'editor-formatter-panes' });
     const inputPane = h('section', { class: 'editor-formatter-pane' }), outputPane = h('section', { class: 'editor-formatter-pane output' });
     const inputBox = h('div', { class: 'editor-codemirror' }), outputBox = h('div', { class: 'editor-codemirror' });
-    inputPane.append(h('div', { class: 'editor-pane-heading' }, '输入'), inputBox); outputPane.append(h('div', { class: 'editor-pane-heading' }, '结果'), outputBox); grid.append(inputPane, outputPane);
-    const status = h('span', { class: 'editor-formatter-status', role: 'status' }, mode === 'sqlFormat' ? '保留字面量与注释，仅整理安全可识别的 SQL' : 'YAML 缩进与 Properties 键值排版');
-    const action = button('格式化', () => run(), 'primary'), copy = button('复制结果', async () => { await api.copyText(output.value); status.textContent = '已复制结果'; }); copy.disabled = true;
-    host.append(grid, h('footer', { class: 'editor-formatter-footer' }, action, status, copy));
+    const inputCount = h('span', { class: 'formatter-count' }, '0 行');
+    const outputCount = h('span', { class: 'formatter-count' });
+    const status = h('span', { class: 'editor-formatter-status', role: 'status' });
+    const action = button('格式化', () => run(), 'primary');
+    action.append(h('kbd', { 'aria-hidden': 'true' }, 'Ctrl+↵'));
+    action.setAttribute('aria-keyshortcuts', 'Control+Enter');
+    const copy = button('复制结果', async () => { await api.copyText(output.value); status.textContent = '已复制结果'; });
+    copy.disabled = true;
+    inputPane.append(h('div', { class: 'editor-pane-heading' }, '原文', inputCount), inputBox);
+    outputPane.append(h('div', { class: 'editor-pane-heading' }, '结果', outputCount, copy), outputBox);
+    grid.append(inputPane, outputPane);
+    host.append(grid, h('footer', { class: 'editor-formatter-footer' }, action, status));
     let input, output, work, disposed = false, revision = 0, busy = false;
-    input = window.OpenAllJSONEditor.create({ parent: inputBox, syntax: mode === 'sqlFormat' ? 'sql' : 'config', placeholder: mode === 'sqlFormat' ? '粘贴 SQL 语句' : '粘贴 YAML 或 Properties 内容', label: '格式化输入', onChange: () => revision++, onFormat: () => run(), onNotice: text => status.textContent = text });
+    function sourceChanged() {
+      revision++;
+      if (!input) return;
+      inputCount.textContent = (input.length ? input.lineCount : 0) + ' 行';
+      if (output?.length) outputCount.textContent = '等待重新处理';
+      copy.disabled = true;
+      status.classList.remove('error');
+      status.textContent = '';
+    }
+    input = window.OpenAllJSONEditor.create({ parent: inputBox, syntax: mode === 'sqlFormat' ? 'sql' : 'config', placeholder: mode === 'sqlFormat' ? '粘贴 SQL 语句' : '粘贴 YAML 或 Properties 内容', label: '格式化输入', onChange: sourceChanged, onFormat: () => run(), onNotice: text => status.textContent = text });
     output = window.OpenAllJSONEditor.create({ parent: outputBox, syntax: mode === 'sqlFormat' ? 'sql' : 'config', placeholder: '格式化结果显示在这里', label: '格式化结果', readOnly: true });
     async function run() {
-      work?.cancel(); const version = revision, current = work = task(mode, input.value); busy = true; action.disabled = true; status.textContent = '正在后台整理…';
-      try { const result = await current.promise; if (disposed || version !== revision) return false; output.setText(result.text, true); copy.disabled = !output.length; status.textContent = result.kind || 'SQL 格式化完成'; status.classList.remove('error'); return true; }
-      catch (error) { if (!error.cancelled && !disposed) { status.textContent = error.message; status.classList.add('error'); } return false; }
+      work?.cancel(); const version = revision, current = work = task(mode, input.value); busy = true; action.disabled = copy.disabled = true; status.textContent = '正在后台整理…';
+      try { const result = await current.promise; if (disposed || version !== revision) return false; output.setText(result.text, true); copy.disabled = !output.length; outputCount.textContent = (output.length ? output.lineCount : 0) + ' 行'; status.textContent = result.kind || 'SQL 格式化完成'; status.classList.remove('error'); return true; }
+      catch (error) { if (!error.cancelled && !disposed && version === revision) { status.textContent = error.message; status.classList.add('error'); } return false; }
       finally { if (work === current) { busy = false; action.disabled = false; } }
     }
     input.setText(typeof ctx.initialValue === 'string' ? ctx.initialValue : ''); input.focus();

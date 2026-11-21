@@ -23,13 +23,17 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
     private let header = NSView()
     private let scroll = NSScrollView()
     private var rows: [Row] = []
-    private var widths: [CGFloat] = []
+    private let numericColumns: Set<Int>
     private let empty = NSTextField(labelWithString: "粘贴内容并运行分析，结果会显示在这里")
-    init(frame: NSRect, columns: [(String, CGFloat)]) {
+    init(frame: NSRect, columns: [(String, CGFloat)], numericColumns: Set<Int> = []) {
+        self.numericColumns = numericColumns
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.backgroundColor = OpenAllTheme.surface.cgColor
         layer?.cornerRadius = 6
+        layer?.borderWidth = 0.5
+        layer?.borderColor = OpenAllTheme.rule.cgColor
+        layer?.masksToBounds = true
         header.wantsLayer = true
         header.layer?.backgroundColor = OpenAllTheme.sidebar.cgColor
         addSubview(header)
@@ -47,11 +51,11 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
             let cell = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("\(index)"))
             cell.width = column.1
             table.addTableColumn(cell)
-            widths.append(column.1)
             let label = NSTextField(labelWithString: column.0)
             label.font = .systemFont(ofSize: 12, weight: .medium)
             label.textColor = OpenAllTheme.muted
-            label.frame = NSRect(x: x + 16, y: 8, width: column.1 - 24, height: 20)
+            label.frame = NSRect(x: x + 12, y: 6, width: column.1 - 24, height: 18)
+            label.alignment = numericColumns.contains(index) ? .right : .left
             header.addSubview(label)
             x += column.1
         }
@@ -69,12 +73,18 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
     required init?(coder: NSCoder) { fatalError("不支持从归档创建") }
     override func layout() {
         super.layout()
-        header.frame = NSRect(x: 0, y: bounds.height - 36, width: bounds.width, height: 36)
-        scroll.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - 36))
+        header.frame = NSRect(x: 0, y: bounds.height - 30, width: bounds.width, height: 30)
+        scroll.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - 30))
         table.sizeLastColumnToFit()
         empty.frame = NSRect(x: 24, y: max(12, (bounds.height - 60) / 2), width: bounds.width - 48, height: 24)
     }
-    func display(_ rows: [Row]) { self.rows = rows; empty.isHidden = !rows.isEmpty; table.reloadData(); needsLayout = true }
+    func display(_ rows: [Row], emptyText: String = "粘贴内容并运行分析，结果会显示在这里") {
+        self.rows = rows
+        empty.stringValue = emptyText
+        empty.isHidden = !rows.isEmpty
+        table.reloadData()
+        needsLayout = true
+    }
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard let column = tableColumn, let index = Int(column.identifier.rawValue), rows.indices.contains(row) else { return nil }
@@ -85,9 +95,13 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
             view.layer?.backgroundColor = OpenAllTheme.surface.withAlphaComponent(0.3).cgColor
         }
         let text = NSTextField(labelWithString: index < item.values.count ? item.values[index] : "")
-        text.frame = NSRect(x: 16, y: 7, width: column.width - 28, height: 22)
+        text.frame = NSRect(x: 12, y: 7, width: column.width - 24, height: 22)
         text.autoresizingMask = [.width]
-        text.font = index == 0 ? .monospacedSystemFont(ofSize: 13, weight: item.tone == "group" ? .regular : .regular) : .systemFont(ofSize: 13)
+        text.font = .systemFont(ofSize: 13, weight: item.tone == "group" ? .semibold : .regular)
+        if numericColumns.contains(index) {
+            text.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+            text.alignment = .right
+        }
         text.textColor = item.tone == "group" ? OpenAllTheme.muted : OpenAllTheme.ink
         if (item.tone == "warning" && index == 1) || (item.tone == "risk" && index == 5) { text.textColor = .systemOrange }
         if item.tone == "added", index > 0 { text.textColor = .systemGreen }
@@ -119,6 +133,7 @@ final class BackendWorkbenchWindow: NSObject {
     private var reportView: AnalysisReportView?
     private var manualRuleExpanded = false
     private var reportSummary: NSTextField?
+    private weak var copyResultButton: NSButton?
     private var result: NSTextView?
     private var status: NSTextField!
     private var reveal: NSButton?
@@ -180,7 +195,7 @@ final class BackendWorkbenchWindow: NSObject {
         for selected in BackendMode.allCases {
             let tab = NSButton(title: selected.title, target: self, action: #selector(selectTab(_:)))
             tab.tag = selected.rawValue
-            tab.frame = NSRect(x: 32 + selected.rawValue * 235, y: 576, width: 222, height: 37)
+            tab.frame = NSRect(x: 28 + selected.rawValue * 124, y: 583, width: 120, height: 32)
             root.addSubview(tab)
             tabs.append(tab)
         }
@@ -207,6 +222,11 @@ final class BackendWorkbenchWindow: NSObject {
         let control = NSButton(title: title, target: self, action: action)
         control.frame = NSRect(x: x, y: y, width: w, height: 30)
         WindowChrome.styleAction(control, primary: primary)
+        if primary {
+            control.keyEquivalent = "\r"
+            control.keyEquivalentModifierMask = [.command]
+            control.toolTip = title + "（⌘↵）"
+        }
         body.addSubview(control)
         return control
     }
@@ -260,7 +280,11 @@ final class BackendWorkbenchWindow: NSObject {
         left = nil; right = nil; result = nil; reveal = nil
         groupField = nil; timeField = nil; manualRule = nil; logs = []; logFields = []
         status.stringValue = ""
-        for tab in tabs { WindowChrome.styleToolMode(tab, active: tab.tag == mode.rawValue) }
+        for tab in tabs {
+            let selected = tab.tag == mode.rawValue
+            WindowChrome.styleToolMode(tab, active: selected)
+            tab.setAccessibilityValue(selected ? "已选中" : "未选中")
+        }
         switch mode {
         case .config:
             body.addSubview(label("左侧配置", x: 4, y: 438, w: 300, h: 24, size: 13, weight: .medium))
@@ -307,7 +331,8 @@ final class BackendWorkbenchWindow: NSObject {
             _ = button("还原 SQL", x: 4, y: 183, w: 110, action: #selector(analyze), primary: true)
             result = editor(x: 4, y: 4, w: 948, h: 170, placeholder: "还原后的语句会显示在这里", editable: false)
         }
-        _ = button("复制结果", x: 834, y: mode == .logs ? 172 : 183, w: 118, action: #selector(copyResult))
+        copyResultButton = button("复制结果", x: 844, y: mode == .logs ? 172 : 183, w: 108, action: #selector(copyResult))
+        copyResultButton?.isEnabled = false
         for view in body.subviews where view !== result?.enclosingScrollView { view.frame.origin.y += 50 }
         if let output = result?.enclosingScrollView { output.frame.size.height += 40 }
         if let text = left as? OpenAllTextView { text.highlightsJSON = mode == .explain || mode == .logs; text.highlightsConfig = mode == .config; text.highlightsSQL = mode == .sql }
@@ -393,6 +418,16 @@ final class BackendWorkbenchWindow: NSObject {
             body.addSubview(summary)
             reportSummary = summary
         }
+        if mode == .logs, let output = result?.enclosingScrollView {
+            output.frame.size.height = 222
+            let summary = label("事件时间线", x: 4, y: 232, w: 720, h: 24, size: 13, weight: .semibold)
+            body.addSubview(summary)
+            reportSummary = summary
+            if let copyResultButton {
+                copyResultButton.frame.origin.y = 228
+                WindowChrome.styleOutputAction(copyResultButton)
+            }
+        }
         if mode != .sql, let output = result?.enclosingScrollView {
             let columns: [(String, CGFloat)]
             switch mode {
@@ -401,7 +436,7 @@ final class BackendWorkbenchWindow: NSObject {
             case .logs: columns = [("时间 / 聚合项", 320), ("级别", 96), ("消息", 532)]
             case .sql: columns = []
             }
-            let report = AnalysisReportView(frame: output.frame, columns: columns)
+            let report = AnalysisReportView(frame: output.frame, columns: columns, numericColumns: mode == .explain ? [2, 3, 4] : [])
             output.isHidden = true
             body.addSubview(report)
             reportView = report
@@ -418,6 +453,9 @@ final class BackendWorkbenchWindow: NSObject {
     @objc private func analyze() {
         guard let input = left?.string, let result else { return }
         reportView?.display([])
+        reportSummary?.textColor = OpenAllTheme.ink
+        reportSummary?.stringValue = mode == .config ? "差异结果" : mode == .explain ? "计划节点" : mode == .logs ? "事件时间线" : "还原结果"
+        defer { copyResultButton?.isEnabled = !result.string.isEmpty }
         switch mode {
         case .config:
             guard let other = right?.string else { return }
@@ -429,7 +467,7 @@ final class BackendWorkbenchWindow: NSObject {
                 reportView?.display(keys.filter { a[$0] != b[$0] }.map { key in
                     let masked = reveal?.state != .on && key.range(of: #"password|passwd|secret|token|api.?key|credential|authorization|private.?key"#, options: [.regularExpression, .caseInsensitive]) != nil
                     return AnalysisReportView.Row(values: [a[key] == nil ? "＋ 新增" : b[key] == nil ? "− 删除" : "~ 修改", key, a[key].map { (masked ? "••••" : $0.value) + " · " + $0.type } ?? "—", b[key].map { (masked ? "••••" : $0.value) + " · " + $0.type } ?? "—"], tone: a[key] == nil ? "added" : b[key] == nil ? "removed" : "changed")
-                })
+                }, emptyText: "两份配置相同")
                 reportSummary?.stringValue = "差异结果 · \(diff.changed) 项变更"
                 status.stringValue = "左侧 \(a.count) 项 · 右侧 \(b.count) 项"
             } catch let issue as BackendIssue {
@@ -537,12 +575,14 @@ final class BackendWorkbenchWindow: NSObject {
             }.joined(separator: "\n\n")
         }.joined(separator: "\n\n────────────────────────────────────────\n\n")
         reportView?.display(reportRows)
+        reportSummary?.stringValue = "事件时间线 · \(logs.count) 条日志 · \(groups.count) 个分组"
+        copyResultButton?.isEnabled = !result.string.isEmpty
     }
 
     @objc private func copyResult() {
         guard let text = result?.string, !text.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        status.stringValue += " · 结果已复制"
+        status.stringValue = "结果已复制"
     }
 }

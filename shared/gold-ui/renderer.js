@@ -222,13 +222,22 @@ function renderOutlook() {
   const number = forecastInstrument === 'gold' ? amount : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 });
   const target = $('#forecast-rows');
   target.replaceChildren();
-  $('#forecast-meta').textContent = data ?
-    `基准 ${data.anchor.date}  ${number.format(data.anchor.price)} ${unit} · 模型 ${data.version || verification.version || '—'} · 方向概率未校准${data.provisional ? ' · 数据尚未就绪，暂估' : ''}` :
-    '等待足够的最新历史报价或参考汇率';
+  const meta = $('#forecast-meta');
+  if (data) {
+    const baseline = element('span', undefined, 'forecast-baseline');
+    baseline.append('基准 ', element('strong', `${number.format(data.anchor.price)} ${unit}`), ' · ', data.anchor.date);
+    const model = element('span', `模型 ${data.version || verification.version || '—'} · 方向概率未校准${data.provisional ? ' · 数据尚未就绪，暂估' : ''}`);
+    meta.replaceChildren(baseline, model);
+  } else {
+    meta.textContent = '等待足够的最新历史报价或参考汇率';
+  }
   $('#forecast-table').hidden = !data;
   for (const item of data?.days ?? []) {
     const row = element('tr');
-    const day = `${item.date.slice(5).replace('-', '/')} ${weekday.format(new Date(item.date))}`;
+    const dateCell = element('td');
+    const date = element('time', item.date.slice(5).replace('-', '/'));
+    date.dateTime = item.date;
+    dateCell.append(date, ' ', element('span', weekday.format(new Date(item.date)), 'weekday'));
     const trend = element('td');
     if (item.model) {
       trend.dataset.direction = item.direction;
@@ -244,10 +253,7 @@ function renderOutlook() {
     const price = element('td', item.mid ? number.format(item.mid) : '—');
     price.title = item.mid ? (item.pointMethod === 'persistence' ?
       '参考估计沿用基准价，方向概率与区间另行估计；不代表保证价格不变' : '参考估计来自历史情景；方向概率不是价格命中率') : '';
-    row.append(
-      element('td', day), trend, price,
-      element('td', item.low ? `${number.format(item.low)} – ${number.format(item.high)}` : '—'),
-    );
+    row.append(dateCell, trend, price, element('td', item.low ? `${number.format(item.low)} – ${number.format(item.high)}` : '—'));
     target.append(row);
   }
 

@@ -8,12 +8,14 @@ on:
       - 'macos/**'
       - 'shared/gold-core/**'
       - 'shared/gold-ui/**'
+      - 'shared/manual-ui/**'
       - '.github/workflows/macos.yml'
   pull_request:
     paths:
       - 'macos/**'
       - 'shared/gold-core/**'
       - 'shared/gold-ui/**'
+      - 'shared/manual-ui/**'
       - '.github/workflows/macos.yml'
 
 permissions:
@@ -108,11 +110,18 @@ jobs:
           OPENALL_PREVIEW_OUTPUT="$PWD/macos/.build/ci-logs/json-ui" \
           OPENALL_JSON_CHECK=1 \
           macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot -NSApplicationCrashOnExceptions YES 2>&1 | tee macos/.build/ci-logs/json-ui.log
+      - name: 验证工具窗口并保存实际截图
+        timeout-minutes: 6
+        run: |
+          OPENALL_PREVIEW_ROOT="$RUNNER_TEMP/openall-tool-preview" \
+          OPENALL_PREVIEW_OUTPUT="$PWD/macos/.build/ci-logs/tool-pages" \
+          OPENALL_DESIGN_LAYOUT_ONLY=1 NSUnbufferedIO=YES \
+          macos/.build/OpenAll.app/Contents/MacOS/OpenAll --design-snapshot -NSApplicationCrashOnExceptions YES 2>&1 | tee macos/.build/ci-logs/tool-pages.log
       - name: 打包并生成校验值
         run: |
           ditto -c -k --sequesterRsrc --keepParent macos/.build/OpenAll.app macos/.build/OpenAll-macOS-Universal.zip
           (cd macos/.build && shasum -a 256 OpenAll-macOS-Universal.zip > SHA256SUMS.txt)
-          printf '## macOS 云端构建通过\n已验证：Swift 语法、纯模型回归、Intel 与 Apple Silicon 双架构、本地签名完整性。\n产物未经过 Apple 公证；图形界面与系统授权需本地验收。\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '## macOS 云端构建通过\n已验证 Swift 模型、Intel 与 Apple Silicon 双架构、本地签名、实际工具窗口和编辑器交互。\n产物未经过 Apple 公证。系统授权取决于用户设备。\n' >> "$GITHUB_STEP_SUMMARY"
       - name: 保存构建与检查日志
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

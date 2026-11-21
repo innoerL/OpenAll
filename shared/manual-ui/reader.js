@@ -1,0 +1,77 @@
+/* 手册正文由宿主的 Markdown 渲染器生成，筛选与复制只处理已有条目。 */
+window.mountOpenAllManual = function (host, article, actions) {
+  const toolbar = document.createElement('div');
+  toolbar.className = 'manual-toolbar';
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'aux-input';
+  search.placeholder = '搜索命令或用途';
+  search.setAttribute('aria-label', search.placeholder);
+  const status = document.createElement('span');
+  status.className = 'manual-count';
+  status.setAttribute('role', 'status');
+  toolbar.append(search, status);
+  function button(title, action) {
+    const element = document.createElement('button');
+    element.type = 'button'; element.textContent = title;
+    element.addEventListener('click', action);
+    toolbar.append(element);
+  }
+  let feedbackTimer;
+  let searchSummary = '';
+  async function copyCommand(action) {
+    clearTimeout(feedbackTimer);
+    try {
+      await action();
+      status.textContent = '已复制';
+    } catch {
+      status.textContent = '复制失败';
+    }
+    feedbackTimer = setTimeout(() => { status.textContent = searchSummary; }, 1500);
+  }
+  button('复制全文', () => copyCommand(actions.copyAll));
+  if (actions.openOriginal) button('用默认应用打开', actions.openOriginal);
+  article.classList.add('manual-article');
+  host.classList.add('manual-reader');
+  host.replaceChildren(toolbar, article);
+  const groups = [];
+  for (const heading of article.querySelectorAll('h2')) {
+    const blocks = [];
+    for (let next = heading.nextElementSibling; next && next.tagName !== 'H2'; next = next.nextElementSibling) blocks.push(next);
+    const rows = blocks.flatMap(block => [...block.querySelectorAll('tbody tr')]);
+    const entries = rows.length ? rows : blocks.filter(block => block.matches('pre,p,ul,ol'));
+    groups.push({heading, blocks, entries});
+  }
+  for (const entry of article.querySelectorAll('td code, pre')) {
+    entry.classList.add('aux-copyable'); entry.tabIndex = 0; entry.setAttribute('role', 'button');
+    entry.title = '复制命令'; entry.setAttribute('aria-label', '复制命令 ' + entry.textContent);
+    entry.addEventListener('click', () => copyCommand(() => actions.copy(entry.textContent)));
+    entry.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); entry.click(); }
+    });
+  }
+  const filter = () => {
+    const query = search.value.trim().toLowerCase();
+    let matches = 0;
+    for (const {heading, blocks, entries} of groups) {
+      const headingMatch = heading.textContent.toLowerCase().includes(query);
+      const visible = entries.filter(entry => headingMatch || entry.textContent.toLowerCase().includes(query));
+      heading.hidden = !visible.length;
+      for (const block of blocks) block.hidden = !visible.length;
+      for (const entry of entries) entry.hidden = !visible.includes(entry);
+      matches += visible.length;
+    }
+    clearTimeout(feedbackTimer);
+    searchSummary = query ? (matches ? `${matches} 项匹配` : '没有匹配项') : '';
+    status.textContent = searchSummary;
+    article.scrollTop = 0;
+  };
+  search.addEventListener('input', filter);
+  const shortcut = event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+      event.preventDefault(); search.focus(); search.select();
+    }
+  };
+  host.addEventListener('keydown', shortcut);
+  return {focus: () => search.focus(), dispose: () => { clearTimeout(feedbackTimer); host.removeEventListener('keydown', shortcut); host.classList.remove('manual-reader'); }};
+};

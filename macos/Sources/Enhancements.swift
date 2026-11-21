@@ -279,7 +279,6 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
     private var status: NSTextField!
     private var actionButton: NSButton!
     private var copyButton: NSButton!
-    private var shortcutHint: NSTextField!
     private var inputSummary: NSTextField!
     private var outputSummary: NSTextField!
     private var changeLegend: NSView!
@@ -289,8 +288,7 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         if window == nil { build() }
         mode = selected
         WindowChrome.updateTitle(on: window, to: selected == .configuration ? "配置格式化" : "SQL 格式化")
-        actionButton.title = "格式化"
-        shortcutHint.stringValue = "⌘↵"
+        actionButton.title = "格式化  ⌘↵"
         for text in [input, output].compactMap({ $0 as? OpenAllTextView }) {
             text.highlightsSQL = selected == .sql
             text.highlightsConfig = selected == .configuration
@@ -332,12 +330,15 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
             root.addSubview(label)
             return label
         }
-        _ = label("原文", x: 24, y: 352, width: 120, size: 13, color: OpenAllTheme.ink)
-        _ = label("结果", x: 504, y: 352, width: 120, size: 13, color: OpenAllTheme.ink)
-        inputSummary = label("", x: 260, y: 352, width: 192)
-        outputSummary = label("", x: 700, y: 352, width: 232)
-        inputSummary.alignment = .right
-        outputSummary.alignment = .right
+        for (title, x) in [("原文", 24), ("结果", 504)] {
+            label(title, x: CGFloat(x), y: 352, width: 48, size: 13, color: OpenAllTheme.ink).font = .systemFont(ofSize: 13, weight: .semibold)
+        }
+        inputSummary = label("", x: 70, y: 352, width: 245)
+        outputSummary = label("", x: 550, y: 352, width: 269)
+        for summary in [inputSummary, outputSummary] {
+            summary?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            summary?.lineBreakMode = .byTruncatingTail
+        }
         func editor(_ x: CGFloat, _ placeholder: String, editable: Bool) -> NSTextView {
             let scroll = NSScrollView(frame: NSRect(x: x, y: 64, width: 456, height: 282))
             scroll.hasVerticalScroller = true
@@ -379,30 +380,29 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
             rule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
             root.addSubview(rule)
         }
-        let action = NSButton(title: "格式化", target: self, action: #selector(run))
+        let action = NSButton(title: "格式化  ⌘↵", target: self, action: #selector(run))
         action.frame = NSRect(x: 24, y: 16, width: 100, height: 30)
         WindowChrome.styleAction(action, primary: true)
         action.keyEquivalent = "\r"
         action.keyEquivalentModifierMask = [.command]
         root.addSubview(action)
         actionButton = action
-        shortcutHint = label("⌘↵", x: 136, y: 20, width: 100)
         let copy = NSButton(title: "复制结果", target: self, action: #selector(copyResult))
-        copy.frame = NSRect(x: 816, y: 16, width: 120, height: 30)
+        copy.frame = NSRect(x: 844, y: 348, width: 92, height: 27)
         WindowChrome.styleOutputAction(copy)
         copy.keyEquivalent = "c"
         copy.keyEquivalentModifierMask = [.command, .shift]
         copy.toolTip = "复制结果（⇧⌘C）"
         root.addSubview(copy)
         copyButton = copy
-        status = label("在本机处理", x: 504, y: 7, width: 300)
-        status.alignment = .right
+        status = label("", x: 150, y: 7, width: 758)
+        status.alignment = .left
         status.frame.size.height = 32
         status.cell?.usesSingleLineMode = false
         status.cell?.wraps = true
         status.cell?.isScrollable = false
         status.maximumNumberOfLines = 2
-        changeLegend = NSView(frame: NSRect(x: 504, y: 24, width: 2, height: 11))
+        changeLegend = NSView(frame: NSRect(x: 140, y: 24, width: 2, height: 11))
         changeLegend.wantsLayer = true
         changeLegend.layer?.backgroundColor = OpenAllTheme.accent.cgColor
         changeLegend.isHidden = true
@@ -416,13 +416,10 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         inputSummary.stringValue = "\(input.string.components(separatedBy: "\n").count) 行"
         outputSummary.stringValue = "等待重新处理"
         changeLegend.isHidden = true
-        status.frame.origin.x = 504
         status.stringValue = "原文已更改"
         copyButton.isEnabled = false
         (output as? OpenAllTextView)?.changedLineNumbers = []
         output.enclosingScrollView?.verticalRulerView?.needsDisplay = true
-        WindowChrome.styleAction(actionButton, primary: true)
-        WindowChrome.styleAction(copyButton)
     }
 
     func showDesignSample(_ selected: Mode) {
@@ -440,7 +437,13 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         inputSummary.stringValue = "\(input.string.components(separatedBy: "\n").count) 行"
         outputSummary.stringValue = ""
         changeLegend.isHidden = true
-        status.frame.origin.x = 504
+        if input.string.isEmpty {
+            inputSummary.stringValue = "0 行"
+            output.string = ""
+            status.stringValue = ""
+            copyButton.isEnabled = false
+            return
+        }
         switch mode {
         case .configuration:
             if let result = LocalTextTools.formatConfiguration(input.string) {
@@ -454,10 +457,6 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
                 status.stringValue = changed == 0 ? "格式已规范" : "行侧标记：格式调整"
                 outputSummary.stringValue += changed > 0 ? " · \(changed) 行已调整" : " · 无改动"
                 changeLegend.isHidden = changed == 0
-                if changed > 0 {
-                    let textWidth = (status.stringValue as NSString).size(withAttributes: [.font: status.font!]).width
-                    changeLegend.frame.origin.x = status.frame.maxX - min(280, textWidth) - 10
-                }
             }
             else { output.string = ""; status.stringValue = "配置格式无法识别；请检查 YAML 或 Properties 语法" }
         case .sql:
@@ -473,8 +472,6 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         copyButton.isEnabled = !output.string.isEmpty
         input.enclosingScrollView?.verticalRulerView?.needsDisplay = true
         output.enclosingScrollView?.verticalRulerView?.needsDisplay = true
-        WindowChrome.styleAction(actionButton, primary: output.string.isEmpty)
-        WindowChrome.styleAction(copyButton, primary: !output.string.isEmpty)
     }
 
     @objc private func copyResult() {
@@ -482,7 +479,6 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(output.string, forType: .string)
         changeLegend.isHidden = true
-        status.frame.origin.x = 504
         status.stringValue = "已复制结果"
     }
 }

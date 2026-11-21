@@ -143,7 +143,7 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
         preview.layer?.masksToBounds = true
         preview.layer?.borderWidth = 0
         preview.layer?.borderColor = OpenAllTheme.rule.cgColor
-        split.addSubview(ToolPane(title: "Markdown", content: left, actions: [help, copy], size: NSSize(width: 468, height: 454)))
+        split.addSubview(ToolPane(title: "Markdown 源文", content: left, actions: [help, copy], size: NSSize(width: 468, height: 454)))
         split.addSubview(ToolPane(title: "实时预览", content: preview, size: NSSize(width: 468, height: 454)))
         split.adjustSubviews()
         WindowChrome.installControls(on: w)
@@ -320,7 +320,7 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
     @objc private func copyAll() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(editor.string, forType: .string)
-        copyButton?.title = "已复制 Markdown"
+        copyButton?.title = "已复制"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
             self?.copyButton?.title = "复制 Markdown"
         }
@@ -356,6 +356,98 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
                 preview.evaluateJavaScript("window.renderMarkdown(\(json)[0])") { _, _ in }
             }
         }
+    }
+}
+
+private final class ManualReaderView: WKWebView, WindowThemeRefreshing {
+    func refreshWindowTheme() {
+        let tokens = ["canvas": OpenAllTheme.canvas, "surface": OpenAllTheme.surface, "raised": OpenAllTheme.raised,
+                      "ink": OpenAllTheme.ink, "muted": OpenAllTheme.muted, "accent-text": OpenAllTheme.accentText,
+                      "rule": OpenAllTheme.isLight ? NSColor(white: 0.78, alpha: 1) : OpenAllTheme.raised]
+        let colors = tokens.mapValues { OpenAllTheme.hex($0) }
+        callAsyncJavaScript("for (const [key,value] of Object.entries(colors)) document.documentElement.style.setProperty('--'+key,value); document.documentElement.style.colorScheme=scheme;", arguments: ["colors": colors, "scheme": OpenAllTheme.isLight ? "light" : "dark"], in: nil, in: .page, completionHandler: nil)
+    }
+}
+
+final class CommandManualWindow: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    private var window: NSWindow?
+    private var web: ManualReaderView?
+    private var source = ""
+    private var documentURL: URL?
+    private var ready = false
+
+    func show() {
+        if window == nil {
+            guard let file = Bundle.main.url(forResource: "OpenAll-命令手册", withExtension: "md") else { return }
+            guard let page = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "manual-ui"),
+                  let text = try? String(contentsOf: file, encoding: .utf8) else { NSWorkspace.shared.open(file); return }
+            source = text
+            documentURL = file
+            let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 560),
+                                 styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            panel.isReleasedWhenClosed = false
+            WindowChrome.apply(panel, title: "Shell 与 Java 命令手册")
+            panel.minSize = NSSize(width: 500, height: 330)
+            panel.center()
+            let config = WKWebViewConfiguration()
+            config.websiteDataStore = .nonPersistent()
+            config.userContentController.add(self, name: "manualAction")
+            let reader = ManualReaderView(frame: NSRect(x: 0, y: 0, width: 900, height: 560 - WindowChrome.height), configuration: config)
+            reader.autoresizingMask = [.width, .height]
+            reader.navigationDelegate = self
+            panel.contentView?.addSubview(reader)
+            WindowChrome.installControls(on: panel)
+            window = panel
+            web = reader
+            reader.loadFileURL(page, allowingReadAccessTo: page.deletingLastPathComponent())
+        }
+        WindowChrome.present(window)
+        WindowChrome.activate()
+        window?.makeFirstResponder(web)
+        if ready { web?.evaluateJavaScript("document.querySelector('input').focus()") }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        web?.refreshWindowTheme()
+        let script = """
+        const article = document.createElement('article');
+        article.innerHTML = body;
+        const post = data => window.webkit.messageHandlers.manualAction.postMessage(data);
+        window.mountOpenAllManual(document.body, article, {copy: text => post({text}), copyAll: () => post({action:'copyAll'}), openOriginal: () => post({action:'open'})}).focus();
+        """
+        webView.callAsyncJavaScript(script, arguments: ["body": MarkdownRenderer.body(source)], in: nil, in: .page) { [weak self] result in
+            if case .success = result { self?.ready = true }
+        }
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+        if navigationAction.navigationType == .linkActivated, ["https", "http"].contains(url.scheme) { NSWorkspace.shared.open(url) }
+        let bundledPage = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "manual-ui")
+        decisionHandler(url == bundledPage ? .allow : .cancel)
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, let data = message.body as? [String: String] else { return }
+        if data["action"] == "open", let documentURL { NSWorkspace.shared.open(documentURL); return }
+        guard let text = data["action"] == "copyAll" ? source : data["text"] else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    @MainActor func verifyForDesign() async throws {
+        guard DesignPreview.enabled, let web, let window else { throw NSError(domain: "CommandManualWindow", code: 1) }
+        for _ in 0..<100 where !ready { try await Task.sleep(nanoseconds: 50_000_000) }
+        let result = try await web.evaluateJavaScript("""
+        (() => {const input=document.querySelector('input[type=search]'); if(!input)return false;
+        const update=value=>{input.value=value;input.dispatchEvent(new Event('input'))};
+        const matching=()=>[...document.querySelectorAll('tbody tr')].filter(row=>!row.closest('[hidden]'));
+        const total=matching().length;update('journalctl');const ok=matching().length>0&&matching().length<total&&!!document.querySelector('td code[role=button]');
+        update('OpenAll-无此命令');const empty=document.querySelector('[role=status]').textContent==='没有匹配项';update('');return ok&&empty&&matching().length===total;})()
+        """)
+        guard result as? Bool == true else { throw NSError(domain: "CommandManualFilter", code: 1) }
+        try await DesignPreview.captureWeb(window, name: "04-command-manual")
     }
 }
 

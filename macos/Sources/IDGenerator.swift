@@ -238,6 +238,7 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
     private var day: NSTextField!
     private var count: NSTextField!
     private var result: NSTextView!
+    private var resultLabel: NSTextField!
     private var status: NSTextField!
 
     func show() {
@@ -311,9 +312,9 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         WindowChrome.styleAction(generate, primary: true)
         generate.keyEquivalent = "\r"
         root.addSubview(generate)
-        let resultLabel = NSTextField(labelWithString: "生成结果")
-        resultLabel.font = .systemFont(ofSize: 11, weight: .regular)
-        resultLabel.textColor = OpenAllTheme.muted
+        resultLabel = NSTextField(labelWithString: "生成结果")
+        resultLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        resultLabel.textColor = OpenAllTheme.ink
         resultLabel.frame = NSRect(x: 24, y: 220, width: 160, height: 24)
         root.addSubview(resultLabel)
         let scroll = NSScrollView(frame: NSRect(x: 24, y: 54, width: 612, height: 156))
@@ -324,7 +325,6 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         paragraph.maximumLineHeight = 26
         result.defaultParagraphStyle = paragraph
         result.isRichText = false
-        result.textContainerInset = NSSize(width: 16, height: 12)
         result.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         result.isEditable = false
         result.isSelectable = true
@@ -344,6 +344,12 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         copy.frame = NSRect(x: 532, y: 216, width: 104, height: 28)
         WindowChrome.styleOutputAction(copy)
         root.addSubview(copy)
+        for (field, title) in [(province!, "省份"), (city!, "城市"), (region!, "区县"), (gender!, "性别")] { field.setAccessibilityLabel(title) }
+        for (field, title) in [(year!, "出生年份"), (month!, "出生月份"), (day!, "出生日期"), (count!, "生成数量")] { field.setAccessibilityLabel(title) }
+        for view in root.subviews { view.autoresizingMask = [.minYMargin] }
+        scroll.autoresizingMask = [.width, .height]
+        copy.autoresizingMask = [.minXMargin, .minYMargin]
+        status.autoresizingMask = [.width]
         WindowChrome.installControls(on: w)
         window = w
         regenerate()
@@ -473,6 +479,7 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
             status.textColor = .systemRed
             return
         }
+        resultLabel.stringValue = "生成结果 · \(numbers.count) 条"
         result.string = numbers.joined(separator: "\n")
         status.stringValue = "已生成 \(numbers.count) 个格式有效的测试号码" + (birthday.map { " · 出生日期 " + $0.text } ?? "")
         status.textColor = .secondaryLabelColor
@@ -484,13 +491,14 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         let savedProvince = province.indexOfSelectedItem, savedCity = city.indexOfSelectedItem, savedRegion = region.indexOfSelectedItem
         let fields = [age!, year!, month!, day!, count!]
         let savedValues = fields.map(\.stringValue), savedGender = gender.indexOfSelectedItem
-        let savedResult = result.string, savedStatus = status.stringValue, savedStatusColor = status.textColor
+        let savedResult = result.string, savedHeading = resultLabel.stringValue, savedStatus = status.stringValue, savedStatusColor = status.textColor
         defer {
             province.selectItem(at: savedProvince); provinceChanged()
             city.selectItem(at: savedCity); cityChanged()
             region.selectItem(at: savedRegion); regionChanged()
             gender.selectItem(at: savedGender)
             for (field, value) in zip(fields, savedValues) { field.stringValue = value }
+            resultLabel.stringValue = savedHeading
             result.string = savedResult; status.stringValue = savedStatus; status.textColor = savedStatusColor
             markAgeInvalid(false)
         }

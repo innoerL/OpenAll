@@ -391,40 +391,39 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             let card = NSView(frame: NSRect(x: (size.width - 440) / 2, y: (view.frame.height - 200) / 2, width: 440, height: 200))
             card.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
             state.addSubview(card)
-            let icon = NSImageView(frame: NSRect(x: 194, y: 150, width: 52, height: 40))
+            let icon = NSImageView(frame: NSRect(x: 10, y: 114, width: 40, height: 36))
             icon.image = NSImage(systemSymbolName: "wifi.exclamationmark", accessibilityDescription: "翻译连接失败")
             icon.contentTintColor = OpenAllTheme.accentText
             icon.imageScaling = .scaleProportionallyUpOrDown
             icon.isHidden = true
             card.addSubview(icon)
             connectionIcon = icon
-            let progress = NSProgressIndicator(frame: NSRect(x: 205, y: 153, width: 30, height: 30))
+            let progress = NSProgressIndicator(frame: NSRect(x: 14, y: 118, width: 28, height: 28))
             progress.style = .spinning
             progress.startAnimation(nil)
             card.addSubview(progress)
             connectionProgress = progress
             let label = NSTextField(labelWithString: "正在连接有道翻译")
-            label.alignment = .center
-            label.font = .systemFont(ofSize: 18, weight: .medium)
+            label.alignment = .left
+            label.font = .systemFont(ofSize: 20, weight: .semibold)
             label.textColor = OpenAllTheme.ink
-            label.frame = NSRect(x: 0, y: 105, width: 440, height: 30)
+            label.frame = NSRect(x: 68, y: 125, width: 364, height: 30)
             card.addSubview(label)
             let detail = NSTextField(labelWithString: "连接完成后，即可输入或粘贴内容进行翻译。")
-            detail.alignment = .center
+            detail.alignment = .left
             detail.font = .systemFont(ofSize: 13)
             detail.textColor = OpenAllTheme.muted
-            detail.frame = NSRect(x: 0, y: 73, width: 440, height: 22)
+            detail.frame = NSRect(x: 68, y: 99, width: 364, height: 22)
             card.addSubview(detail)
             let retry = NSButton(title: "重新连接", target: self, action: #selector(retryTranslation))
-            retry.frame = NSRect(x: 94, y: 14, width: 116, height: 34)
+            retry.frame = NSRect(x: 68, y: 47, width: 100, height: 32)
             WindowChrome.styleAction(retry, primary: true)
-            retry.isHidden = false
+            retry.isHidden = true
             retry.isEnabled = false
-            WindowChrome.styleAction(retry)
             card.addSubview(retry)
             let browser = NSButton(title: "在浏览器打开 ↗", target: self, action: #selector(openTranslationBrowser))
-            browser.frame = NSRect(x: 224, y: 14, width: 136, height: 34)
-            WindowChrome.styleAction(browser)
+            browser.frame = NSRect(x: 68, y: 47, width: 130, height: 32)
+            WindowChrome.styleOutputAction(browser)
             card.addSubview(browser)
             connectionBrowser = browser
             stateView = state
@@ -443,10 +442,9 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             loadingLabel?.stringValue = "正在连接有道翻译"
             stateDetail?.stringValue = "连接完成后，即可输入或粘贴内容进行翻译。"
             stateView?.isHidden = false
-            retryButton?.isHidden = false
+            retryButton?.isHidden = true
             retryButton?.isEnabled = false
-            if let retryButton { WindowChrome.styleAction(retryButton) }
-            connectionBrowser?.frame.origin.x = 224
+            connectionBrowser?.frame.origin.x = 68
             connectionIcon?.isHidden = true
             connectionProgress?.isHidden = false
             connectionProgress?.startAnimation(nil)
@@ -459,27 +457,18 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
         waitForPage(remaining: 35)
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        loadFailed = true
-        loadingLabel?.stringValue = "暂时无法连接有道翻译"
-        stateDetail?.stringValue = "请检查网络连接，或在浏览器中继续。"
-        retryButton?.isHidden = false
-        retryButton?.isEnabled = true
-        if let retryButton { WindowChrome.styleAction(retryButton, primary: true) }
-        connectionBrowser?.frame.origin.x = 224
-        connectionIcon?.isHidden = false
-        connectionProgress?.stopAnimation(nil)
-        connectionProgress?.isHidden = true
-        stateView?.isHidden = false
-        loadingLabel?.isHidden = false
+        showConnectionFailure()
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        showConnectionFailure()
+    }
+    private func showConnectionFailure() {
         loadFailed = true
         loadingLabel?.stringValue = "暂时无法连接有道翻译"
         stateDetail?.stringValue = "请检查网络连接，或在浏览器中继续。"
         retryButton?.isHidden = false
         retryButton?.isEnabled = true
-        if let retryButton { WindowChrome.styleAction(retryButton, primary: true) }
-        connectionBrowser?.frame.origin.x = 224
+        connectionBrowser?.frame.origin.x = 178
         connectionIcon?.isHidden = false
         connectionProgress?.stopAnimation(nil)
         connectionProgress?.isHidden = true
@@ -495,18 +484,7 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
 
     func showFailureForDesign() {
         guard DesignPreview.enabled else { return }
-        loadFailed = true
-        loadingLabel?.stringValue = "暂时无法连接有道翻译"
-        stateDetail?.stringValue = "请检查网络连接，或在浏览器中继续。"
-        retryButton?.isHidden = false
-        retryButton?.isEnabled = true
-        if let retryButton { WindowChrome.styleAction(retryButton, primary: true) }
-        connectionBrowser?.frame.origin.x = 224
-        connectionIcon?.isHidden = false
-        connectionProgress?.stopAnimation(nil)
-        connectionProgress?.isHidden = true
-        stateView?.isHidden = false
-        loadingLabel?.isHidden = false
+        showConnectionFailure()
     }
 
     private func waitForPage(remaining: Int) {
@@ -526,6 +504,9 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
                 }
             } else if !self.loadFailed {
                 self.loadingLabel?.stringValue = "网页加载缓慢，请稍候…"
+                self.retryButton?.isHidden = false
+                self.retryButton?.isEnabled = true
+                self.connectionBrowser?.frame.origin.x = 178
             }
         }
     }
@@ -570,6 +551,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     private let goldTool = GoldToolController()
     private let unicodeTool = UnicodeToolWindow()
     private let markdownTool = MarkdownToolWindow()
+    private let commandManual = CommandManualWindow()
     private let idGenerator = IDGeneratorWindow()
     private let developerConverter = DeveloperConverterWindow()
     private let backendWorkbench = BackendWorkbenchWindow()
@@ -709,6 +691,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     }
 
     @MainActor private func renderDesignSnapshots() async throws {
+        if ProcessInfo.processInfo.environment["OPENALL_MANUAL_CHECK"] == "1" {
+            commandManual.show()
+            try await commandManual.verifyForDesign()
+            return
+        }
         if ProcessInfo.processInfo.environment["OPENALL_GOLD_CHECK"] == "1" {
             for (index, query) in ["金价", "gold", "金价桌台"].enumerated() {
                 field.stringValue = query
@@ -1010,6 +997,8 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             previewTool.showDesignSample(mode)
             try DesignPreview.capture(DesignPreview.lastWindow!, name: "03-\(name)")
         }
+        commandManual.show()
+        try await commandManual.verifyForDesign()
         guard MarkdownRenderer.verifyRenderingForDesign() else { throw NSError(domain: "MarkdownRenderRegression", code: 1) }
         markdownTool.show("""
         # 项目记录
@@ -1700,7 +1689,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         case "sqlRestore": backendWorkbench.show(.sql)
         case "configFormat": localTextTool.show(.configuration)
         case "sqlFormat": localTextTool.show(.sql)
-        case "manual": if let path = Bundle.main.path(forResource: "OpenAll-命令手册", ofType: "md") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+        case "manual": commandManual.show()
         case "image": imageTool.show()
         case "clipboard": showClipboard()
         case "stack": showStack()
