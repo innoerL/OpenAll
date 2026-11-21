@@ -2411,8 +2411,8 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         button.frame = frame
         button.isBordered = false
         button.wantsLayer = true
-        button.layer?.cornerRadius = 9
-        button.layer?.borderWidth = 1
+        button.layer?.cornerRadius = 6
+        button.layer?.borderWidth = 0.5
         button.layer?.borderColor = OpenAllTheme.rule.cgColor
         button.layer?.backgroundColor = OpenAllTheme.raised.cgColor
         button.font = .systemFont(ofSize: 12, weight: .medium)
@@ -2437,38 +2437,59 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             let title = settingLabel("快捷键", y: 474, width: 500)
             title.font = .systemFont(ofSize: 21, weight: .semibold)
             body.addSubview(title)
-            label("点击快捷键重新录制 · Esc 取消", 28, 442, 600, secondary: true)
-            label("搜索唤起方式", 28, 399, 220)
+            label("点击快捷键重新录制 · Esc 取消", 28, 445, 600, secondary: true)
+            label("搜索唤起方式", 28, 397, 220)
+            let groupRight: CGFloat = 644
+            let keyWidth: CGFloat = 136
+            let keyX = groupRight - 16 - keyWidth
+            let modeFrame = NSRect(x: groupRight - 244, y: 394, width: 244, height: 32)
+            let modeBackground = NSView(frame: modeFrame)
+            modeBackground.wantsLayer = true
+            modeBackground.layer?.cornerRadius = 7
+            modeBackground.layer?.backgroundColor = OpenAllTheme.surface.cgColor
+            modeBackground.layer?.borderColor = OpenAllTheme.rule.cgColor
+            modeBackground.layer?.borderWidth = 0.5
+            body.addSubview(modeBackground)
             let isDouble = settings.value.searchShortcutMode == "double"
-            for (text, tag, x, selected) in [("组合快捷键", 0, CGFloat(272), !isDouble), ("双击修饰键", 1, CGFloat(420), isDouble)] {
+            for (text, tag, selected) in [("组合快捷键", 0, !isDouble), ("双击修饰键", 1, isDouble)] {
                 let button = NSButton(title: text, target: self, action: #selector(changeSearchShortcutMode(_:)))
                 button.tag = tag
-                button.frame = NSRect(x: x, y: 395, width: 144, height: 30)
+                button.frame = NSRect(x: modeFrame.minX + 3 + CGFloat(tag) * 119, y: modeFrame.minY + 3, width: 119, height: 26)
                 WindowChrome.styleAction(button)
-                button.layer?.backgroundColor = (selected ? OpenAllTheme.accent.withAlphaComponent(0.14) : .clear).cgColor
-                button.layer?.borderColor = (selected ? OpenAllTheme.accent : OpenAllTheme.rule).cgColor
+                button.layer?.cornerRadius = 5
+                button.layer?.backgroundColor = (selected ? OpenAllTheme.accent.withAlphaComponent(0.16) : .clear).cgColor
+                button.layer?.borderWidth = selected ? 0.5 : 0
+                button.layer?.borderColor = OpenAllTheme.accentText.withAlphaComponent(0.5).cgColor
                 button.contentTintColor = selected ? OpenAllTheme.accentText : OpenAllTheme.muted
+                button.setAccessibilityValue(selected ? "已选中" : "未选中")
                 body.addSubview(button)
             }
+            let bindings = NSView(frame: NSRect(x: 28, y: 90, width: groupRight - 28, height: 284))
+            bindings.wantsLayer = true
+            bindings.layer?.cornerRadius = 9
+            bindings.layer?.backgroundColor = OpenAllTheme.surface.cgColor
+            bindings.layer?.borderWidth = 0.5
+            bindings.layer?.borderColor = OpenAllTheme.rule.cgColor
+            body.addSubview(bindings)
             let names: [UInt32: String] = [55:"Command ⌘",54:"Command ⌘",58:"Option ⌥",61:"Option ⌥",59:"Control ⌃",62:"Control ⌃",56:"Shift ⇧",60:"Shift ⇧"]
             let doubleTitle = settings.value.doubleTapKeyCode.map { "双击 " + (names[$0] ?? shortcutDescription(code: $0, modifiers: settings.value.doubleTapModifiers, label: settings.value.doubleTapKeyLabel)) } ?? "双击 Option ⌥"
-            label("打开搜索", 28, 353, 220)
-            let active = shortcutControl(isDouble ? doubleTitle : shortcutDescription(settings.value), tag: isDouble ? 4 : 1, frame: NSRect(x: 420, y: 347, width: 144, height: 30))
+            label("打开搜索", 44, 334, 220)
+            let active = shortcutControl(isDouble ? doubleTitle : shortcutDescription(settings.value), tag: isDouble ? 4 : 1, frame: NSRect(x: keyX, y: 324, width: keyWidth, height: 30))
             body.addSubview(active)
             recordButton = active
             if isDouble && !doubleTapMonitor.isActive {
                 let repair = NSButton(title: AXIsProcessTrusted() ? "重试监听" : "前往授权", target: self, action: AXIsProcessTrusted() ? #selector(retryDoubleTapFromSettings) : #selector(openPermissionsTab))
-                repair.frame = NSRect(x: 272, y: 347, width: 136, height: 34)
+                repair.frame = NSRect(x: keyX - 100, y: 324, width: 90, height: 30)
                 WindowChrome.styleAction(repair)
                 body.addSubview(repair)
             }
             let ready = isDouble ? doubleTapMonitor.isActive : shortcutAvailable
-            let state = NSTextField(labelWithString: ready ? "已启用" : isDouble ? "监听未启动，请检查辅助功能权限" : "快捷键已占用，点击上方重新录制")
+            let warning = OpenAllTheme.isLight ? (NSColor.systemOrange.blended(withFraction: 0.48, of: .black) ?? .systemOrange) : .systemOrange
+            let state = NSTextField(labelWithString: ready ? "已启用" : isDouble ? "监听未启动，请检查辅助功能权限" : "快捷键已占用，请重新录制")
             state.font = .systemFont(ofSize: 12)
-            state.textColor = ready ? OpenAllTheme.muted : .systemOrange
-            state.alignment = .right
-            state.frame = NSRect(x: 224, y: 318, width: 340, height: 23)
-            if !ready { active.layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.5).cgColor }
+            state.textColor = ready ? OpenAllTheme.muted : warning
+            state.frame = NSRect(x: 44, y: 314, width: 335, height: 24)
+            if !ready { active.layer?.borderColor = warning.withAlphaComponent(0.5).cgColor }
             body.addSubview(state)
             settingsStatus = state
             let shortcuts: [(String, String, String, Int)] = [
@@ -2476,18 +2497,18 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 ("复制堆栈", "连续收集内容，按顺序粘贴", shortcutDescription(code: settings.value.stackKeyCode, modifiers: settings.value.stackModifiers, label: settings.value.stackKeyLabel), 3),
                 ("对选中内容操作", "将当前选择交给相应工具处理", shortcutDescription(code: settings.value.selectionKeyCode, modifiers: settings.value.selectionModifiers, label: settings.value.selectionKeyLabel), 5)]
             for (index, item) in shortcuts.enumerated() {
-                let y = CGFloat(260 - index * 72)
-                let rule = NSView(frame: NSRect(x: 28, y: y + 42, width: 536, height: 1))
+                let y = CGFloat(263 - index * 71)
+                let rule = NSView(frame: NSRect(x: 44, y: y + 40, width: groupRight - 60, height: 0.5))
                 rule.wantsLayer = true
                 rule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
                 body.addSubview(rule)
-                label(item.0, 28, y + 10, 250)
-                label(item.1, 28, y - 14, 360, secondary: true)
-                body.addSubview(shortcutControl(item.2, tag: item.3, frame: NSRect(x: 420, y: y - 4, width: 144, height: 30)))
+                label(item.0, 44, y, 250)
+                label(item.1, 44, y - 20, 360, secondary: true)
+                body.addSubview(shortcutControl(item.2, tag: item.3, frame: NSRect(x: keyX, y: y - 10, width: keyWidth, height: 30)))
             }
             label("再次按同一快捷键，可关闭对应窗口。", 28, 46, 450, secondary: true)
             let diagnostics = NSButton(title: "查看诊断 →", target: self, action: #selector(openDiagnosticsTab))
-            diagnostics.frame = NSRect(x: 426, y: 40, width: 138, height: 32)
+            diagnostics.frame = NSRect(x: groupRight - 80, y: 40, width: 80, height: 32)
             WindowChrome.styleOutputAction(diagnostics)
             body.addSubview(diagnostics)
         case 1:

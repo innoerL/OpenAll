@@ -49,10 +49,25 @@
       content.replaceChildren();body.scrollTop=0;prefs=await api.settings();if(disposed||revision!==renderRevision)return;
       if(tab==='general') {
         heading('快捷键','点击快捷键重新录制 · Esc 取消');
-        content.append(row('搜索唤起方式',h('div',{class:'settings-segmented'},...['combo','double'].map((mode,i)=>button(i?'双击修饰键':'组合快捷键',async()=>{await save({searchShortcutMode:mode});render();},prefs.searchShortcutMode===mode?'selected':'')))));
-        content.append(row('打开搜索',prefs.searchShortcutMode==='double'?select([['Alt','双击 Alt'],['Control','双击 Ctrl'],['Shift','双击 Shift'],['Super','双击 Win']],prefs.doubleTap,value=>save({doubleTap:value})):shortcut('search')));
-        const status=h('p',{class:'hint small',style:{textAlign:'right',margin:'3px 0 22px'}},'已启用');content.append(status);
-        api.diagnostics().then(d=>{if(disposed||tab!=='general')return;const entry=d.shortcuts?.search;status.textContent=entry===false?'快捷键被占用，请重新录制':d.shortcuts?.error||'已启用';}).catch(()=>{});
+        const modes = h('div', {class:'settings-segmented', role:'group', 'aria-label':'搜索唤起方式'});
+        for (const [mode, title] of [['combo','组合快捷键'], ['double','双击修饰键']]) {
+          const selected = prefs.searchShortcutMode === mode;
+          const choice = button(title, async () => { await save({searchShortcutMode:mode}); render(); }, selected ? 'selected' : '');
+          choice.setAttribute('aria-pressed', String(selected));
+          modes.append(choice);
+        }
+        content.append(row('搜索唤起方式', modes));
+        const trigger = prefs.searchShortcutMode === 'double'
+          ? select([['Alt','双击 Alt'],['Control','双击 Ctrl'],['Shift','双击 Shift'],['Super','双击 Win']],prefs.doubleTap,value=>save({doubleTap:value}))
+          : shortcut('search');
+        const status = h('span', {class:'shortcut-status', id:'search-shortcut-status', role:'status'});
+        if (trigger.tagName === 'SELECT') trigger.setAttribute('aria-label', '打开搜索的修饰键');
+        trigger.setAttribute('aria-describedby', status.id);
+        content.append(row('打开搜索', h('div', {class:'shortcut-control'}, status, trigger)));
+        api.diagnostics().then(d => {
+          if (disposed || revision !== renderRevision) return;
+          status.textContent = d.shortcuts?.search === false ? '快捷键被占用，请重新录制' : d.shortcuts?.error || '已启用';
+        }).catch(() => {});
         for(const [key,title,desc] of [['clipboard','剪贴板','查找、预览与粘贴历史记录'],['stack','复制堆栈','连续收集内容，按顺序粘贴'],['selection','对选中内容操作','将当前选择交给相应工具处理']])content.append(row(title,shortcut(key),desc,true));
         content.append(h('div',{class:'settings-footer'},'再次按同一快捷键，可关闭对应窗口。',button('查看诊断 →',()=>render('diagnostics'),'ghost')));
       } else if(tab==='search') {

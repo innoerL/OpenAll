@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'none'; connect-src 'none'">
   <title>文本对比</title>
   <style>
+    /* finesse · register=product · shell=双栏文本编辑器 */
     :root { color-scheme: dark; --canvas:#1b1c1d; --surface:#202425; --raised:#30332f; --ink:#efeee6; --muted:#a2a69e; --secondary:#b8b7b2; --rule:rgba(255,255,255,.065); --accent:#cfb58d; --removed:rgba(197,92,105,.22); --added:rgba(65,164,112,.22); --changed-left:rgba(197,92,105,.12); --changed-right:rgba(65,164,112,.12); --removed-token:rgba(197,92,105,.50); --added-token:rgba(65,164,112,.50); --removed-ink:#d99b9e; --added-ink:#8dbea1; font:13px "Microsoft YaHei UI",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
     * { box-sizing:border-box; }
     body { margin:0; height:100vh; display:flex; flex-direction:column; background:var(--canvas); color:var(--ink); overflow:hidden; }
@@ -36,13 +37,15 @@
     .editors { flex:1; min-height:0; margin:0 20px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); border:.5px solid var(--rule); border-radius:6px; overflow:hidden; background:var(--surface); }
     .pane { min-width:0; min-height:0; display:flex; flex-direction:column; }
     .pane + .pane { border-left:.5px solid var(--rule); }
-    .heading { flex:none; height:34px; padding:0 14px; display:flex; align-items:center; gap:10px; border-bottom:.5px solid var(--rule); background:transparent; }
-    .heading strong { font-size:13px; font-weight:500; }
+    .heading { flex:none; height:36px; padding:0 12px; display:flex; align-items:center; gap:3px; border-bottom:1px solid var(--rule); }
+    .pane-title { min-width:0; display:flex; align-items:baseline; gap:8px; white-space:nowrap; }
+    .pane-title strong { font-size:13px; font-weight:600; }
     .count { color:var(--secondary); font-size:12px; font-variant-numeric:tabular-nums; }
-    .natural-sort { margin-left:auto; height:26px; padding:2px 8px; font-size:12px; white-space:nowrap; }
-    .copy { height:28px; padding:2px 4px; border:0; background:transparent; color:var(--secondary); font-size:13px; }
-    .copy:hover { background:transparent; color:var(--ink); }
-    #open-search { color:var(--secondary); white-space:nowrap; }
+    .natural-sort { margin-left:auto; }
+    .heading button { flex:none; height:26px; padding:0 7px; border:0; border-radius:4px; color:var(--secondary); font:inherit; font-size:12px; white-space:nowrap; }
+    .heading button:is(:hover,:focus-visible) { background:var(--raised); color:var(--ink); }
+    #open-search { display:inline-flex; align-items:center; gap:7px; color:var(--secondary); white-space:nowrap; }
+    #open-search kbd { padding:0 4px; border:1px solid color-mix(in srgb,currentColor 24%,transparent); border-radius:3px; font-family:inherit; font-size:11px; line-height:16px; font-variant-numeric:tabular-nums; }
     .findbar { flex:none; height:36px; margin:0 20px; display:flex; align-items:center; gap:10px; }
     .findbar[hidden] { display:none; }
     #find-query { flex:1; min-width:100px; height:28px; border:.5px solid var(--rule); border-radius:6px; background:var(--surface); color:var(--ink); padding:0 10px; font:13px "Microsoft YaHei UI",-apple-system,BlinkMacSystemFont,sans-serif; outline:none; }
@@ -88,6 +91,28 @@
     footer { flex:none; height:30px; padding:0 20px; display:flex; align-items:center; color:var(--secondary); font-size:12px; }
     #hint { margin-left:auto; text-align:right; }
     @media (max-width:850px) { .toolbar,.comparison-status,#summary { gap:8px; } .options { gap:12px; } #hint { max-width:40%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; } }
+    @media (max-width:730px) {
+      .toolbar { height:auto; flex-wrap:wrap; row-gap:6px; padding:6px 12px; }
+      .comparison-status { flex-basis:100%; }
+      .navigation { margin-left:auto; }
+      .options { padding-left:0; border:0; }
+      .editors,.findbar { margin-inline:12px; }
+      footer { padding-inline:12px; }
+      .heading { padding-inline:8px; }
+      .findbar { gap:5px; }
+      #find-count { min-width:6em; }
+    }
+    @media (max-width:620px) {
+      .findbar { height:auto; padding:2px 0 7px; display:grid; grid-template-columns:minmax(0,1fr) auto repeat(3,28px); }
+      .findbar > .nav-label { display:none; }
+      #find-query { grid-column:1/3; min-width:0; width:100%; }
+      #find-count { grid-column:3/-1; text-align:right; }
+      #find-scope { justify-self:start; }
+      .findbar button { width:28px; }
+      .heading { gap:1px; }
+      .pane-title { gap:5px; }
+      .heading button { padding-inline:5px; }
+    }
   </style>
   <link rel="stylesheet" href="../src/fonts.css">
   <link rel="stylesheet" href="../../shared/gold-ui/surface-effects.css">
@@ -96,11 +121,11 @@
   <div class="toolbar">
     <div class="comparison-status"><div id="summary" role="status" aria-live="polite" aria-atomic="true"><span class="summary-primary notice">在左右两侧输入文本，差异会直接标出</span></div>
     <div class="navigation" role="group" aria-label="差异组导航"><span class="nav-label">差异</span><button id="previous" title="上一个差异组" aria-label="上一个差异组">↑</button><span id="navigation-count" role="status" aria-live="polite" aria-atomic="true">0 / 0</span><button id="next" title="下一个差异组" aria-label="下一个差异组">↓</button></div></div>
-    <div class="options"><button id="open-search" title="搜索内容（Ctrl+F）">搜索 Ctrl+F</button><label><input id="sync-scroll" type="checkbox" checked>同步滚动</label><label><input id="ignore-space" type="checkbox">忽略行尾空格</label></div>
+    <div class="options"><button id="open-search" aria-controls="findbar" aria-expanded="false" title="搜索内容（Ctrl+F）" aria-keyshortcuts="Control+F">搜索<kbd aria-hidden="true">Ctrl+F</kbd></button><label><input id="sync-scroll" type="checkbox" checked>同步滚动</label><label><input id="ignore-space" type="checkbox">忽略行尾空格</label></div>
   </div>
   <div class="findbar" id="findbar" role="search" aria-label="搜索对比内容" hidden><span class="nav-label">匹配</span>
     <input id="find-query" type="search" placeholder="搜索内容" aria-label="搜索内容" autocomplete="off" spellcheck="false">
-    <span id="find-count" role="status" aria-live="polite">输入搜索内容</span>
+    <span id="find-count" role="status" aria-live="polite"></span>
     <select id="find-scope" aria-label="搜索范围"><option value="both">左右两侧</option><option value="0">仅左侧</option><option value="1">仅右侧</option></select>
     <label><input id="find-case" type="checkbox">区分大小写</label>
     <button id="find-previous" title="上一处（⇧↵ / ⇧Ctrl+G）" aria-label="上一个搜索结果">↑</button>
@@ -109,11 +134,11 @@
   </div>
   <div class="editors">
     <section class="pane">
-      <div class="heading"><strong>左侧</strong><span class="count" id="left-count">0 行</span><button class="natural-sort" data-side="0" title="左侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="左侧按行自然升序">自然排序</button><button class="copy" data-side="0" title="复制左侧全文" aria-label="复制左侧全文">复制</button></div>
+      <div class="heading"><div class="pane-title"><strong>左侧</strong><span class="count" id="left-count">0 行</span></div><button class="natural-sort" data-side="0" title="左侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="左侧按行自然升序">自然排序</button><button class="copy" data-side="0" title="复制左侧全文" aria-label="复制左侧全文">复制</button></div>
       <div class="editor" id="left"></div>
     </section>
     <section class="pane">
-      <div class="heading"><strong>右侧</strong><span class="count" id="right-count">0 行</span><button class="natural-sort" data-side="1" title="右侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="右侧按行自然升序">自然排序</button><button class="copy" data-side="1" title="复制右侧全文" aria-label="复制右侧全文">复制</button></div>
+      <div class="heading"><div class="pane-title"><strong>右侧</strong><span class="count" id="right-count">0 行</span></div><button class="natural-sort" data-side="1" title="右侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="右侧按行自然升序">自然排序</button><button class="copy" data-side="1" title="复制右侧全文" aria-label="复制右侧全文">复制</button></div>
       <div class="editor" id="right"></div>
     </section>
   </div>

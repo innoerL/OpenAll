@@ -14,6 +14,7 @@
   const findCount = document.getElementById('find-count');
   const findScope = document.getElementById('find-scope');
   const findCase = document.getElementById('find-case');
+  const searchButton = document.getElementById('open-search');
   const findPrevious = document.getElementById('find-previous');
   const findNext = document.getElementById('find-next');
   const sortButtons = [...document.querySelectorAll('.natural-sort')];
@@ -424,6 +425,7 @@
   function openSearch() {
     if (composing.size || inputs.some(input => input.composing)) return;
     findBar.hidden = false;
+    searchButton.setAttribute('aria-expanded', 'true');
     if (!findQuery.value) {
       const input = inputs[activeSide];
       const selected = input.value.slice(input.selectionStart, input.selectionEnd);
@@ -438,6 +440,7 @@
     if (findComposing) return;
     clearTimeout(findTimer);
     findBar.hidden = true;
+    searchButton.setAttribute('aria-expanded', 'false');
     findMatches = [[], []]; findResults = []; findIndex = -1;
     paintSearch();
     inputs[activeSide].focus();
@@ -477,7 +480,7 @@
 
   function updateSearchCount() {
     const current = findResults[findIndex];
-    findCount.textContent = !findQuery.value ? '输入搜索内容' : !current ? '无匹配结果' :
+    findCount.textContent = !findQuery.value ? '' : !current ? '无匹配结果' :
       (findIndex + 1) + ' / ' + findResults.length + (findLimited ? '+' : '') + ' · ' + (current.side === 0 ? '左侧' : '右侧');
     findCount.title = findLimited ? '每侧显示前 10,000 处匹配，请增加搜索词以缩小范围' : findCount.textContent;
     findPrevious.disabled = findNext.disabled = !findResults.length;
@@ -511,7 +514,7 @@
     revealSearchMatch();
   }
 
-  document.getElementById('open-search').addEventListener('click', openSearch);
+  searchButton.addEventListener('click', openSearch);
   document.getElementById('find-close').addEventListener('click', closeSearch);
   findPrevious.addEventListener('click', () => moveSearch(-1));
   findNext.addEventListener('click', () => moveSearch(1));

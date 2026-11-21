@@ -609,16 +609,11 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         root.appearance = OpenAllTheme.appearance
         root.autoresizingMask = [.width, .height]
         w.contentView = root
-        // 两组原生操作使用连续的轻量轮廓，区分内容处理与查看／复制。
-        for frame in [NSRect(x: 20, y: 515, width: 284, height: 28), NSRect(x: 330, y: 515, width: 176, height: 28)] {
-            let group = NSView(frame: frame)
-            group.wantsLayer = true
-            group.layer?.cornerRadius = 6
-            group.layer?.borderWidth = 0.5
-            group.layer?.borderColor = OpenAllTheme.rule.cgColor
-            group.autoresizingMask = [.minYMargin]
-            root.addSubview(group)
-        }
+        let divider = NSView(frame: NSRect(x: 301, y: 520, width: 1, height: 18))
+        divider.wantsLayer = true
+        divider.layer?.backgroundColor = OpenAllTheme.rule.cgColor
+        divider.autoresizingMask = [.minYMargin]
+        root.addSubview(divider)
         let operations: [(Int, String, CGFloat)] = [(0, "格式化  ⌘↵", 108), (2, "压缩", 58)]
         var actionX: CGFloat = 20
         for (index, name, width) in operations {
@@ -640,7 +635,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
             operationButtons.append(action)
             actionX += width + 8
         }
-        let more = NSPopUpButton(frame: NSRect(x: actionX + 8, y: 515, width: 94, height: 28), pullsDown: true)
+        let more = NSPopUpButton(frame: NSRect(x: actionX, y: 515, width: 88, height: 28), pullsDown: true)
         more.autoresizingMask = [.minYMargin]
         more.isBordered = false
         more.font = .systemFont(ofSize: 13)
@@ -654,14 +649,14 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         }
         root.addSubview(more)
         let copy = NSButton(title: "复制全文", target: self, action: #selector(copyContent))
-        copy.frame = NSRect(x: 422, y: 515, width: 84, height: 28)
+        copy.frame = NSRect(x: 389, y: 515, width: 76, height: 28)
         copy.autoresizingMask = [.minYMargin]
         styleToolbarButton(copy)
         copy.isEnabled = false
         copyButton = copy
         root.addSubview(copy)
         foldButton = NSButton(title: "全部折叠", target: self, action: #selector(toggleAllFolds))
-        foldButton.frame = NSRect(x: 338, y: 515, width: 76, height: 28)
+        foldButton.frame = NSRect(x: 311, y: 515, width: 76, height: 28)
         foldButton.autoresizingMask = [.minYMargin]
         foldButton.toolTip = "折叠或展开所有对象与数组；复制始终保留完整内容"
         styleToolbarButton(foldButton)
@@ -672,13 +667,14 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         w.handleSearchKey = { [weak self] in self?.handleSearchKey($0) ?? false }
         status = NSTextField(labelWithString: "就绪")
         status.font = .systemFont(ofSize: 12)
-        status.textColor = .secondaryLabelColor
+        status.textColor = OpenAllTheme.muted
+        status.lineBreakMode = .byTruncatingTail
         status.frame = NSRect(x: 20, y: 7, width: 730, height: 18)
         status.autoresizingMask = [.width]
         root.addSubview(status)
         documentSummary = NSTextField(labelWithString: "0 行 · ⌘Z 撤销")
         documentSummary.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        documentSummary.textColor = OpenAllTheme.ink.withAlphaComponent(0.74)
+        documentSummary.textColor = OpenAllTheme.muted
         documentSummary.alignment = .right
         documentSummary.frame = NSRect(x: 772, y: 7, width: 168, height: 18)
         documentSummary.autoresizingMask = [.minXMargin]
@@ -765,12 +761,23 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         open.frame = NSRect(x: 844, y: 515, width: 96, height: 28)
         open.autoresizingMask = [.minXMargin, .minYMargin]
         styleToolbarButton(open)
+        open.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
+        open.imagePosition = .imageLeading
+        open.imageHugsTitle = true
+        open.layer?.borderWidth = 0.5
+        open.setAccessibilityLabel("搜索 JSON 内容")
         root.addSubview(open)
-        searchBar = NSView(frame: NSRect(x: 500, y: 468, width: 440, height: 32))
+        searchBar = NSView(frame: NSRect(x: 426, y: 472, width: 514, height: 32))
         searchBar.autoresizingMask = [.minXMargin, .minYMargin]
+        searchBar.wantsLayer = true
+        searchBar.layer?.cornerRadius = 6
+        searchBar.layer?.backgroundColor = OpenAllTheme.surface.cgColor
+        searchBar.layer?.borderColor = OpenAllTheme.rule.cgColor
+        searchBar.layer?.borderWidth = 0.5
         searchBar.isHidden = true
         root.addSubview(searchBar)
-        searchField = NSSearchField(frame: NSRect(x: 0, y: 2, width: 220, height: 28))
+        searchField = NSSearchField(frame: NSRect(x: 3, y: 3, width: 231, height: 26))
         searchField.autoresizingMask = [.width]
         searchField.placeholderString = "搜索 JSON 内容"
         searchField.font = .systemFont(ofSize: 13)
@@ -785,35 +792,37 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         let searchBorder = NSView(frame: searchField.frame)
         searchBorder.autoresizingMask = [.width]
         searchBorder.wantsLayer = true
-        searchBorder.layer?.cornerRadius = 6
+        searchBorder.layer?.cornerRadius = 4
         searchBorder.layer?.borderWidth = 0.5
         searchBorder.layer?.borderColor = OpenAllTheme.rule.cgColor
         searchBorder.layer?.backgroundColor = OpenAllTheme.editorCanvas.cgColor
         searchField.frame = searchBorder.bounds.insetBy(dx: 10, dy: 4)
         searchBorder.addSubview(searchField)
         searchBar.addSubview(searchBorder)
-        searchCount = NSTextField(labelWithString: "输入搜索内容")
-        searchCount.frame = NSRect(x: 228, y: 6, width: 62, height: 20)
+        searchCount = NSTextField(labelWithString: "")
+        searchCount.frame = NSRect(x: 238, y: 7, width: 110, height: 18)
         searchCount.autoresizingMask = [.minXMargin]
         searchCount.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         searchCount.textColor = OpenAllTheme.muted
+        searchCount.alignment = .center
         searchBar.addSubview(searchCount)
         searchCase = WindowChrome.checkbox("Aa", target: self, action: #selector(searchOptionsChanged))
-        searchCase.frame = NSRect(x: 294, y: 2, width: 50, height: 28)
+        searchCase.frame = NSRect(x: 352, y: 2, width: 49, height: 28)
         searchCase.autoresizingMask = [.minXMargin]
         searchCase.font = .systemFont(ofSize: 12)
         searchCase.toolTip = "区分大小写"
         searchCase.setAccessibilityLabel("区分大小写")
         searchBar.addSubview(searchCase)
         for (x, title, action, help) in [
-            (CGFloat(348), "↑", #selector(previousSearchMatch), "上一处（⇧↵ / ⇧⌘G）"),
-            (CGFloat(378), "↓", #selector(nextSearchMatch), "下一处（↵ / ⌘G）"),
-            (CGFloat(408), "×", #selector(closeSearch), "关闭搜索（Esc）")
+            (CGFloat(407), "↑", #selector(previousSearchMatch), "上一处（⇧↵ / ⇧⌘G）"),
+            (CGFloat(440), "↓", #selector(nextSearchMatch), "下一处（↵ / ⌘G）"),
+            (CGFloat(481), "×", #selector(closeSearch), "关闭搜索（Esc）")
         ] {
             let button = NSButton(title: title, target: self, action: action)
-            button.frame = NSRect(x: x, y: 2, width: 28, height: 28)
+            button.frame = NSRect(x: x, y: 3, width: 30, height: 26)
             button.autoresizingMask = [.minXMargin]
-            WindowChrome.styleAction(button)
+            if title == "×" { WindowChrome.styleOutputAction(button) }
+            else { WindowChrome.styleAction(button) }
             button.toolTip = help
             button.setAccessibilityLabel(help)
             searchBar.addSubview(button)
@@ -918,7 +927,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
     }
 
     private func updateSearchCount() {
-        searchCount.stringValue = searchField.stringValue.isEmpty ? "输入搜索内容" :
+        searchCount.stringValue = searchField.stringValue.isEmpty ? "" :
             searchMatches.isEmpty ? "无匹配结果" : "\(searchIndex + 1) / \(searchMatches.count)\(searchLimited ? "+" : "")"
         searchCount.toolTip = searchLimited ? "显示前 10,000 处匹配，请增加搜索词以缩小范围" : searchCount.stringValue
         searchCount.setAccessibilityLabel("搜索结果：\(searchCount.stringValue)")
@@ -1778,6 +1787,11 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         history.undo()
         guard result.source == sample, searchMatches.count == 2, !history.canUndo else { return false }
         try DesignPreview.capture(window, name: "03-json-search")
+        let originalFrame = window.frame
+        window.setContentSize(NSSize(width: 760, height: 440))
+        guard let bounds = window.contentView?.bounds, bounds.contains(searchBar.frame) else { return false }
+        try DesignPreview.capture(window, name: "03-json-search-small")
+        window.setFrame(originalFrame, display: false)
         if let cell = searchField.cell as? NSSearchFieldCell, let cancel = cell.cancelButtonCell {
             cancel.performClick(searchField)
         }
@@ -1794,6 +1808,8 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         searchField.stringValue = "x"
         refreshSearch(navigate: true)
         guard searchMatches.count == 10000, searchLimited, searchCount.stringValue.hasSuffix("+") else { return false }
+        previousSearchMatch()
+        guard searchIndex == 9999, searchCount.intrinsicContentSize.width <= searchCount.frame.width else { return false }
         closeSearch()
         show(sample)
         print("JSON 内容搜索检查通过")

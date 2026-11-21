@@ -29,8 +29,11 @@
     await load('editor-json.js');
     const { h, button, api, notify } = ctx;
     const host = h('section', { class: 'editor-page editor-json-page' }); root.append(host);
-    const toolbar = h('div', { class: 'editor-toolbar' }), actions = h('div', { class: 'editor-action-group' }), views = h('div', { class: 'editor-action-group editor-view-group' });
-    const formatButton = button('格式化  Ctrl+↵', () => format('format'), 'primary');
+    const toolbar = h('div', { class: 'editor-toolbar' }), actions = h('div', { class: 'editor-action-group', role: 'group', 'aria-label': '格式操作' }), views = h('div', { class: 'editor-action-group editor-view-group', role: 'group', 'aria-label': '文档操作' });
+    const formatButton = button('格式化', () => format('format'), 'primary');
+    formatButton.append(h('kbd', { 'aria-hidden': 'true' }, 'Ctrl+↵'));
+    formatButton.setAttribute('aria-keyshortcuts', 'Control+Enter');
+    formatButton.title = '格式化（Ctrl+Enter）';
     formatButton.dataset.action = 'format';
     const compact = button('压缩', () => format('compact')); compact.dataset.action = 'compact';
     const more = h('select', { 'aria-label': '更多操作', class: 'editor-more' });
@@ -38,15 +41,22 @@
     more.onchange = () => { const mode = more.value; more.value = ''; if (mode) format(mode); };
     const foldButton = button('全部折叠', () => { editor.folded ? editor.unfoldAll() : editor.foldAll(); updateFold(); }); foldButton.dataset.action = 'fold';
     const copyButton = button('复制全文', async () => { await api.copyText(editor.value); status.textContent = '已复制全文'; }); copyButton.dataset.action = 'copy';
-    const searchButton = button('搜索  Ctrl+F', () => showSearch()); searchButton.classList.add('editor-search-button');
+    const searchButton = button('搜索', () => showSearch(), 'editor-search-button');
+    searchButton.append(h('kbd', { 'aria-hidden': 'true' }, 'Ctrl+F'));
+    searchButton.setAttribute('aria-keyshortcuts', 'Control+F');
+    searchButton.title = '搜索内容（Ctrl+F）';
     actions.append(formatButton, compact, more); views.append(foldButton, copyButton); toolbar.append(actions, views, searchButton);
-    const searchBar = h('div', { class: 'editor-findbar', hidden: true, role: 'search' });
+    const searchBar = h('div', { class: 'editor-findbar', id: 'json-search', hidden: true, role: 'search' });
+    searchButton.setAttribute('aria-controls', searchBar.id);
+    searchButton.setAttribute('aria-expanded', 'false');
     const query = h('input', { type: 'search', placeholder: '搜索内容', 'aria-label': '搜索 JSON 内容', spellcheck: false });
-    const searchCount = h('span', { class: 'editor-find-count', role: 'status' }, '输入搜索内容');
+    const searchCount = h('span', { class: 'editor-find-count', role: 'status' }, '');
     const caseBox = h('input', { type: 'checkbox' }), caseLabel = h('label', {}, caseBox, '区分大小写');
     const previous = button('↑', () => moveSearch(-1)), next = button('↓', () => moveSearch(1)), close = button('×', () => hideSearch());
     previous.setAttribute('aria-label', '上一个搜索结果'); next.setAttribute('aria-label', '下一个搜索结果'); close.setAttribute('aria-label', '关闭搜索');
-    searchBar.append(query, searchCount, caseLabel, previous, next, close);
+    const findNav = h('div', { class: 'editor-find-nav', role: 'group', 'aria-label': '匹配导航' }, previous, next);
+    close.classList.add('editor-find-close');
+    searchBar.append(query, searchCount, caseLabel, findNav, close);
     const container = h('div', { class: 'editor-codemirror', 'data-editor': 'json' });
     const status = h('span', { role: 'status' }, '就绪'), count = h('span', { class: 'editor-document-count' }, '0 行 · Ctrl+Z 撤销');
     const footer = h('footer', { class: 'editor-footer' }, status, count); host.append(toolbar, searchBar, container, footer);
@@ -60,9 +70,12 @@
       count.textContent = editor.lineCount + ' 行 · Ctrl+Z 撤销'; copyButton.disabled = !editor.length;
       notice(editor.length ? '已编辑' : '就绪'); updateFold();
       clearTimeout(metadataTimer); metadataJob?.cancel(); pendingMetadata = !!editor.length;
+      if (!searchBar.hidden) {
+        if (query.value && editor.length) scheduleSearch();
+        else showCount();
+      }
       if (!editor.length) { editor.setRegions([]); pendingMetadata = false; return; }
       metadataTimer = setTimeout(metadata, editor.length > 200000 ? 240 : 120);
-      if (!searchBar.hidden && query.value) scheduleSearch();
     }
     editor = window.OpenAllJSONEditor.create({ parent: container, onChange: changed,
       onNotice: message => notice(message), onFind: showSearch, onFindNext: moveSearch, onFormat: () => format('format'),
@@ -95,10 +108,14 @@
       finally { if (operationJob === current) { busy = false; formatButton.disabled = compact.disabled = false; } }
     }
     function paintSearch() { if (!disposed && editor) editor.setSearch(searchBar.hidden ? [] : matches, activeMatch); }
-    function showSearch() { searchBar.hidden = false; if (!query.value && editor.selectedText.length < 256) query.value = editor.selectedText; query.focus(); query.select(); if (query.value) refreshSearch(true); }
-    function hideSearch() { searchBar.hidden = true; clearTimeout(searchTimer); searchJob?.cancel(); editor.setSearch([]); editor.focus(); }
+    function setSearchVisible(visible) {
+      searchBar.hidden = !visible;
+      searchButton.setAttribute('aria-expanded', String(visible));
+    }
+    function showSearch() { setSearchVisible(true); if (!query.value && editor.selectedText.length < 256) query.value = editor.selectedText; query.focus(); query.select(); if (query.value) refreshSearch(true); else showCount(); }
+    function hideSearch() { setSearchVisible(false); clearTimeout(searchTimer); searchJob?.cancel(); editor.setSearch([]); editor.focus(); }
     function scheduleSearch() { clearTimeout(searchTimer); if (!queryComposing) searchTimer = setTimeout(() => refreshSearch(false), editor.length > 200000 ? 200 : 90); }
-    function showCount() { searchCount.textContent = !query.value ? '输入搜索内容' : !matches.length ? '无匹配结果' : `${activeMatch + 1} / ${matches.length}${limited ? '+' : ''}`; previous.disabled = next.disabled = !matches.length; }
+    function showCount() { searchCount.textContent = !query.value ? '' : !matches.length ? '无匹配结果' : `${activeMatch + 1} / ${matches.length}${limited ? '+' : ''}`; previous.disabled = next.disabled = !matches.length; }
     async function refreshSearch(reveal = true) {
       searchJob?.cancel(); const version = revision, needle = query.value;
       if (!needle) { matches = []; activeMatch = -1; showCount(); paintSearch(); return; }
@@ -129,7 +146,7 @@
       editor, getText: () => editor.value, getSelection: () => document.activeElement === query ? query.value.slice(query.selectionStart, query.selectionEnd) : editor.selectedText, setText: text => editor.setText(text), format, paste, focus: () => editor.focus(),
       foldAll: () => { editor.foldAll(); updateFold(); }, unfoldAll: () => { editor.unfoldAll(); updateFold(); }, foldLine: line => editor.foldLine(line),
       undo: () => editor.undo(), redo: () => editor.redo(),
-      search: async (text, sensitive = false) => { searchBar.hidden = false; query.value = text; caseBox.checked = sensitive; await refreshSearch(true); return matches.length; },
+      search: async (text, sensitive = false) => { setSearchVisible(true); query.value = text; caseBox.checked = sensitive; await refreshSearch(true); return matches.length; },
       getState: () => ({ revision, valid, regions: regions.length, folded: editor.folded, matches: matches.length, limited, busy, pendingMetadata, renderedLines: container.querySelectorAll('.cm-line').length }),
       waitIdle: () => waitUntil(() => !pendingMetadata && !busy),
       dispose() { disposed = true; clearTimeout(metadataTimer); clearTimeout(searchTimer); metadataJob?.cancel(); operationJob?.cancel(); searchJob?.cancel(); editor.destroy(); host.remove(); }

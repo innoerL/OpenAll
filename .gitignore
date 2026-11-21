@@ -4,6 +4,7 @@ node_modules
 dist/
 artifacts/
 .artifacts/
+.finesse/
 .ci-smoke/
 *.log
 .env
