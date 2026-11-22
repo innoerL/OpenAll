@@ -77,21 +77,48 @@ app.whenReady().then(async () => {
     });
     const normalSize = comparison.getContentSize();
     comparison.setContentSize(480, normalSize[1]);
-    await until(() => execute(comparison, () => OpenAllApp.controller.frame.contentWindow.innerWidth <= 480));
-    check(await execute(comparison, () => {
+    function measureNavigation() {
       const doc = OpenAllApp.controller.frame.contentDocument;
-      const rect = selector => doc.querySelector(selector).getBoundingClientRect();
-      const field = rect('.query-field'), query = rect('#find-query'), matches = rect('.match-nav');
-      return !rect('#open-search').width && !rect('#find-filters').width && rect('#options-toggle').width > 0 &&
-        rect('.toolbar').height <= 40 && rect('#findbar').height <= 40 &&
-        doc.querySelector('#navigation-count').textContent === '1 / 2' &&
-        doc.querySelector('#find-count').textContent === '匹配 1 / 2 · 左侧' &&
-        rect('.navigation').right <= rect('#summary').left && query.width >= 66 &&
-        query.right <= matches.left && matches.right <= field.right &&
-        doc.documentElement.scrollWidth <= doc.defaultView.innerWidth;
-    }), '480 像素宽时差异和搜索匹配各占一排，计数与箭头完整可见');
-    await delay(100);
-    fs.writeFileSync(path.join(output, 'comparison-search-narrow.png'), (await comparison.webContents.capturePage()).toPNG());
+      const selectors = ['.toolbar', '.navigation', '#navigation-count', '#previous', '#next', '#summary',
+        '#open-search', '#options-toggle', '#find-filters', '#findbar', '.query-field', '#find-query',
+        '.match-nav', '#find-count', '#find-previous', '#find-next', '#find-close', '.editors'];
+      const boxes = Object.fromEntries(selectors.map(id => [id, doc.querySelector(id).getBoundingClientRect().toJSON()]));
+      const width = doc.defaultView.innerWidth;
+      const compact = doc.defaultView.matchMedia('(max-width:730px)').matches &&
+        doc.querySelector('#options-panel').contains(doc.querySelector('#find-filters'));
+      const difference = doc.querySelector('#navigation-count').textContent;
+      const match = doc.querySelector('#find-count').textContent;
+      // 同一排的控件纵向交叠，且整个位于这一排内；系统字体和缩放可以改变实际行高。
+      const inOneRow = (selector, ids) => {
+        const row = boxes[selector], controls = ids.map(id => boxes[id]);
+        return controls.every(box => box.width > 0 && box.height > 0 && box.top >= row.top - 1 &&
+          box.bottom <= row.bottom + 1 && box.left >= 0 && box.right <= width + 1) &&
+          Math.max(...controls.map(box => box.top)) < Math.min(...controls.map(box => box.bottom));
+      };
+      const differenceRow = inOneRow('.toolbar', ['#navigation-count', '#previous', '#next', '#summary', '#options-toggle']);
+      const searchRow = inOneRow('#findbar', ['#find-query', '#find-count', '#find-previous', '#find-next', '#find-close']);
+      const geometryCorrect = differenceRow && searchRow && boxes['.toolbar'].bottom <= boxes['#findbar'].top + 1 &&
+        boxes['#findbar'].bottom <= boxes['.editors'].top + 1 &&
+        boxes['.navigation'].right <= boxes['#summary'].left + 1 &&
+        boxes['#find-query'].width >= 66 && boxes['#find-query'].right <= boxes['.match-nav'].left + 1 &&
+        boxes['.match-nav'].right <= boxes['.query-field'].right + 1 &&
+        boxes['.query-field'].right <= boxes['#find-close'].left + 1 &&
+        doc.documentElement.scrollWidth <= width && !boxes['#open-search'].width && !boxes['#find-filters'].width;
+      return { width, scrollWidth: doc.documentElement.scrollWidth, compact, difference, match, differenceRow, searchRow, geometryCorrect, boxes };
+    }
+    try {
+      // 尺寸变化、断点事件和后台比较结果可能在不同的消息循环到达。
+      await until(async () => {
+        const state = await execute(comparison, measureNavigation);
+        return state.width > 0 && state.width <= 480 && state.compact &&
+          state.difference === '1 / 2' && state.match === '匹配 1 / 2 · 左侧';
+      }, 5000);
+      const state = await execute(comparison, measureNavigation);
+      check(state.geometryCorrect, '480 像素宽时差异和搜索匹配各占一排，计数与箭头完整可见');
+    } finally {
+      report.narrowNavigation = await execute(comparison, measureNavigation);
+      fs.writeFileSync(path.join(output, 'comparison-search-narrow.png'), (await comparison.webContents.capturePage()).toPNG());
+    }
     comparison.focus();
     await until(() => BrowserWindow.getFocusedWindow()?.id === comparison.id);
     await execute(comparison, () => {

@@ -70,6 +70,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
     private var durationInput: NSTextField?
     private var durationUnit: NSPopUpButton?
     private var durationResults: NSView?
+    private weak var durationSummary: NSTextField?
     private var durationRows: [ConversionRow] = []
     private var cronInput: NSTextField?
     private var cronResults: NSView?
@@ -101,6 +102,27 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         if window == nil { build() }
         selectedMode = mode
         rebuildContent()
+        if mode == .duration {
+            precondition(durationSummary?.stringValue == "1 秒 = 1000 毫秒")
+            durationUnit?.selectItem(at: 7)
+            refreshDuration()
+            precondition(durationSummary?.stringValue == "1 毫秒 = 0.001 秒")
+            durationInput?.stringValue = "无效"
+            refreshDuration()
+            precondition(durationRows.isEmpty && durationSummary?.stringValue == "换算结果")
+            durationInput?.stringValue = "1"
+            durationUnit?.selectItem(at: 6)
+            refreshDuration()
+        } else if mode == .ascii {
+            asciiSearch?.stringValue = "a"
+            refreshASCII()
+            precondition(asciiStatus?.stringValue == "a  ·  十进制 97  ·  0x61")
+            asciiSearch?.stringValue = "没有这个字符"
+            refreshASCII()
+            precondition(asciiStatus?.stringValue == "0 个字符")
+            asciiSearch?.stringValue = ""
+            refreshASCII()
+        }
         DesignPreview.lastWindow = window
     }
 
@@ -200,7 +222,10 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         note.cell?.wraps = true
         note.maximumNumberOfLines = 2
         content.addSubview(note)
-        content.addSubview(label("换算结果", frame: NSRect(x: 328, y: 380, width: 280, height: 24), size: 14, weight: .medium))
+        let summary = label("换算结果", frame: NSRect(x: 328, y: 380, width: 562, height: 24), size: 16, weight: .semibold)
+        summary.lineBreakMode = .byTruncatingTail
+        content.addSubview(summary)
+        durationSummary = summary
         let results = NSView(frame: NSRect(x: 316, y: 0, width: 580, height: 372))
         content.addSubview(results)
         durationResults = results
@@ -210,12 +235,27 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
     @objc private func refreshDuration() {
         guard let input = durationInput, let units = durationUnit, let holder = durationResults else { return }
         holder.subviews.forEach { $0.removeFromSuperview() }
-        guard let number = Double(input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)), number.isFinite else {
+        durationRows = []
+        durationSummary?.stringValue = "换算结果"
+        let raw = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let number = Double(raw), number.isFinite else {
             holder.addSubview(label("请输入有效数字，结果会实时更新。", frame: NSRect(x: 12, y: 236, width: 600, height: 25),
                                     size: 12, color: OpenAllTheme.muted))
             return
         }
         durationRows = DeveloperConversion.durationRows(value: number, source: units.indexOfSelectedItem)
+        let source = units.indexOfSelectedItem
+        let target = source == 6 ? 7 : 6
+        let sourceUnit = DeveloperConversion.durationUnits[source]
+        let targetUnit = DeveloperConversion.durationUnits[target]
+        let targetValue = durationRows[target].value
+        if let converted = Double(targetValue) {
+            let calculated = number * sourceUnit.seconds / targetUnit.seconds
+            let rounding = max(abs(calculated), abs(converted)) * (Double.ulpOfOne * 4)
+            let operation = abs(calculated - converted) <= rounding && (converted != 0 || number == 0) ? "=" : "≈"
+            let name = sourceUnit.name.components(separatedBy: " · ")[0]
+            durationSummary?.stringValue = "\(raw) \(name) \(operation) \(targetValue) \(targetUnit.name)"
+        } else { durationSummary?.stringValue = "换算超出范围" }
         let order = Array(0..<10)
         for (position, index) in order.enumerated() {
             let row = durationRows[index]
@@ -391,7 +431,18 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         let rows = DeveloperConversion.asciiRows(query: search.stringValue).filter {
             !search.stringValue.isEmpty || asciiCategory == 2 || (asciiCategory == 0 ? (32..<127).contains($0.number) : $0.number < 32 || $0.number == 127)
         }
-        asciiStatus?.stringValue = "\(rows.count) 个字符"
+        let term = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let match = rows.first(where: { String($0.number) == term || $0.hex.lowercased() == term.lowercased() })
+            ?? rows.first(where: { $0.character == term || (term.count > 1 && $0.character.lowercased() == term.lowercased()) })
+        if let match {
+            asciiStatus?.stringValue = "\(match.character)  ·  十进制 \(match.number)  ·  \(match.hex)"
+            asciiStatus?.textColor = OpenAllTheme.ink
+            asciiStatus?.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
+        } else {
+            asciiStatus?.stringValue = "\(rows.count) 个字符"
+            asciiStatus?.textColor = OpenAllTheme.muted
+            asciiStatus?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        }
         let height = max(CGFloat(283), CGFloat(rows.count * 29 + 4))
         let document = NSView(frame: NSRect(x: 0, y: 0, width: 886, height: height))
         if rows.isEmpty {

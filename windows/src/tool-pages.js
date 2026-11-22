@@ -34,12 +34,12 @@
     const body = h('tbody'), footer = h('div',{class:'aux-table-footer'});
     const group = h('colgroup',{},columns.map(c => h('col',Array.isArray(c) ? {style:'width:'+c[1]/totalWidth*100+'%'} : {})));
     const node = h('div',{class:'aux-report'},h('table',{},group,head,body),footer);
-    let pages = [], records = [], page = 0, count = 0, emptyText = emptyMessage;
+    let markedRecord, pages = [], records = [], page = 0, count = 0, emptyText = emptyMessage;
     function render() {
       body.replaceChildren();
       for (const row of pages[page] || []) {
         const cells = Array.isArray(row) ? row : row.cells;
-        body.append(h('tr',{class:row.tone || ''},cells.map(cell => h('td',cell instanceof Node ? {} : {title:String(cell ?? '')},cell ?? ''))));
+        body.append(h('tr',{class:[row.tone, row === markedRecord ? 'summary-row' : ''].filter(Boolean).join(' ')},cells.map(cell => h('td',cell instanceof Node ? {} : {title:String(cell ?? '')},cell ?? ''))));
       }
       if (!count) body.append(h('tr',{},h('td',{colspan:columns.length,class:'aux-empty'},emptyText)));
       const position = pages.length > 1 ? ' · 第 '+(page+1)+' / '+pages.length+' 页' : '';
@@ -51,7 +51,7 @@
       }
     }
     function set(rows, message = emptyMessage) {
-      pages = []; records = rows; page = 0; count = 0; emptyText = message;
+      markedRecord = null; pages = []; records = rows; page = 0; count = 0; emptyText = message;
       let group = null, lastGroup = null;
       for (const row of rows) {
         if (row.tone === 'group') { group = row; continue; }
@@ -75,7 +75,14 @@
       row.focus({preventScroll:true});
       row.scrollIntoView({block:'nearest',inline:'nearest'});
     }
-    return {node,set,locate};
+    function mark(index) {
+      markedRecord = index == null ? null : records[index];
+      const rendered = pages[page] || [];
+      Array.from(body.rows).forEach((element, i) => {
+        element.classList.toggle('summary-row', !!markedRecord && rendered[i] === markedRecord);
+      });
+    }
+    return {node,set,locate,mark};
   }
   function copyButtonIcon(callback,title){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [key,value]of Object.entries({viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':1.5,'aria-hidden':'true'}))svg.setAttribute(key,value);const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d','M9 8h11v14H9zM15 8V2H3v14h6M15 2l5 6');svg.append(path);const result=button('',callback,'quiet aux-copy-icon');result.title=title;result.setAttribute('aria-label',title);result.append(svg);return result;}
   function backend(ctx,action,...args){return ctx.api.backendTask?ctx.api.backendTask(action,args):Promise.resolve(ctx.api.backend[action](...args));}
@@ -147,11 +154,26 @@
   pages.converter=async(root,ctx)=>{
     const status=shell(root,'converter'),job=worker(),modes=h('div',{class:'aux-tabs wide',role:'group','aria-label':'转换模式'}),content=h('div',{class:'aux-converter-body'});let mode='duration',timer,dead=false,cronSequence=0;const tabs=[['duration','时间单位'],['cron','Cron 表达式'],['ascii','ASCII 码表']];root.append(modes,content,status);
     async function render(){modes.replaceChildren(...tabs.map(([id,title])=>{const tab=button(title,()=>{mode=id;render();},mode===id?'active':'');tab.setAttribute('aria-pressed',String(mode===id));return tab;}));content.replaceChildren();setStatus(status,'');
-      if(mode==='duration'){const value=input('例如 1.5',/^-?[\d.]+$/.test(ctx.initialValue||'')?ctx.initialValue:'1'),unit=select(core.durationUnits.map(([name,symbol],index)=>[index,`${name} (${symbol})`]),6),list=h('div',{class:'aux-conversion-results'});content.append(h('div',{class:'aux-duration-fields'},label('输入时长',value),label('单位',unit),h('p',{class:'muted'},'年按 365 天、月按 30 天计算。')),h('div',{class:'aux-conversion-output'},h('h3',{},'换算结果'),list));const update=()=>{const rows=value.value.trim()?core.durationRows(Number(value.value),Number(unit.value)):[];list.replaceChildren(...rows.map((row,index)=>h('div',{class:'aux-conversion-row'+(index===Number(unit.value)?' source':'')},h('span',{class:'muted'},row.title),h('code',{title:row.value},core.durationDisplay(row.value)),copyButtonIcon(()=>copy(ctx,row.value),'复制完整数值'))));if(!value.value.trim()||!rows.length)setStatus(status,'请输入有效数字',true);else setStatus(status,'点击行末图标可复制完整精度的数值');};value.oninput=unit.onchange=update;update();}
+      if(mode==='duration'){const value=input('例如 1.5',/^-?[\d.]+$/.test(ctx.initialValue||'')?ctx.initialValue:'1'),unit=select(core.durationUnits.map(([name,symbol],index)=>[index,`${name} (${symbol})`]),6),summary=h('h3',{class:'aux-unit-summary','aria-live':'polite'},'换算结果'),list=h('div',{class:'aux-conversion-results'});content.append(h('div',{class:'aux-duration-fields'},label('输入时长',value),label('单位',unit),h('p',{class:'muted'},'年按 365 天、月按 30 天计算。')),h('div',{class:'aux-conversion-output'},summary,list));const update=()=>{const rows=value.value.trim()?core.durationRows(Number(value.value),Number(unit.value)):[];
+        const source = Number(unit.value), target = source === 6 ? 7 : 6;
+        if (!rows.length) summary.textContent = '换算结果';
+        else if (rows[target].value === '超出范围') summary.textContent = '换算超出范围';
+        else {
+          const converted = Number(value.value)*core.durationUnits[source][2]/core.durationUnits[target][2];
+          const shown = Number(rows[target].value), rounding = Math.max(Math.abs(shown),Math.abs(converted))*(Number.EPSILON*4);
+          const sign = Math.abs(shown-converted)<=rounding && (shown!==0 || Number(value.value)===0) ? '=' : '≈';
+          summary.textContent = value.value.trim()+' '+core.durationUnits[source][0].split(' · ')[0]+' '+sign+' '+rows[target].value+' '+core.durationUnits[target][0];
+        }
+        list.replaceChildren(...rows.map((row,index)=>h('div',{class:'aux-conversion-row'+(index===Number(unit.value)?' source':'')},h('span',{class:'muted'},row.title),h('code',{title:row.value},core.durationDisplay(row.value)),copyButtonIcon(()=>copy(ctx,row.value),'复制完整数值'))));if(!value.value.trim()||!rows.length)setStatus(status,'请输入有效数字',true);else setStatus(status,'点击行末图标可复制完整精度的数值');};value.oninput=unit.onchange=update;update();}
       if(mode==='cron'){const field=input('分 时 日 月 周','*/15 9-18 * * 1-5'),description=h('p',{class:'aux-cron-summary'}),results=h('div',{class:'aux-cron-times'}),parts=h('div',{class:'aux-cron-fields'}),presets=h('div',{class:'aux-inline'});try{core.cronParse(ctx.initialValue||'');field.value=ctx.initialValue;}catch{}const update=async()=>{const serial=++cronSequence;try{const parsed=core.cronParse(field.value);description.textContent=core.cronSummary(parsed);const dates=await job.run('cronNext',field.value,new Date(),5);if(dead||mode!=='cron'||serial!==cronSequence)return;results.replaceChildren(h('h3',{},'未来执行时间 · 中国时间'),...dates.map((date,index)=>{const value=new Date(date).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+' '+new Date(date).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',weekday:'long'});return h('div',{class:'aux-cron-row'},h('span',{class:'muted'},index?'第 '+(index+1)+' 次':'下一次'),h('code',{},value),button('复制',()=>copy(ctx,value),'quiet'));}));if(!dates.length)results.append(h('p',{class:'muted'},'未来五年内没有匹配的时间'));parts.replaceChildren(h('h3',{},'字段解析'),...parsed.fields.map((part,index)=>h('div',{},h('span',{class:'muted'},['分钟','小时','日期','月份','星期'][index]),h('code',{},part==='*'?'任意':part))));setStatus(status,'结果仅在本机计算 · 日期与星期同时指定时为“或”关系');}catch(error){description.textContent='';results.replaceChildren();parts.replaceChildren();setStatus(status,error.message,true);}};for(const [name,sample] of [['工作日 · 每 15 分钟','*/15 9-18 * * 1-5'],['工作日 · 09:00','0 9 * * 1-5'],['每月 1 日 · 08:30','30 8 1 * *']]){
           const preset=button(name,()=>{field.value=sample;update();},'quiet');preset.title=sample;presets.append(preset);
         }field.oninput=()=>{clearTimeout(timer);timer=setTimeout(update,120);};content.append(label('Cron 表达式',field),presets,description,h('div',{class:'aux-cron-grid'},results,parts));await update();}
-      if(mode==='ascii'){const field=input('搜索字符、十进制或十六进制'),category=select([['printable','可打印字符'],['control','控制字符'],['all','全部字符']]),report=table([['十进制',110],['十六进制',140],['字符',160],['说明',370],['',90]],'没有匹配的字符，可试试 A、65 或 0x41');const update=()=>{const rows=core.asciiRows(field.value,field.value?'all':category.value);report.set(rows.map(row=>[row.number,row.hex,row.character,core.asciiDescription(row.number),copyButtonIcon(()=>copy(ctx,String.fromCharCode(row.number)),'复制字符：'+row.character)]));setStatus(status,`${rows.length} 项 · ASCII 范围 0–127`);};field.oninput=category.onchange=update;content.append(h('div',{class:'aux-inline'},field,category),report.node);update();}
+      if(mode==='ascii'){const field=input('搜索字符、十进制或十六进制'),category=select([['printable','可打印字符'],['control','控制字符'],['all','全部字符']]),matchLabel=h('strong',{class:'aux-ascii-match','aria-live':'polite'}),report=table([['十进制',110],['十六进制',140],['字符',160],['说明',370],['',90]],'没有匹配的字符，可试试 A、65 或 0x41');const update=()=>{const rows=core.asciiRows(field.value,field.value?'all':category.value);
+        const term = field.value.trim();
+        const match = rows.find(row => String(row.number) === term || row.hex.toLowerCase() === term.toLowerCase())
+          || rows.find(row => row.character === term || (term.length > 1 && row.character.toLowerCase() === term.toLowerCase()));
+        matchLabel.textContent = match ? match.character+'  ·  十进制 '+match.number+'  ·  '+match.hex : '';
+        report.set(rows.map(row=>[row.number,row.hex,row.character,core.asciiDescription(row.number),copyButtonIcon(()=>copy(ctx,String.fromCharCode(row.number)),'复制字符：'+row.character)]));setStatus(status,`${rows.length} 项 · ASCII 范围 0–127`);};field.oninput=category.onchange=update;content.append(h('div',{class:'aux-inline aux-ascii-lookup'},field,category,matchLabel),report.node);update();}
     }
     if(ctx.initialValue){try{core.cronParse(ctx.initialValue);mode='cron';}catch{}}await render();return {dispose(){dead=true;clearTimeout(timer);job.dispose();}};
   };
@@ -175,7 +197,9 @@
     locateButton.title = '定位到摘要对应的行（Ctrl+L）';
     locateButton.hidden = true;
     function setHeadline(message, attention = false, destination = null) {
+      if (target && target.report !== destination?.report) target.report.mark(null);
       target = destination;
+      target?.report.mark(target.index);
       locateButton.hidden = !target;
       headline.textContent = message;
       body.classList.toggle('has-finding', attention);
@@ -207,7 +231,7 @@
         const text = String(value).replace(/[\r\n]+/g,' ');
         return text ? text.slice(0,26) + (text.length > 26 ? '…' : '') : '空字符串';
       };
-      const example = first && rows.length > 1 ? '其中一项：' : '';
+      const example = first && rows.length > 1 ? `${rows.length} 项变更 · ` : '';
       const title = first ? example + first.key.slice(0,52) + ' · ' + brief(first.left,first.leftType) + ' → ' + brief(first.right,first.rightType) : rows.length ? '敏感字段已变更' : '两份配置相同';
       complete(rows.map(row=>`${row.status} ${row.key}\n  ${row.left} [${row.leftType}] → ${row.right} [${row.rightType}]`).join('\n\n'),title,['新增','变化','删除'].map(kind => {
         const count = rows.filter(row => row.status === kind).length;

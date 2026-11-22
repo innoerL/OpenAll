@@ -23,6 +23,7 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
     private let header = NSView()
     private let scroll = NSScrollView()
     private var rows: [Row] = []
+    private var markedRow: Int?
     private let numericColumns: Set<Int>
     private let empty = NSTextField(labelWithString: "粘贴内容并运行分析，结果会显示在这里")
     init(frame: NSRect, columns: [(String, CGFloat)], numericColumns: Set<Int> = []) {
@@ -81,11 +82,17 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
         empty.frame = NSRect(x: 24, y: max(12, (bounds.height - 60) / 2), width: bounds.width - 48, height: 24)
     }
     func display(_ rows: [Row], emptyText: String = "粘贴内容并运行分析，结果会显示在这里") {
+        markedRow = nil
         self.rows = rows
         empty.stringValue = emptyText
         empty.isHidden = !rows.isEmpty
         table.reloadData()
         needsLayout = true
+    }
+    func mark(_ index: Int?) {
+        let changed = [markedRow, index].compactMap { $0 }.filter(rows.indices.contains)
+        markedRow = index
+        if !changed.isEmpty { table.reloadData(forRowIndexes: IndexSet(changed), columnIndexes: IndexSet(integer: 0)) }
     }
     @discardableResult
     func locate(_ index: Int) -> Bool {
@@ -118,6 +125,12 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
         guard let column = tableColumn, let index = Int(column.identifier.rawValue), rows.indices.contains(row) else { return nil }
         let item = rows[row]
         let view = NSTableCellView()
+        if index == 0 && row == markedRow {
+            let marker = NSView(frame: NSRect(x: 0, y: 5, width: 2, height: 24))
+            marker.wantsLayer = true
+            marker.layer?.backgroundColor = OpenAllTheme.accentText.cgColor
+            view.addSubview(marker)
+        }
         if item.tone == "group" {
             view.wantsLayer = true
             view.layer?.backgroundColor = OpenAllTheme.surface.withAlphaComponent(0.3).cgColor
@@ -540,6 +553,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
     }
 
     private func setHeadline(_ title: String, detail: String = "", attention: Bool = false, target: Int? = nil) {
+        reportView?.mark(target)
         targetRow = target
         locateButton?.isHidden = target == nil
         if mode != .sql { reportSummary?.frame.size.width = target == nil ? 810 : 734 }
@@ -612,7 +626,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                         let value = field.value.replacingOccurrences(of: "\n", with: " ")
                         return value.isEmpty ? "空字符串" : String(value.prefix(26)) + (value.count > 26 ? "…" : "")
                     }
-                    let example = differences.count > 1 ? "其中一项：" : ""
+                    let example = differences.count > 1 ? "\(differences.count) 项变更 · " : ""
                     setHeadline(example + "\(String(key.prefix(52))) · \(brief(a[key])) → \(brief(b[key]))",
                                 detail: breakdown, target: differences.firstIndex(of: key))
                 } else {

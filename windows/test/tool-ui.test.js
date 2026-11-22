@@ -92,14 +92,26 @@ app.whenReady().then(async()=>{
   for(const [part,value]of [['year','2000'],['month','1'],['day','2']])await fill('[data-id-part='+part+']',value);await expectIDBirthday([2000,1,2]);await capture('id-age-manual');
 
   await mount('converter');assert.equal(await js('return document.querySelectorAll(".aux-conversion-row").length'),10);await capture('converter-duration');
+  assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'1 秒 = 1000 毫秒');
+  await js('const unit=document.querySelector(".aux-duration-fields select");unit.value="7";unit.dispatchEvent(new Event("change"));');
+  assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'1 毫秒 = 0.001 秒');
+  await fill('.aux-duration-fields input','xxx');assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'换算结果');
+  assert.equal(await js('return document.querySelectorAll(".aux-conversion-row").length'),0);
   await click('Cron 表达式');await until('document.querySelectorAll(".aux-cron-row").length===5','Cron 时间');await capture('converter-cron');
   await click('ASCII 码表');await until('document.querySelectorAll("tbody tr").length===95','ASCII 行');await capture('converter-ascii');
+  for (const [query,expected] of [['A',65],['a',97],['65',65],['0x41',65],['TAB',9]]) {
+    await fill('.aux-ascii-lookup input',query);
+    assert.match(await js('return document.querySelector(".aux-ascii-match").textContent'),new RegExp('十进制 '+expected+'  ·  0x','u'));
+  }
+  await fill('.aux-ascii-lookup input','A');await capture('converter-ascii-match');
   await fill('.aux-converter-body input','xxx-no-ascii');
   assert.match(await js('return document.querySelector("tbody").textContent'),/没有匹配的字符/);
+  assert.equal(await js('return document.querySelector(".aux-ascii-match").textContent'),'');
 
   await mount('configDiff');
   await js('const fields=document.querySelectorAll("textarea,.aux-editor-frame");fields[0].value="server:\\n  port: 80\\npassword: old";fields[1].value="server:\\n  port: 81\\npassword: new\\nfeature: true";');
-  await click('比较配置');await until('document.querySelector(".aux-status").textContent.includes("修改 2")','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-status").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),"其中一项：server.port · 80 → 81");assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');await capture('configDiff');
+  await click('比较配置');await until('document.querySelector(".aux-status").textContent.includes("修改 2")','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-status").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),"3 项变更 · server.port · 80 → 81");assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');assert.match(await js('return document.querySelector(".summary-row").textContent'),/server.port/);
+  await capture('configDiff');
   await click('定位到行');assert.equal(await js('return document.activeElement.cells[1].textContent'),'server.port','定位到摘要列出的配置键');
   await js('document.querySelector(".aux-editor-frame").value="server: 123";');
   await until('document.querySelector(".aux-status").textContent.includes("重新运行")','配置更改状态');
