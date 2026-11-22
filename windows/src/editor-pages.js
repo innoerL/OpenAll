@@ -58,16 +58,21 @@
     close.classList.add('editor-find-close');
     searchBar.append(query, searchCount, caseLabel, findNav, close);
     const container = h('div', { class: 'editor-codemirror', 'data-editor': 'json' });
-    const status = h('span', { role: 'status' }, '就绪'), count = h('span', { class: 'editor-document-count' }, '0 行 · Ctrl+Z 撤销');
+    const status = h('span', { role: 'status' }, '就绪'), count = h('span', { class: 'editor-document-count' }, '0 行');
     const footer = h('footer', { class: 'editor-footer' }, status, count); host.append(toolbar, searchBar, container, footer);
     let editor, revision = 0, disposed = false, metadataJob, operationJob, searchJob, metadataTimer, searchTimer;
     let valid = false, regions = [], matches = [], activeMatch = -1, limited = false, busy = false;
     let pendingMetadata = false, queryComposing = false;
     function notice(message, error = false) { status.textContent = message; status.classList.toggle('error', error); }
-    function updateFold() { foldButton.textContent = editor?.folded ? '全部展开' : '全部折叠'; foldButton.disabled = !valid || !regions.length; }
+    function updateFold() {
+      const folds = editor.foldCount;
+      foldButton.textContent = folds ? '全部展开' : '全部折叠';
+      foldButton.disabled = !valid || !regions.length;
+      count.textContent = editor.lineCount + ' 行' + (folds ? ' · 折叠 ' + folds + ' 处' : '');
+    }
     function changed() {
       revision++; valid = false; regions = []; matches = []; activeMatch = -1;
-      count.textContent = editor.lineCount + ' 行 · Ctrl+Z 撤销'; copyButton.disabled = !editor.length;
+      copyButton.disabled = !editor.length;
       notice(editor.length ? '已编辑' : '就绪'); updateFold();
       clearTimeout(metadataTimer); metadataJob?.cancel(); pendingMetadata = !!editor.length;
       if (!searchBar.hidden) {

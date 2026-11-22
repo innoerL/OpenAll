@@ -268,15 +268,20 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         panel?.setContentSize(NSSize(width: 640, height: height))
         panel?.contentView?.viewWithTag(301)?.frame.origin.y = height - 43
         contextLabel.frame.origin.y = height - 35
-        if case .image(let selectedImage) = content {
-            contextLabel.stringValue = "选中的图片 · \(Int(selectedImage.size.width)) × \(Int(selectedImage.size.height))"
+        let selectedImage: NSImage?
+        if case .image(let picture) = content { selectedImage = picture }
+        else { selectedImage = loading ? image : nil }
+        if let selectedImage {
+            let raster = selectedImage.representations.max { $0.pixelsWide < $1.pixelsWide }
+            let width = raster?.pixelsWide ?? Int(selectedImage.size.width)
+            let height = raster?.pixelsHigh ?? Int(selectedImage.size.height)
+            contextLabel.stringValue = "\(loading ? "图片文字识别" : "选中的图片") · \(width) × \(height)"
         } else {
             contextLabel.stringValue = content?.summary ?? (loading ? "图片文字识别" : "当前状态")
         }
         preview.string = content?.preview ?? (loading ? "" : "暂未读取到选中内容")
         preview.textColor = content != nil || loading ? OpenAllTheme.ink : OpenAllTheme.muted
-        if case .image(let selectedImage) = content { imagePreview.image = selectedImage }
-        else { imagePreview.image = loading ? image : nil }
+        imagePreview.image = selectedImage
         imagePreview.isHidden = imagePreview.image == nil
         previewScroll.isHidden = !imagePreview.isHidden
         if loading {
@@ -500,6 +505,11 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         if let next = actions.firstIndex(where: { $0.kind == selected }) {
             table.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
         }
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        let index = table.selectedRow
+        actionHeading.stringValue = actions.indices.contains(index) ? "可用操作　\(index + 1) / \(actions.count)" : "可用操作"
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { actions.count }

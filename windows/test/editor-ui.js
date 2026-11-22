@@ -29,6 +29,7 @@ app.whenReady().then(async () => {
     await run(async () => controller.waitIdle());
     const folded = await run(() => { controller.foldLine(3); return controller.getState().folded; });
     check(folded, '嵌套对象可折叠');
+    check(await run(() => document.querySelector('.editor-document-count').textContent.endsWith('折叠 1 处')), '折叠后保留全文行数并显示折叠数量');
     check(await run(() => {
       const text = controller.getText(), at = text.indexOf('保留');
       controller.editor.view.dispatch({ changes: { from: at, to: at + 2, insert: '可编辑' }, userEvent: 'input.type' });
@@ -118,8 +119,8 @@ app.whenReady().then(async () => {
       return controller.getTexts()[0] === '共同\n旧值\n结束' && controller.getTexts()[1].startsWith('共同\n剪贴板');
     }), '剪贴板内容插入对比当前侧光标位置');
     const compared = await run(async () => controller.verify());
-    check(compared.passed, '复用 macOS 文本对比回归');
     report.comparisonVerification = compared;
+    check(compared.passed, '复用 macOS 文本对比回归：' + (compared.error || '通过'));
     const comparisonPerformance = await run(async () => controller.verifyPerformance());
     check(comparisonPerformance.passed, '复用 macOS 大文本压力回归');
     report.comparisonPerformance = comparisonPerformance;

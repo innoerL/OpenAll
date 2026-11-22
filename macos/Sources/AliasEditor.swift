@@ -1,11 +1,12 @@
 import AppKit
 
-final class AliasEditorView: NSView {
+final class AliasEditorView: NSView, NSTextFieldDelegate {
     private let store: AliasStore
     private let onChange: () -> Void
     private let list = NSView()
     private let scroll = NSScrollView()
     private let notice = NSTextField(labelWithString: "修改后保存，别名立即生效。")
+    private let example = NSTextField(labelWithString: "")
     private let countLabel = NSTextField(labelWithString: "")
     private var fields: [NSTextField] = []
     private var saveButton: NSButton!
@@ -51,6 +52,7 @@ final class AliasEditorView: NSView {
             field.cell?.wraps = true
             field.cell?.isScrollable = false
         }
+        field.delegate = self
         addSubview(field)
         fields.append(field)
     }
@@ -94,7 +96,11 @@ final class AliasEditorView: NSView {
         input("例如 google, gg", y: 270)
         label("网址模板 · {query} 代表搜索词", x: 260, y: 229, width: 350)
         input("https://example.com/search?q={query}", y: 155, multiline: true)
-        label("示例：xhs 咖啡 → 搜索小红书中的“咖啡”", x: 260, y: 126, width: 410, size: 10)
+        example.frame = NSRect(x: 260, y: 126, width: 391, height: 20)
+        example.font = .systemFont(ofSize: 12)
+        example.textColor = OpenAllTheme.muted
+        example.lineBreakMode = .byTruncatingTail
+        addSubview(example)
         saveButton = NSButton(title: "保存更改", target: self, action: #selector(saveAlias))
         saveButton.frame = NSRect(x: 260, y: 86, width: 104, height: 30)
         WindowChrome.styleAction(saveButton, primary: true)
@@ -158,7 +164,28 @@ final class AliasEditorView: NSView {
             saveButton.title = "添加网址"
             deleteButton.isHidden = true
         }
+        updateExample()
         rebuildList()
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        updateExample()
+    }
+
+    private func updateExample() {
+        let keyword = fields[1].stringValue.components(separatedBy: CharacterSet(charactersIn: ",，"))
+            .first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let name = fields[0].stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let template = fields[2].stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty, !name.isEmpty, !template.isEmpty else {
+            example.stringValue = ""
+            example.toolTip = nil
+            return
+        }
+        let query = template.contains("{query}")
+        example.stringValue = query ? "输入 “\(keyword) 咖啡” → 在\(name)搜索“咖啡”"
+                                    : "输入 “\(keyword)” → 打开\(name)"
+        example.toolTip = example.stringValue
     }
 
     private func showNotice(_ text: String, error: Bool = false) {

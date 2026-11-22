@@ -42,6 +42,15 @@ window.mountOpenAllManual = function (host, article, actions) {
     const entries = rows.length ? rows : blocks.filter(block => block.matches('pre,p,ul,ol'));
     groups.push({heading, blocks, entries});
   }
+  const intro = [...article.children].filter(element => !groups.some(group => group.heading === element || group.blocks.includes(element)));
+  const empty = document.createElement('div');
+  empty.className = 'manual-empty';
+  const reset = document.createElement('button');
+  reset.type = 'button'; reset.textContent = '清除搜索';
+  reset.onclick = () => { search.value = ''; filter(); search.focus(); };
+  empty.append('没有找到相关命令', reset);
+  empty.hidden = true;
+  article.append(empty);
   for (const entry of article.querySelectorAll('td code, pre')) {
     entry.classList.add('aux-copyable'); entry.tabIndex = 0; entry.setAttribute('role', 'button');
     entry.title = '复制命令'; entry.setAttribute('aria-label', '复制命令 ' + entry.textContent);
@@ -61,6 +70,8 @@ window.mountOpenAllManual = function (host, article, actions) {
       for (const entry of entries) entry.hidden = !visible.includes(entry);
       matches += visible.length;
     }
+    for (const block of intro) block.hidden = !!query;
+    empty.hidden = !query || matches > 0;
     clearTimeout(feedbackTimer);
     searchSummary = query ? (matches ? `${matches} 项匹配` : '没有匹配项') : '';
     status.textContent = searchSummary;

@@ -266,6 +266,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         cachedFormat = label
         return label
     }
+    var searchTerm = ""
     private var textPreview: (text: String, truncated: Bool)?
     private static let jsonKey = try! NSRegularExpression(pattern: #""(?:[^"\\]|\\.)*"(?=\s*:)"#)
     private static let markdownHeading = try! NSRegularExpression(pattern: #"(?m)^#{1,6}[^\n]*"#)
@@ -471,6 +472,14 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             } else if format == "Markdown" {
                 Self.markdownHeading.matches(in: display, range: full).forEach {
                     styled.addAttributes([.font: NSFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: OpenAllTheme.accentText], range: $0.range)
+                }
+            }
+            if !searchTerm.isEmpty, searchTerm.utf16.count <= 300 {
+                let match = (display as NSString).range(of: searchTerm, options: .caseInsensitive)
+                if match.location != NSNotFound {
+                    styled.addAttributes([.foregroundColor: OpenAllTheme.ink,
+                                          .backgroundColor: OpenAllTheme.accent.withAlphaComponent(0.26),
+                                          .underlineStyle: NSUnderlineStyle.single.rawValue], range: match)
                 }
             }
             styled.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine])
@@ -1260,6 +1269,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             let card = reusableCards.popLast() ?? ClipCard(frame: .zero)
             card.frame = NSRect(x: CGFloat(index) * step + 4, y: 1, width: cardWidth, height: 182)
             card.item = item
+            card.searchTerm = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             card.title = item.title
             card.toolTip = "来源：\(item.sourceName)\n\(item.kind == "files" ? item.filePaths.joined(separator: "\n") : item.text.prefix(500).description)"
             card.imageURL = store.imageURL(for: item)
@@ -1412,16 +1422,19 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         let heading = NSTextField(labelWithString: format + "预览")
         heading.font = .systemFont(ofSize: 17, weight: .semibold)
         heading.textColor = OpenAllTheme.ink
-        heading.frame = NSRect(x: 24, y: 386, width: 482, height: 28)
-        heading.autoresizingMask = [.width, .minYMargin]
+        heading.frame = NSRect(x: 24, y: 386, width: 202, height: 28)
+        heading.autoresizingMask = [.minYMargin]
         root.addSubview(heading)
-        let source = NSTextField(labelWithString: item.sourceName)
+        let copiedAt = DateFormatter.localizedString(from: item.date, dateStyle: .short, timeStyle: .short)
+        let provenance = [item.sourceName, copiedAt].filter { !$0.isEmpty }.joined(separator: " · ")
+        let source = NSTextField(labelWithString: provenance)
+        source.toolTip = provenance
         source.alignment = .right
         source.lineBreakMode = .byTruncatingMiddle
         source.font = .systemFont(ofSize: 12)
         source.textColor = OpenAllTheme.muted
-        source.frame = NSRect(x: 516, y: 389, width: 220, height: 20)
-        source.autoresizingMask = [.minXMargin, .minYMargin]
+        source.frame = NSRect(x: 234, y: 389, width: 502, height: 20)
+        source.autoresizingMask = [.width, .minYMargin]
         root.addSubview(source)
         let scroll = NSScrollView(frame: NSRect(x: 24, y: 55, width: 712, height: 321))
         scroll.autoresizingMask = [.width, .height]

@@ -162,7 +162,7 @@ final class ImagePreviewCanvas: NSView {
         let rows = Int(ceil(imageRect.height / size))
         for row in 0..<rows {
             for column in 0..<columns where (row + column).isMultiple(of: 2) {
-                OpenAllTheme.ink.withAlphaComponent(0.055).setFill()
+                OpenAllTheme.ink.withAlphaComponent(0.11).setFill()
                 NSRect(x: imageRect.minX + CGFloat(column) * size,
                        y: imageRect.minY + CGFloat(row) * size, width: size, height: size).fill()
             }
@@ -192,7 +192,6 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
     private var targetLabel: NSTextField!
     private var advancedButton: NSPopUpButton!
     private var sourceImage: NSImage?
-    private var sourceData: Data?
     private var metadataSourceData: Data?
     private var sourceURL: URL?
     private var sourceSize = NSSize.zero
@@ -422,7 +421,6 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         chooseButton?.isHidden = false
         chooseButton?.title = "更换图片…"
         if let chooseButton { chooseButton.font = .systemFont(ofSize: 12) }
-        sourceData = data
         if !preserveMetadata { metadataSourceData = data }
         sourceURL = url
         if let data, let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -631,13 +629,19 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         let ratio = min(preview.bounds.width / max(1, rendered.size.width), preview.bounds.height / max(1, rendered.size.height))
         previewScale?.stringValue = "适应窗口 · \(Int((ratio * 100).rounded()))%"
         let outputSize = ByteCountFormatter.string(fromByteCount: Int64(finalData.count), countStyle: .file)
-        let sourceSizeText = sourceData.map { ByteCountFormatter.string(fromByteCount: Int64($0.count), countStyle: .file) }
+        let sourceSize = metadataSourceData?.count
         let summary = NSMutableAttributedString(string: outputSize,
             attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 23, weight: .regular),
                          .foregroundColor: OpenAllTheme.ink])
         summary.append(NSAttributedString(string: "  \(outputFormat.title)",
             attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: OpenAllTheme.muted]))
-        let detail = sourceSizeText.map { "\(w) × \(h) · 原图 \($0)" } ?? "\(w) × \(h) 像素"
+        var detail = "\(w) × \(h) 像素"
+        if let sourceSize, sourceSize > 0 {
+            let original = ByteCountFormatter.string(fromByteCount: Int64(sourceSize), countStyle: .file)
+            let percent = Int((Double(finalData.count - sourceSize) * 100 / Double(sourceSize)).rounded())
+            let change = percent == 0 ? "体积相近" : (percent < 0 ? "减小 " : "增大 ") + "\(abs(percent))%"
+            detail += " · 原图 \(original) · \(change)"
+        }
         let paragraph = NSMutableParagraphStyle()
         paragraph.paragraphSpacingBefore = 8
         summary.append(NSAttributedString(string: "\n" + detail,

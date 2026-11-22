@@ -46,7 +46,6 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
         table.delegate = self
         table.dataSource = self
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-        var x: CGFloat = 0
         for (index, column) in columns.enumerated() {
             let cell = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("\(index)"))
             cell.width = column.1
@@ -54,10 +53,8 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
             let label = NSTextField(labelWithString: column.0)
             label.font = .systemFont(ofSize: 12, weight: .medium)
             label.textColor = OpenAllTheme.muted
-            label.frame = NSRect(x: x + 12, y: 6, width: column.1 - 24, height: 18)
             label.alignment = numericColumns.contains(index) ? .right : .left
             header.addSubview(label)
-            x += column.1
         }
         scroll.borderType = .noBorder
         scroll.drawsBackground = false
@@ -76,6 +73,10 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
         header.frame = NSRect(x: 0, y: bounds.height - 30, width: bounds.width, height: 30)
         scroll.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - 30))
         table.sizeLastColumnToFit()
+        for (index, label) in header.subviews.enumerated() {
+            let column = table.rect(ofColumn: index)
+            label.frame = NSRect(x: column.minX + 12, y: 6, width: max(0, column.width - 24), height: 18)
+        }
         empty.frame = NSRect(x: 24, y: max(12, (bounds.height - 60) / 2), width: bounds.width - 48, height: 24)
     }
     func display(_ rows: [Row], emptyText: String = "粘贴内容并运行分析，结果会显示在这里") {
@@ -114,6 +115,9 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
             styled.addAttributes([.font: NSFont.systemFont(ofSize: 11), .foregroundColor: OpenAllTheme.muted], range: NSRange(split.lowerBound..<text.stringValue.endIndex, in: text.stringValue))
             text.attributedStringValue = styled
         }
+        if item.tone == "group" && index == 0 {
+            text.textColor = OpenAllTheme.accentText
+        }
         text.lineBreakMode = .byTruncatingTail
         text.toolTip = text.stringValue
         view.addSubview(text)
@@ -122,7 +126,7 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
     }
 }
 
-final class BackendWorkbenchWindow: NSObject {
+final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDelegate {
     private var window: NSWindow?
     private var root: NSView!
     private var body: NSView!
@@ -243,6 +247,7 @@ final class BackendWorkbenchWindow: NSObject {
         paragraph.maximumLineHeight = 21
         text.defaultParagraphStyle = paragraph
         text.isEditable = editable
+        if editable { text.delegate = self }
         text.isSelectable = true
         text.isVerticallyResizable = true
         text.textContainer?.widthTracksTextView = true
@@ -321,6 +326,7 @@ final class BackendWorkbenchWindow: NSObject {
             let rule = NSTextField(frame: NSRect(x: 4, y: 172, width: 704, height: 30))
             rule.placeholderString = "高级：字段名=正则表达式（可选，取第 1 个捕获组）"
             WindowChrome.styleInput(rule)
+            rule.delegate = self
             body.addSubview(rule); manualRule = rule
             result = editor(x: 4, y: 4, w: 948, h: 160, placeholder: "先识别字段，再选择聚合字段", editable: false)
         case .sql:
@@ -448,6 +454,31 @@ final class BackendWorkbenchWindow: NSObject {
         manualRule?.isHidden = !manualRuleExpanded
         sender.title = manualRuleExpanded ? "⌄ 自定义字段" : "› 自定义字段"
         if manualRuleExpanded { window?.makeFirstResponder(manualRule) }
+    }
+
+    func textDidChange(_ notification: Notification) {
+        guard let text = notification.object as? NSTextView, text === left || text === right else { return }
+        markResultsStale()
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        if let field = notification.object as? NSTextField, field === manualRule { markResultsStale() }
+    }
+
+    private func markResultsStale() {
+        guard copyResultButton?.isEnabled == true || !(logs.isEmpty && logFields.isEmpty) else { return }
+        copyResultButton?.isEnabled = false
+        result?.string = ""
+        reportView?.display([], emptyText: "输入已更改，请重新运行分析")
+        reportSummary?.textColor = OpenAllTheme.muted
+        reportSummary?.stringValue = mode == .config ? "差异结果" : mode == .explain ? "计划节点" : mode == .logs ? "事件时间线" : "还原结果"
+        status.stringValue = "输入已更改，请重新运行"
+        if mode == .logs {
+            logs.removeAll()
+            logFields.removeAll()
+            groupField?.removeAllItems()
+            timeField?.removeAllItems()
+        }
     }
 
     @objc private func analyze() {

@@ -115,7 +115,8 @@ function create(options) {
     get length() { return view.state.doc.length; },
     get lineCount() { return view.state.doc.length ? view.state.doc.lines : 0; },
     get selectedText() { return view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to); },
-    get folded() { return foldedRanges(view.state).size > 0; },
+    get foldCount() { return foldedRanges(view.state).size; },
+    get folded() { return this.foldCount > 0; },
     get hasFocus() { return view.hasFocus; },
     setText(text, formatted = false) {
       text = String(text).replace(/\r\n?/g, '\n');

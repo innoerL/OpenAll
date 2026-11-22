@@ -20,3 +20,33 @@
 .manual-article pre { white-space:pre-wrap; background:var(--canvas); border:1px solid var(--rule); border-radius:5px; padding:12px; }
 .manual-article a { color:var(--accent-text,var(--ink)); }
 .manual-reader [hidden] { display:none!important; }
+
+.manual-reader .manual-article th {
+  position: sticky;
+  top: -1px;
+  z-index: 1;
+  box-shadow: 0 1px var(--rule);
+}
+.manual-article .aux-copyable:hover,
+.manual-article .aux-copyable:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: .22em;
+}
+.manual-reader .manual-empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 12px;
+  min-height: 55%;
+  color: var(--muted);
+}
+.manual-empty button {
+  padding: 5px 12px;
+  color: var(--ink);
+  font: inherit;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.manual-empty button:hover { background: var(--raised); }

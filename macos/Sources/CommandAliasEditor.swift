@@ -9,6 +9,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
     private let commandSearch = NSSearchField()
     private let commandScroll = NSScrollView()
     private let commandList = NSView()
+    private let detail = NSView()
     private let noMatches = NSTextField(labelWithString: "没有匹配的功能")
     private var commandTitle: NSTextField!
     private var builtInNames: NSTextField!
@@ -85,7 +86,8 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         }
         noMatches.font = .systemFont(ofSize: 13)
         noMatches.textColor = OpenAllTheme.muted
-        noMatches.frame = NSRect(x: 12, y: 262, width: 220, height: 24)
+        noMatches.frame = NSRect(x: 8, y: 187, width: 228, height: 30)
+        noMatches.alignment = .center
         noMatches.isHidden = true
         listCard.addSubview(noMatches)
         scroll.documentView = list
@@ -93,7 +95,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         scroll.reflectScrolledClipView(scroll.contentView)
         listCard.addSubview(scroll)
 
-        let detail = NSView(frame: NSRect(x: 288, y: 47, width: 392, height: 358))
+        detail.frame = NSRect(x: 288, y: 47, width: 392, height: 358)
         WindowChrome.styleSettingsSection(detail)
         addSubview(detail)
         commandTitle = label("", x: 20, y: 324, width: 350, size: 16)
@@ -105,7 +107,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         builtInNames = NSTextField(wrappingLabelWithString: "")
         builtInNames.font = .systemFont(ofSize: 12)
         builtInNames.textColor = OpenAllTheme.ink
-        builtInNames.frame = NSRect(x: 20, y: 252, width: 348, height: 24)
+        builtInNames.frame = NSRect(x: 20, y: 239, width: 348, height: 40)
         detail.addSubview(builtInNames)
         let customLabel = label("自定义别名", x: 20, y: 219, width: 340, size: 11)
         customLabel.textColor = OpenAllTheme.muted
@@ -179,6 +181,13 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
             buttons[index].frame = NSRect(x: 2, y: height - CGFloat(position + 1) * 54, width: 232, height: 50)
         }
         noMatches.isHidden = !matches.isEmpty
+        commandScroll.isHidden = matches.isEmpty
+        detail.isHidden = matches.isEmpty
+        if let first = matches.first, !matches.contains(selectedIndex) {
+            selectedIndex = first
+            notice.stringValue = ""
+            refreshSelection()
+        }
         commandScroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, height - commandScroll.contentSize.height)))
         commandScroll.reflectScrolledClipView(commandScroll.contentView)
     }

@@ -672,7 +672,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         status.frame = NSRect(x: 20, y: 7, width: 730, height: 18)
         status.autoresizingMask = [.width]
         root.addSubview(status)
-        documentSummary = NSTextField(labelWithString: "0 行 · ⌘Z 撤销")
+        documentSummary = NSTextField(labelWithString: "0 行")
         documentSummary.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         documentSummary.textColor = OpenAllTheme.muted
         documentSummary.alignment = .right
@@ -983,9 +983,9 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
             let range = NSRange(location: projection.projectedOffset(forSourceOffset: match.location), length: match.length)
             guard NSMaxRange(range) <= full.length, projection.sourceRange(for: range) == match else { continue }
             manager.addTemporaryAttribute(.backgroundColor,
-                value: NSColor.systemBlue.withAlphaComponent(index == searchIndex ? 0.40 : 0.14), forCharacterRange: range)
+                value: OpenAllTheme.accentText.withAlphaComponent(index == searchIndex ? 0.34 : 0.15), forCharacterRange: range)
             if index == searchIndex {
-                manager.addTemporaryAttributes([.underlineStyle: NSUnderlineStyle.single.rawValue, .underlineColor: NSColor.systemBlue], forCharacterRange: range)
+                manager.addTemporaryAttributes([.underlineStyle: NSUnderlineStyle.single.rawValue, .underlineColor: OpenAllTheme.accentText], forCharacterRange: range)
             }
         }
     }
@@ -1026,7 +1026,6 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         status.stringValue = description
         status.textColor = OpenAllTheme.ink.withAlphaComponent(0.74)
         copyButton.isEnabled = !result.source.isEmpty
-        documentSummary?.stringValue = "\(result.lineCount) 行 · ⌘Z 撤销"
     }
     @objc private func formatJSON() {
         if largeDocument { processLargeJSON(action: "格式化", transform: JSONPrettyPrinter.format); return }
@@ -1356,7 +1355,9 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
                 switch response {
                 case .success(let value):
                     if self.replaceContent(value, action: action) { self.success("\(action)完成") }
-                case .failure(let issue as JSONIssue): self.status.stringValue = "第 \(issue.line) 行、第 \(issue.column) 列：\(issue.message)"
+                case .failure(let issue as JSONIssue):
+                    self.status.stringValue = "第 \(issue.line) 行、第 \(issue.column) 列：\(issue.message)"
+                    self.status.textColor = .systemRed
                 case .failure(let error): self.status.stringValue = error.localizedDescription
                 }
             }
@@ -1366,6 +1367,8 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
     }
 
     private func updateEditorControls() {
+        let folded = result.collapsed.count
+        documentSummary?.stringValue = folded == 0 ? "\(result.lineCount) 行" : "\(result.lineCount) 行 · 折叠 \(folded) 处"
         ruler.projection = projection
         ruler.onToggle = supportsFolding ? { [weak self] start in self?.toggleFold(start: start) } : nil
         foldButton.isEnabled = supportsFolding && !result.regions.isEmpty

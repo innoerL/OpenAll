@@ -62,3 +62,5 @@
 .clip-preview-action { margin-left: auto; }
 .clip-preview button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
 .clip-preview .preview-content:focus-visible { outline: none; border-color: var(--accent-text); }
+
+.clip-content mark { color: var(--ink); background: color-mix(in srgb, var(--accent) 26%, transparent); text-decoration: underline; text-underline-offset: 2px; }

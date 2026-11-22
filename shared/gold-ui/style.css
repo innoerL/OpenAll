@@ -85,3 +85,7 @@ body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none
   #forecast-table .daily-direction { gap:0; }
   #forecast-table th, #forecast-table td { padding:5px 2px; }
 }
+
+@media (hover:hover) {
+  #forecast-table tbody tr:hover { background:color-mix(in srgb,var(--forecast-ink) 8%,transparent); }
+}

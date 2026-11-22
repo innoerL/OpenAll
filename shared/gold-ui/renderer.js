@@ -125,10 +125,13 @@ function updateSummary(id, card, outlook) {
   }
   const days = outlook?.days.filter(({ mid }) => Number.isFinite(mid)) ?? [];
   const last = days.at(-1);
+  $('.week-label', summary).textContent = last ? last.date.slice(5).replace('-', '/') + ' 展望' : '7 日展望';
   $('.week-direction', summary).textContent = last ? FORECAST_LABELS[last.direction] : '待生成';
   $('.week-confidence', summary).textContent = last ? `方向概率 ${last.confidence}%` : '';
   $('.week-confidence', summary).hidden = !last;
   summary.dataset.direction = last?.direction ?? '';
+  summary.setAttribute('aria-label', last ?
+    `查看七日展望，${last.date} ${FORECAST_LABELS[last.direction]}，方向概率 ${last.confidence}%` : '查看七日展望');
   summary.title = last ?
     `截至 ${last.date} · ${FORECAST_LABELS[last.direction]} · 方向概率 ${last.confidence}%（未校准），不是价格命中率` :
     '打开七日展望';

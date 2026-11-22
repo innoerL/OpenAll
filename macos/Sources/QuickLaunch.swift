@@ -363,6 +363,7 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
     private var loadFailed = false
     private var stateView: NSView?
     private var stateDetail: NSTextField?
+    private var sourceExcerpt: NSTextField?
     private var retryButton: NSButton?
     private var connectionProgress: NSProgressIndicator?
     private var connectionIcon: NSImageView?
@@ -415,6 +416,13 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             detail.textColor = OpenAllTheme.muted
             detail.frame = NSRect(x: 68, y: 99, width: 364, height: 22)
             card.addSubview(detail)
+            let excerpt = NSTextField(labelWithString: "")
+            excerpt.font = .systemFont(ofSize: 12, weight: .medium)
+            excerpt.textColor = OpenAllTheme.ink
+            excerpt.lineBreakMode = .byTruncatingTail
+            excerpt.frame = NSRect(x: 68, y: 78, width: 360, height: 18)
+            card.addSubview(excerpt)
+            sourceExcerpt = excerpt
             let retry = NSButton(title: "重新连接", target: self, action: #selector(retryTranslation))
             retry.frame = NSRect(x: 68, y: 47, width: 100, height: 32)
             WindowChrome.styleAction(retry, primary: true)
@@ -434,6 +442,9 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             window = w
             webView = view
         }
+        let excerpt = text.prefix(96).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        sourceExcerpt?.stringValue = excerpt.isEmpty ? "" : "待译原文　" + excerpt
+        sourceExcerpt?.isHidden = excerpt.isEmpty
         WindowChrome.present(window)
         WindowChrome.activate()
         if DesignPreview.enabled { return }
@@ -533,7 +544,7 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
         """
         webView?.evaluateJavaScript(script) { [weak self] result, _ in
             guard let self = self else { return }
-            if (result as? Bool) == true { self.pending = "" }
+            if (result as? Bool) == true { self.pending = ""; self.sourceExcerpt?.isHidden = true }
             else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { self.fill() } }
         }
     }
@@ -571,6 +582,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     }()
     private var apps: [Entry] = []
     private var results: [Entry] = []
+    private var titleMatchTerm = ""
     private var panel: NSPanel!
     private var field: SearchField!
     private var table: NSTableView!
@@ -974,7 +986,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         let stackPreview = PasteStackWindow(store: stackStore)
         stackPreview.showForDesign()
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "11-paste-stack")
-        translator.show("")
+        translator.show("Open the project folder to review the changes.")
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "12-translation-loading")
         translator.showFailureForDesign()
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "12-translation-failed")
@@ -1795,6 +1807,8 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         let q = original.lowercased()
         let searchScope = ["书签 ", "历史 ", "应用 "].first { q.hasPrefix($0) }
         let exactTerm = searchScope.map { String(original.dropFirst($0.count)).trimmingCharacters(in: .whitespaces) } ?? original
+        let term = exactTerm.hasPrefix("?") || exactTerm.hasPrefix("？") ? String(exactTerm.dropFirst()).trimmingCharacters(in: .whitespaces) : exactTerm
+        titleMatchTerm = term.utf16.count <= 256 ? term : ""
         let pinyin = settings.value.pinyinEnabled
         let catalog = CommandCatalog.all(settings: settings.value)
         var list: [Entry] = []
@@ -2147,7 +2161,19 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             detail.autoresizingMask = [.width]
             cell.addSubview(icon); cell.addSubview(title); cell.addSubview(detail)
         }
-        cell.viewWithTag(1).flatMap { $0 as? NSTextField }?.stringValue = results[row].title
+        if let title = cell.viewWithTag(1) as? NSTextField {
+            let value = results[row].title
+            title.stringValue = value
+            if !titleMatchTerm.isEmpty {
+                let match = (String(value.prefix(256)) as NSString).range(of: titleMatchTerm, options: .caseInsensitive)
+                if match.location != NSNotFound {
+                    let marked = NSMutableAttributedString(attributedString: title.attributedStringValue)
+                    marked.addAttributes([.foregroundColor: OpenAllTheme.accentText,
+                                          .font: NSFont.systemFont(ofSize: 14, weight: .semibold)], range: match)
+                    title.attributedStringValue = marked
+                }
+            }
+        }
         cell.viewWithTag(2).flatMap { $0 as? NSTextField }?.stringValue = results[row].detail
         let item = results[row]
         cell.setAccessibilityHelp("回车" + item.returnAction)
@@ -2401,7 +2427,13 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                               ("权限", "lock.shield", 5), ("诊断", "waveform.path.ecg", 6),
                               ("外观", "paintpalette", 7)]
             for (row, item) in navigation.enumerated() {
-                let control = SettingsNavItem(frame: NSRect(x: 10, y: 447 - CGFloat(row) * 40, width: 160, height: 40),
+                let y = 447 - CGFloat(row) * 40 - CGFloat(row / 3) * 13
+                if row == 3 || row == 6 {
+                    let divider = NSBox(frame: NSRect(x: 21, y: y + 46, width: 137, height: 1))
+                    divider.boxType = .separator
+                    sidebar.addSubview(divider)
+                }
+                let control = SettingsNavItem(frame: NSRect(x: 10, y: y, width: 160, height: 40),
                                               title: item.0, symbol: item.1)
                 control.tag = item.2
                 control.onChoose = { [weak self] in
@@ -2966,9 +2998,20 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         let contentHeight = max(270, CGFloat(rules.count) * 50 + 10)
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: contentHeight))
         if rules.isEmpty {
-            hint.stringValue = "尚未设置手动规则。在搜索中按 ⌘K，可置顶或隐藏选中项。"
+            hint.isHidden = true
+            let emptyTitle = NSTextField(labelWithString: "暂无置顶或隐藏的结果")
+            emptyTitle.font = .systemFont(ofSize: 15, weight: .semibold)
+            emptyTitle.textColor = OpenAllTheme.ink
+            emptyTitle.alignment = .center
+            emptyTitle.frame = NSRect(x: 0, y: 175, width: 620, height: 24)
+            content.addSubview(emptyTitle)
+            let instructions = NSTextField(labelWithString: "在搜索中选中结果，按 ⌘K 即可置顶或隐藏。")
+            instructions.textColor = OpenAllTheme.muted
+            instructions.alignment = .center
+            instructions.frame = NSRect(x: 0, y: 147, width: 620, height: 22)
+            content.addSubview(instructions)
             let start = NSButton(title: "打开搜索", target: self, action: #selector(show))
-            start.frame = NSRect(x: 0, y: 220, width: 132, height: 32)
+            start.frame = NSRect(x: 251, y: 94, width: 118, height: 32)
             WindowChrome.styleAction(start, primary: true)
             content.addSubview(start)
         }

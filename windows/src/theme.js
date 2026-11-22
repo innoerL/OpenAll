@@ -11,6 +11,27 @@
   const luminance = value => rgb(value).reduce((sum, component, index) => sum + component / 255 * [.2126, .7152, .0722][index], 0);
   const mix = (base, target, fraction) => '#' + rgb(base).map((component, index) => Math.round(component * (1 - fraction) + rgb(target)[index] * fraction).toString(16).padStart(2, '0')).join('');
 
+  function relativeLuminance(color) {
+    return rgb(color).reduce((sum, channel, index) => {
+      const value = channel / 255;
+      const linear = value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+      return sum + linear * [.2126, .7152, .0722][index];
+    }, 0);
+  }
+
+  function contrast(a, b) { return (Math.max(a, b) + .05) / (Math.min(a, b) + .05); }
+  function readableText(preferred, backgrounds) {
+    const levels = backgrounds.map(relativeLuminance);
+    const score = color => Math.min(...levels.map(level => contrast(relativeLuminance(color), level)));
+    if (score(preferred) >= 4.5) return preferred;
+    const toward = score('#000000') >= score('#ffffff') ? '#000000' : '#ffffff';
+    for (let step = 1; step < 10; step++) {
+      const candidate = mix(preferred, toward, step / 10);
+      if (score(candidate) >= 4.5) return candidate;
+    }
+    return toward;
+  }
+
   function palette(settings = {}, systemLight = false) {
     let canvas = settings.theme === 'system' ? (systemLight ? '#f2f2ef' : '#242626') : hex(settings.backgroundHex, '#242626');
     // 旧默认值沿用已有迁移规则；用户显式选择的相同颜色不改写。
@@ -20,12 +41,16 @@
     // AppKit calibrated 色转为 sRGB 后的常量，与 Mac 原生文字保持一致。
     const ink = light ? '#1e1e1e' : '#f3f1eb', muted = light ? '#747474' : '#acb0ac';
     const editor = mix(canvas, light ? '#ffffff' : '#000000', light ? .45 : .16);
+    const raised = mix(canvas, opposite, .095);
+    const preferred = light && luminance(accent) > .42 ? mix(accent, '#000000', .46) : accent;
+    const accentLevel = relativeLuminance(accent);
+    const buttonText = contrast(accentLevel, 1) >= contrast(accentLevel, relativeLuminance('#1a1a1a')) ? '#ffffff' : '#1a1a1a';
     const vars = {
       '--canvas': canvas, '--sidebar': mix(canvas, opposite, .025), '--surface': mix(canvas, opposite, .052),
-      '--raised': mix(canvas, opposite, .095), '--editor': editor, '--ink': ink, '--muted': muted,
+      '--raised': raised, '--editor': editor, '--ink': ink, '--muted': muted,
       '--secondary': mix(ink, editor, .26), '--accent': accent,
-      '--accent-text': light && luminance(accent) > .42 ? mix(accent, '#000000', .46) : accent,
-      '--on-accent': luminance(accent) > .55 ? '#1a1a1a' : '#ffffff',
+      '--accent-text': readableText(preferred, [canvas, raised, editor]),
+      '--on-accent': readableText(buttonText, [accent]),
       '--rule': light ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.085)',
       '--comparison-rule': light ? 'rgba(0,0,0,.09)' : 'rgba(255,255,255,.065)',
       '--selection': accent + '1c', '--editor-selection': accent + '59'

@@ -11,13 +11,24 @@ final class MarkdownHelpRow: NSButton {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self))
         super.updateTrackingAreas()
     }
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        needsDisplay = true
+        return accepted
+    }
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        needsDisplay = true
+        return accepted
+    }
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
     override func draw(_ dirtyRect: NSRect) {
         let bounds = self.bounds.insetBy(dx: 2, dy: 2)
         (hovering ? OpenAllTheme.raised : NSColor.clear).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 5, yRadius: 5).fill()
-        if hovering || isHighlighted {
+        let focused = window?.firstResponder === self
+        if hovering || isHighlighted || focused {
             OpenAllTheme.accent.withAlphaComponent(0.5).setStroke()
             NSBezierPath(roundedRect: bounds, xRadius: 5, yRadius: 5).stroke()
         }
@@ -28,7 +39,7 @@ final class MarkdownHelpRow: NSButton {
         (detail as NSString).draw(in: NSRect(x: 124, y: 6, width: bounds.width - 194, height: 20),
                                   withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular), .foregroundColor: OpenAllTheme.muted])
         ("↵" as NSString).draw(in: NSRect(x: bounds.maxX - 46, y: 6, width: 36, height: 20),
-                                withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: hovering ? OpenAllTheme.accentText : OpenAllTheme.muted])
+                                withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: hovering || focused ? OpenAllTheme.accentText : OpenAllTheme.muted])
     }
 }
 
@@ -196,6 +207,8 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
         card.addSubview(subtitle)
         let close = NSButton(title: "×", target: self, action: #selector(toggleHelp))
         close.isBordered = false
+        close.setAccessibilityLabel("关闭语法速查")
+        close.toolTip = "关闭语法速查"
         close.font = .systemFont(ofSize: 19, weight: .light)
         close.contentTintColor = OpenAllTheme.muted
         close.frame = NSRect(x: width - 48, y: card.bounds.height - 47, width: 30, height: 30)

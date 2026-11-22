@@ -94,10 +94,15 @@ app.whenReady().then(async()=>{
   await mount('converter');assert.equal(await js('return document.querySelectorAll(".aux-conversion-row").length'),10);await capture('converter-duration');
   await click('Cron 表达式');await until('document.querySelectorAll(".aux-cron-row").length===5','Cron 时间');await capture('converter-cron');
   await click('ASCII 码表');await until('document.querySelectorAll("tbody tr").length===95','ASCII 行');await capture('converter-ascii');
+  await fill('.aux-converter-body input','xxx-no-ascii');
+  assert.match(await js('return document.querySelector("tbody").textContent'),/没有匹配的字符/);
 
   await mount('configDiff');
   await js('const fields=document.querySelectorAll("textarea,.aux-editor-frame");fields[0].value="server:\\n  port: 80\\npassword: old";fields[1].value="server:\\n  port: 81\\npassword: new\\nfeature: true";');
   await click('比较配置');await until('document.querySelector(".aux-status").textContent==="3 项差异"','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);await capture('configDiff');
+  await js('document.querySelector(".aux-editor-frame").value="server: 123";');
+  await until('document.querySelector(".aux-status").textContent.includes("重新运行")','配置更改状态');
+  assert.equal(await js('return document.querySelector(".aux-report-heading button").disabled'),true,'源配置变更后应禁用旧结果复制');
 
   await mount('explain',JSON.stringify([{Plan:{'Node Type':'Nested Loop','Plan Rows':200,Plans:[{'Node Type':'Index Scan','Relation Name':'users','Index Name':'users_pkey','Plan Rows':1,'Actual Rows':1,'Actual Total Time':0.04},{'Node Type':'Seq Scan','Relation Name':'orders','Plan Rows':200,'Actual Rows':174,'Actual Total Time':1.24}]}}]));await click('分析计划');await until('document.querySelectorAll("tbody tr").length===3','执行计划');assert.match(await js('return document.querySelector("tbody").textContent'),/全表扫描/);await capture('explain');
 
@@ -118,12 +123,16 @@ app.whenReady().then(async()=>{
   await fill('input[type=search]','');
   assert.equal(await js('return [...document.querySelectorAll("tbody tr")].filter(row=>!row.closest("[hidden]")).length'),manualRowCount);
   await capture('manual');
+  await fill('.manual-toolbar input','no_command_359907');
+  assert.equal(await js('return !document.querySelector(".manual-empty").hidden'),true);
+  await click('清除搜索');
+  assert.equal(await js('return document.querySelector(".manual-empty").hidden && document.activeElement===document.querySelector(".manual-toolbar input")'),true);
 
   await mount('markdown','# OpenAll 笔记\n\n在一处编辑与预览。\n\n- [x] Markdown\n- [x] Mermaid 图表\n\n```mermaid\nflowchart LR\nA[输入] --> B[编辑]\nB --> C[导出]\n```\n\n| 工具 | 状态 |\n| --- | --- |\n| JSON | 可用 |');await until('document.querySelector(".aux-diagram svg")!==null','Mermaid 图表');await capture('markdown');await js('document.querySelector(".aux-editor-frame").focus();');win.webContents.sendInputEvent({type:'keyDown',keyCode:'F',modifiers:[process.platform==='darwin'?'meta':'control']});await until('!document.querySelector(".aux-findbar").hidden','Markdown 搜索框');await fill('.aux-findbar input','OpenAll');await until('document.querySelector(".aux-findbar span").textContent.includes("1 / 1")','Markdown 内容搜索');await js('document.querySelector(".aux-findbar button:last-child").click();');await click('复制 Markdown');assert.match(await js('return window.copied'),/# OpenAll/);await click('导出 HTML…');await until('window.saved.length===1','HTML 导出');assert.match(await js('return window.saved[0].text'),/<svg/);
   await fill('textarea,.aux-editor-frame','<script>window.hacked=1</script>\n<img src=x onerror="window.hacked=1">\n[bad](javascript:alert(1))');await until('document.querySelector(".aux-status").textContent.includes("预览已更新")','Markdown 安全预览');assert.equal(await js('return Boolean(window.hacked||document.querySelector(".aux-markdown-preview script")||document.querySelector(".aux-markdown-preview [onerror]"))'),false);
 
   const image=await js('const canvas=document.createElement("canvas");canvas.width=800;canvas.height=500;const ctx=canvas.getContext("2d"),g=ctx.createLinearGradient(0,0,800,500);g.addColorStop(0,"#d8c19e");g.addColorStop(1,"#49716b");ctx.fillStyle=g;ctx.fillRect(0,0,800,500);ctx.fillStyle="#f8f7ef";ctx.font="42px sans-serif";ctx.fillText("OpenAll",60,100);ctx.strokeStyle="#ffffff90";ctx.lineWidth=3;ctx.strokeRect(60,150,680,290);return canvas.toDataURL();');
-  await mount('image',image);await until('document.querySelector(".aux-image-size").textContent.includes("PNG")','图片编码');await capture('image');await click('↷ 右转');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="500" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片旋转');await click('⌗ 裁剪');await js('const fields=document.querySelectorAll(".aux-crop-fields input");fields[0].value="20";fields[1].value="30";fields[2].value="100";fields[3].value="120";');await click('裁剪');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="100" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片裁剪');await click('保存文件…');await until('window.saved.length===2','图片保存');await click('复制图片');await until('Boolean(window.copiedImage)','图片复制');
+  await mount('image',image);await until('document.querySelector(".aux-image-size").textContent.includes("PNG")','图片编码');await capture('image');assert.match(await js('return document.querySelector(".aux-image-summary p").textContent'),/体积相近|减小|增大/);await click('↷ 右转');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="500" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片旋转');await click('⌗ 裁剪');await js('const fields=document.querySelectorAll(".aux-crop-fields input");fields[0].value="20";fields[1].value="30";fields[2].value="100";fields[3].value="120";');await click('裁剪');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="100" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片裁剪');await click('保存文件…');await until('window.saved.length===2','图片保存');await click('复制图片');await until('Boolean(window.copiedImage)','图片复制');
   const copied=await js('return window.copiedImage');assert.ok(copied.startsWith('data:image/png;'));
 
   for(const id of ['id','markdown','unicode','image','manual']){

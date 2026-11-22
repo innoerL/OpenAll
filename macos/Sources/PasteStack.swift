@@ -242,11 +242,19 @@ final class PasteStackWindow: NSObject {
             indexLabel.textColor = index == 0 ? OpenAllTheme.accentText : OpenAllTheme.muted
             indexLabel.frame = NSRect(x: 10, y: 10, width: 39, height: 18)
             row.addSubview(indexLabel)
+            let types = ["image": ("photo", "图片"), "files": ("folder", "文件"), "link": ("link", "链接")]
+            let (symbol, kind) = types[item.kind] ?? ("text.alignleft", "文本")
+            let typeIcon = NSImageView(frame: NSRect(x: 54, y: 13, width: 14, height: 14))
+            typeIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            typeIcon.contentTintColor = OpenAllTheme.muted
+            row.addSubview(typeIcon)
+            row.setAccessibilityLabel("第 \(index + 1) 项，\(kind)，\(item.title)")
+            row.toolTip = item.title
             let preview = NSTextField(labelWithString: item.kind == "image" ? "图片" : item.title)
             preview.lineBreakMode = .byWordWrapping
             preview.maximumNumberOfLines = 2
             preview.textColor = OpenAllTheme.ink
-            preview.frame = NSRect(x: 55, y: 4, width: 210, height: 32)
+            preview.frame = NSRect(x: 76, y: 4, width: 189, height: 32)
             row.addSubview(preview)
             let remove = NSButton(title: "×", target: self, action: #selector(removeRow(_:)))
             remove.tag = index
@@ -275,10 +283,11 @@ final class PasteStackWindow: NSObject {
             next.title = authorized ? "粘贴下一项" : "授权后可粘贴"
             WindowChrome.styleAction(next, primary: next.isEnabled)
         }
+        let queueSize = count > 6 ? "\(count) 项 · 显示前 6 项" : "\(count) 项待粘贴"
         if pasteHotkeyAvailable || tapAvailable {
-            status.stringValue = "\(count) 项待粘贴 · ⌘V"
+            status.stringValue = queueSize + " · ⌘V"
         } else if AXIsProcessTrusted() {
-            status.stringValue = "\(count) 项待粘贴"
+            status.stringValue = queueSize
         } else {
             status.stringValue = "请授权辅助功能后重开堆栈"
         }

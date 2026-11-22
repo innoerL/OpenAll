@@ -24,7 +24,7 @@
   pages.selection=async(root,ctx)=>{
     const {api,h,button,icon,notify}=ctx;
     let content=normalize(ctx.initialValue||await api.selection('get')),actions=[],selected=0,dead=false,busy=false,revision=0;
-    const host=h('section',{class:'context-selection'}),heading=h('h1',{},'对选中内容执行操作'),summary=h('div',{class:'selection-summary'}),preview=h('div',{class:'selection-preview',tabIndex:0}),actionHeading=h('h2',{},'可用操作'),list=h('div',{class:'selection-action-list',role:'listbox',tabIndex:0,'aria-label':'可用操作'}),status=h('div',{class:'selection-key-hint',role:'status'}),loading=h('div',{class:'selection-loading',hidden:true},h('span',{class:'selection-spinner'}),h('span',{},'正在从图片中提取文字…')),cancel=button('取消识别',()=>{revision++;api.windowAction('close');});
+    const host=h('section',{class:'context-selection'}),heading=h('h1',{},'对选中内容执行操作'),summary=h('div',{class:'selection-summary'}),preview=h('div',{class:'selection-preview',tabIndex:0}),position=h('span',{class:'selection-position'}),actionHeading=h('h2',{},'可用操作',position),list=h('div',{class:'selection-action-list',role:'listbox',tabIndex:0,'aria-label':'可用操作'}),status=h('div',{class:'selection-key-hint',role:'status'}),loading=h('div',{class:'selection-loading',hidden:true},h('span',{class:'selection-spinner'}),h('span',{},'正在从图片中提取文字…')),cancel=button('取消识别',()=>{revision++;api.windowAction('close');});
     root.append(host);host.append(h('header', {class:'selection-heading'}, heading, summary),preview,actionHeading,list,loading,cancel,status);cancel.hidden=true;
     const close=()=>api.windowAction('close');
     function actionIcon(action){const shapes={unicode:'M9 2 6 22M18 2 15 22M3 8h18M2 16h18',translate:'M5 3h14v17H5zM5 20l-2 2M19 20l2 2M8 15l4-9 4 9M10 12h4',recognizeText:'M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M6 9h12M6 13h9M6 17h6'};if(!shapes[action.id])return icon(action.icon,18);const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [key,value]of Object.entries({viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'}))svg.setAttribute(key,value);const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',shapes[action.id]);svg.append(path);return svg;}
@@ -65,6 +65,7 @@
       syncSelection();
     }
     function syncSelection() {
+      position.textContent = actions.length ? (selected + 1) + " / " + actions.length : "";
       for (const [index, row] of Array.from(list.children).entries()) {
         row.classList.toggle('selected', index === selected);
         row.setAttribute('aria-selected', String(index === selected));
@@ -84,7 +85,17 @@
       if(!action||busy||dead)return;busy=true;const text=content.kind==='files'?content.files.join('\n'):content.text||'';
       try{
         if(action.id==='recognizeText'){
-          const token=++revision,data=await imageData();if(dead||token!==revision)return;summary.textContent='图片文字识别';preview.classList.add('image');preview.replaceChildren(h('img',{src:data.dataUrl,alt:'正在识别的图片'}));list.hidden=actionHeading.hidden=true;loading.hidden=false;cancel.hidden=false;status.textContent='Esc 取消 · 识别完成后自动显示文字与可用操作';await api.windowAction('resize',{width:640,height:360});
+          const token = ++revision, data = await imageData();
+          if (dead || token !== revision) return;
+          summary.textContent = '图片文字识别';
+          const image = h('img', {src:data.dataUrl, alt:'正在识别的图片'});
+          image.onload = () => { if (token === revision) summary.textContent = '图片文字识别 · ' + image.naturalWidth + ' × ' + image.naturalHeight; };
+          preview.classList.add('image');
+          preview.replaceChildren(image);
+          list.hidden = actionHeading.hidden = true;
+          loading.hidden = cancel.hidden = false;
+          status.textContent = 'Esc 取消 · 识别完成后自动显示文字与可用操作';
+          await api.windowAction('resize', {width:640, height:360});
           const result=await api.ocr({dataUrl:data.dataUrl});if(dead||token!==revision)return;if(!result.text?.trim())throw Error('未识别到文字');content={kind:'text',text:result.text};await render();list.focus();return;
         }
         if(action.id==='copy'){if(content.kind==='image')await api.fileAction('copyImage',{dataUrl:content.dataUrl});else await api.copyText(text);}
@@ -112,14 +123,18 @@
   };
 
   pages.stack=async(root,ctx)=>{
-    const {api,h,button}=ctx;let state=await api.stack('get'),dead=false,selected=0,busy=false;
+    const {api,h,button,icon}=ctx;let state=await api.stack('get'),dead=false,selected=0,busy=false;
     const host=h('section',{class:'paste-queue'}),title=h('h1',{},'复制堆栈'),end=button('结束堆栈',async()=>{await api.stack('stop');await api.windowAction('close');},'queue-end'),list=h('div',{class:'queue-list',role:'listbox',tabIndex:0,'aria-label':'待粘贴队列'}),status=h('div',{class:'queue-status',role:'status'}),next=button('粘贴下一项',async()=>{if(busy)return;busy=true;next.disabled=true;try{state=await api.stack('next');await paint();if(!state.active)await api.windowAction('close');}catch(error){status.textContent=error.message;}finally{busy=false;next.disabled=!(state.items||[]).length;}},'primary');
     root.append(host);host.append(h('div',{class:'queue-heading'},title,end),list,h('div',{class:'queue-actions'},status,next));
     async function action(name,payload){if(busy)return;try{state=await api.stack(name,payload);await paint();}catch(error){status.textContent=error.message;}}
     async function paint(){if(dead)return;const items=state.items||[],shown=items.slice(0,6);selected=Math.max(0,Math.min(selected,shown.length-1));list.replaceChildren(...shown.map((item,index)=>{
       const text=item.kind==='image'?'图片':item.title||item.text||item.value||'文件',row=h('div',{class:'queue-row'+(!index?' next':'')+(index===selected?' focused':''),role:'option',id:'queue-option-'+index,'aria-selected':String(index===selected),tabIndex:-1,onclick:()=>{selected=0;action('move',{id:item.id||item.hash,index,to:0});},ondblclick:()=>next.click(),title:String(text)});
-      const remove=button('×',event=>{event.stopPropagation();action('remove',{id:item.id||item.hash,index});},'queue-remove');remove.title='从待粘贴队列中移除此项';remove.setAttribute('aria-label','移除第 '+(index+1)+' 项');row.append(h('span',{class:'queue-index'},index===0?'下一项':index+1),h('span',{class:'queue-text'},text),remove);return row;
-    }));if(!shown.length)list.append(h('div',{class:'queue-empty'},state.active?'等待 Ctrl+C 复制内容…':'本次队列已结束'));if (shown.length) list.setAttribute('aria-activedescendant', 'queue-option-'+selected); else list.removeAttribute('aria-activedescendant');status.textContent=items.length?items.length+' 项待粘贴 · Ctrl+V':'0 项待粘贴';next.disabled=!items.length;await api.windowAction('resize',{width:340,height:104+Math.max(1,shown.length)*44});}
+      const remove=button('×',event=>{event.stopPropagation();action('remove',{id:item.id||item.hash,index});},'queue-remove');remove.title='从待粘贴队列中移除此项';remove.setAttribute('aria-label','移除第 '+(index+1)+' 项');
+      const [symbol, kind] = ({image:['image','图片'], files:['file','文件'], link:['link','链接']})[item.kind] || ['text','文本'];
+      row.setAttribute('aria-label', '第 '+(index+1)+' 项，'+kind+'，'+text);
+      row.append(h('span',{class:'queue-index'},index===0?'下一项':index+1), icon(symbol,14), h('span',{class:'queue-text'},text), remove);
+      return row;
+    }));if(!shown.length)list.append(h('div',{class:'queue-empty'},state.active?'等待 Ctrl+C 复制内容…':'本次队列已结束'));if (shown.length) list.setAttribute('aria-activedescendant', 'queue-option-'+selected); else list.removeAttribute('aria-activedescendant');status.textContent = (items.length > shown.length ? items.length+' 项 · 显示前 '+shown.length+' 项' : items.length+' 项待粘贴') + (items.length ? ' · Ctrl+V' : '');next.disabled=!items.length;await api.windowAction('resize',{width:340,height:104+Math.max(1,shown.length)*44});}
     const keydown=event=>{if(event.defaultPrevented || event.target.closest('button') && event.key !== 'Escape')return;const items=(state.items||[]).slice(0,6);if(['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const delta=event.key==='ArrowUp'?-1:1;if(event.altKey&&items[selected]){const to=Math.max(0,Math.min(items.length-1,selected+delta));action('move',{id:items[selected].id,index:selected,to});selected=to;}else{selected=Math.max(0,Math.min(items.length-1,selected+delta));paint();}}else if(event.key==='Enter'){event.preventDefault();next.click();}else if(['Backspace','Delete'].includes(event.key)&&items[selected]){event.preventDefault();action('remove',{id:items[selected].id,index:selected});}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();api.windowAction('close');}};
     root.addEventListener('keydown',keydown);const off=api.onStackChanged?.(value=>{state=value;if(!dead)paint();});if(!state.active)state=await api.stack('start');await paint();return {focus:()=>list.focus(),getState:()=>state,dispose(){dead=true;off?.();root.removeEventListener('keydown',keydown);}};
   };

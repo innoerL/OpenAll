@@ -481,6 +481,17 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         }
         resultLabel.stringValue = "生成结果 · \(numbers.count) 条"
         result.string = numbers.joined(separator: "\n")
+        // 仅用字距分隔地区、生日和顺序校验段，选择和复制仍保留完整号码。
+        if let storage = result.textStorage {
+            storage.beginEditing()
+            for index in numbers.indices {
+                let offset = index * 19
+                for boundary in [5, 13] {
+                    storage.addAttribute(.kern, value: 5, range: NSRange(location: offset + boundary, length: 1))
+                }
+            }
+            storage.endEditing()
+        }
         status.stringValue = "已生成 \(numbers.count) 个格式有效的测试号码" + (birthday.map { " · 出生日期 " + $0.text } ?? "")
         status.textColor = .secondaryLabelColor
     }

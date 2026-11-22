@@ -17,6 +17,7 @@
   const searchButton = document.getElementById('open-search');
   const findPrevious = document.getElementById('find-previous');
   const findNext = document.getElementById('find-next');
+  const copyButtons = [...document.querySelectorAll('.copy')];
   const sortButtons = [...document.querySelectorAll('.natural-sort')];
   let findMatches = [[], []], findResults = [], findIndex = -1;
   let findLimited = false, findComposing = false, findTimer = null;
@@ -27,7 +28,15 @@
   let timer = null;
   let painting = false;
   let pending = false;
+  const panes = [...document.querySelectorAll('.pane')];
+  const pasteTarget = document.getElementById('paste-target');
   let activeSide = 0;
+  function setActiveSide(side) {
+    if (activeSide === side) return;
+    activeSide = side;
+    panes.forEach((pane, index) => pane.toggleAttribute('data-target', index === side));
+    pasteTarget.textContent = side === 0 ? '粘贴到左侧' : '粘贴到右侧';
+  }
   let current = -1;
   let generation = 0;
   let lineCounts = [0, 0];
@@ -116,7 +125,10 @@
 
   function updateCounts() {
     lineCounts = inputs.map(input => input.lineCount);
-    for (let side = 0; side < 2; side++) counts[side].textContent = lineCounts[side] + ' 行';
+    for (let side = 0; side < 2; side++) {
+      counts[side].textContent = lineCounts[side] + ' 行';
+      copyButtons[side].disabled = !inputs[side].length;
+    }
     updateSortControls();
   }
 
@@ -375,7 +387,7 @@
       onChange: () => { documentVersions[side]++; cancelSort(side); scheduleCompare(); },
       onReject: message => { renderSummary(message); footerStatus.textContent = message; },
       onViewport: schedulePaint,
-      onFocus: () => { activeSide = side; },
+      onFocus: () => setActiveSide(side),
       onScroll: () => handleScroll(side),
       onComposition: started => {
         if (started) { composing.add(side); cancelSort(0); cancelSort(1); clearTimeout(timer); footerStatus.textContent = '输入中'; }
@@ -392,11 +404,11 @@
       }
     }));
   }
-  document.querySelectorAll('.copy').forEach(button => button.addEventListener('click', () => {
+  copyButtons.forEach(button => button.addEventListener('click', () => {
     const side = Number(button.dataset.side);
     window.parent.postMessage({ openallComparison: true, action: 'copy', side, text: inputs[side].value }, '*');
   }));
-  sortButtons.forEach((button, side) => { button.addEventListener('mousedown', event => event.preventDefault()); button.addEventListener('click', () => { activeSide = side; inputs[side].focus(); naturalSort(side); }); });
+  sortButtons.forEach((button, side) => { button.addEventListener('mousedown', event => event.preventDefault()); button.addEventListener('click', () => { setActiveSide(side); inputs[side].focus(); naturalSort(side); }); });
   document.querySelectorAll('.navigation button').forEach(button => button.addEventListener('mousedown', event => event.preventDefault()));
   previous.addEventListener('click', () => navigate(-1));
   next.addEventListener('click', () => navigate(1));
@@ -498,7 +510,7 @@
   function revealSearchMatch() {
     const selected = findResults[findIndex];
     if (!selected) { paintSearch(); return; }
-    activeSide = selected.side;
+    setActiveSide(selected.side);
     inputs[selected.side].revealSearch(selected.from, selected.to);
     paintSearch();
   }
@@ -814,7 +826,7 @@
           selection: inputs[1].view.state.selection.main.toJSON()
         };
         // CodeMirror.hasFocus 同时要求系统窗口激活；离屏验收仍严格核对实际 DOM 编辑焦点。
-        require(document.activeElement === inputs[1].view.contentDOM && activeSide === 1 &&
+        require(document.activeElement === inputs[1].view.contentDOM && activeSide === 1 && panes[1].hasAttribute('data-target') && pasteTarget.textContent === '粘贴到右侧' &&
           (!document.hasFocus() || inputs[1].hasFocus) && inputs[1].selectionStart === 2 && inputs[1].selectionEnd === 4 &&
           current === 1 && navigationCount.textContent === '2 / 2' &&
           inputs[1].view.contentDOM.querySelector('.cm-diffLine.current')?.textContent === '尾',

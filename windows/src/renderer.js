@@ -43,6 +43,17 @@
   matchMedia('(prefers-color-scheme: light)').addEventListener('change',()=>applyTheme(settings));
   window.OpenAllApp={render,openTool,applyTheme,pasteText,get page(){return page;},controller:null};
 
+  // 仅标记当前可见文本里的首个字面匹配，保留原始大小写和纯文本内容。
+  function literalMatcher(term) {
+    if (!term || term.length > 256) return null;
+    return new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu');
+  }
+  function markFirst(text, pattern) {
+    const match = pattern?.exec(text);
+    if (!match) return [text];
+    return [text.slice(0, match.index), h('mark', {}, match[0]), text.slice(match.index + match[0].length)];
+  }
+
   window.OpenAllPages.search=async(host,ctx)=>{
     const ownContext=await call('context');
     const panel = h('div', {class: 'search-panel idle'}), head = h('div', {class: 'search-header'});
@@ -112,12 +123,13 @@
       updateHint();
     }
     function paint(index) {
+      const pattern = literalMatcher(input.value.trim().replace(/^[=?？]/, '').trim());
       list.replaceChildren(...rows.map((item, i) => h('div', {
         id: 'launcher-result-' + i, class: 'search-result', role: 'option', 'aria-selected': 'false',
         onclick: () => execute(item), oncontextmenu: event => { event.preventDefault(); choose(i); actions(item, event); }
       }, h('span', {class: 'search-result-icon'}, item.icon ? h('img', {src: item.icon, alt: ''}) : icon(rowSymbol(item), 28)),
       h('div', {class: 'search-result-copy'},
-        h('div', {class: 'search-result-title'}, item.title + (item.type === 'tool' && isFavorite(item) ? ' ★' : '')),
+        h('div', {class: 'search-result-title'}, markFirst(item.title, pattern), item.type === 'tool' && isFavorite(item) ? ' ★' : ''),
         h('div', {class: 'search-result-detail'}, item.detail || '')
       ))));
       choose(index);
@@ -206,7 +218,18 @@
       const hadCardFocus = document.activeElement?.matches('.clip-card');
       const available=new Set(filtered.map(id));selected=new Set([...selected].filter(x=>available.has(x)));current=Math.min(current,Math.max(0,filtered.length-1));if(!selected.size&&filtered.length)selected.add(id(filtered[current]));
       if (selected.size && !selected.has(id(filtered[current]))) current = filtered.findIndex(item => selected.has(id(item)));
-      const fragment=document.createDocumentFragment();filtered.forEach((r,index)=>{const format=type(r),content=h('div',{class:'clip-content'});if(r.kind==='image')content.append(h('img',{src:r.dataUrl||'data:image/png;base64,'+(r.thumbnail||r.value),alt:r.title||'剪贴板图片',loading:'lazy'}));else if(format==='JSON')content.append(h('pre',{},(r.text||r.value||'').slice(0,1800)));else content.textContent=(r.kind==='files'?(r.files||[]).map(x=>x.split(/[\\/]/).pop()).join('\n'):r.text||r.value||r.title||'').slice(0,1800);
+      const pattern = literalMatcher(search.value.trim());
+      const fragment = document.createDocumentFragment();
+      filtered.forEach((r, index) => {
+        const format = type(r), content = h('div', {class:'clip-content'});
+        if (r.kind === 'image') {
+          content.append(h('img', {src:r.dataUrl || 'data:image/png;base64,' + (r.thumbnail || r.value), alt:r.title || '剪贴板图片', loading:'lazy'}));
+        } else {
+          const body = r.kind === 'files' ? (r.files || []).map(x => x.split(/[\\/]/).pop()).join('\n') : r.text || r.value || r.title || '';
+          const excerpt = markFirst(body.slice(0, 1800), pattern);
+          if (format === 'JSON') content.append(h('pre', {}, excerpt));
+          else content.append(...excerpt);
+        }
         const card=h('article',{draggable:true,onpointerdown:()=>{if(r.truncated&&!dragContent.has(id(r)))api.clipboardAction('read',{ids:[id(r)]}).then(full=>dragContent.set(id(r),Array.isArray(full)?full[0]:full)).catch(()=>{});},ondragstart:e=>{if(['files','image'].includes(r.kind)){e.preventDefault();api.clipboardAction('drag',{ids:selected.has(id(r))?[...selected]:[id(r)]}).catch(error=>notify(error.message,true));return;}const data=dragContent.get(id(r))||r;if(data.truncated){e.preventDefault();notify('正在读取全文，请稍后重新拖动');return;}e.dataTransfer.setData('text/plain',data.text||data.value||'');if(data.html)e.dataTransfer.setData('text/html',data.html);e.dataTransfer.effectAllowed='copy';},class:'clip-card'+(selected.has(id(r))?' selected':''),tabIndex:index === current ? 0 : -1,'data-index':index,role:'option','aria-selected':String(selected.has(id(r))),onclick:e=>{if(e.shiftKey){const low=Math.min(current,index),high=Math.max(current,index);for(let n=low;n<=high;n++)selected.add(id(filtered[n]));}else if(e.ctrlKey||e.metaKey){if(selected.has(id(r)))selected.delete(id(r));else selected.add(id(r));}else selected=new Set([id(r)]);current=index;paint(true);},ondblclick:()=>paste(),oncontextmenu:e=>{e.preventDefault();if(!selected.has(id(r)))selected=new Set([id(r)]);current=index;paint();cardMenu(e);}},content);
         if((r.text||r.value||'').length>110&&r.kind!=='image')card.append(button('查看全文 ↗',e=>{e.stopPropagation();current=index;selected=new Set([id(r)]);preview();},'clip-preview-link'));
         const source=r.icon?h('img',{src:r.icon,class:'clip-source',alt:r.sourceName||''}):h('span',{class:'clip-source',title:r.sourceName||r.source||''},icon(r.kind==='files'?'file':'application',16));card.append(h('div',{class:'clip-type-bar',style:{'--type-color':colors[format]||colors['文本']}},h('strong',{},format),h('time',{},UI.relativeTime(r.time||r.date)),source));fragment.append(card);});
@@ -247,7 +270,10 @@
     const text = files ? files.join('\n') : image ? '' : record.text || record.value || '';
     const format = record.type || (image ? '图片' : files ? '文件' : record.kind === 'link' ? '链接' : '文本');
     const title = h('h1', {}, format + '预览');
-    const source = h('span', {class:'clip-preview-source', title:record.sourceName || ''}, record.sourceName || '');
+    const copiedAt = new Date(record.time ?? record.date ?? NaN);
+    const timestamp = Number.isNaN(copiedAt.getTime()) ? '' : copiedAt.toLocaleString(undefined, {dateStyle:'short', timeStyle:'short'});
+    const provenance = [record.sourceName, timestamp].filter(Boolean).join(' · ');
+    const source = h('span', {class:'clip-preview-source', title:provenance}, provenance);
     const content = h('div', {class:'preview-content', tabIndex:0, 'aria-label':'卡片内容'});
     const status = h('span', {class:'clip-preview-status', role:'status'}, 'Esc 关闭预览');
     const tools = h('div', {class:'clip-preview-tools'});

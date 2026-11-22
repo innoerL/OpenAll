@@ -43,3 +43,35 @@
   .aux-id .aux-id-top { gap:8px; }
   .aux-tool.manual-reader { padding:10px 12px; }
 }
+
+:is(.aux-unicode,.aux-markdown) .aux-pane:has(.aux-editor:focus, .cm-content:focus) .aux-pane-bar {
+  box-shadow: inset 0 -1px color-mix(in srgb,var(--accent) 65%,transparent);
+}
+:is(.aux-unicode,.aux-markdown) .aux-pane:has(.aux-editor:focus, .cm-content:focus) .aux-pane-bar strong {
+  color: var(--accent-text,var(--ink));
+}
+.aux-id .aux-id-row code > span + span { margin-inline-start: .4em; }
+.aux-id .aux-id-row:hover { background: var(--surface); }
+.aux-markdown .aux-help-popover { grid-template-columns: minmax(0,1fr); gap: 0; }
+.aux-help-popover .aux-section-bar { position: sticky; top: -12px; z-index: 1; padding-block: 5px; background: var(--surface); }
+.aux-help-popover .aux-button[data-sample] {
+  display: grid;
+  grid-template-columns: minmax(68px,.42fr) minmax(0,1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 32px;
+  padding-inline: 8px;
+}
+.aux-help-popover .aux-button[data-sample]::after {
+  content: attr(data-sample);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font: 12px/1.5 ui-monospace,Consolas,monospace;
+}
+.aux-markdown .aux-markdown-preview a { text-decoration: underline; text-underline-offset: .18em; }
+.aux-image .aux-image-canvas img {
+  background-color: var(--editor-bg,var(--canvas));
+  background-image: repeating-conic-gradient(color-mix(in srgb,var(--ink) 11%,transparent) 0 25%,transparent 0 50%);
+}

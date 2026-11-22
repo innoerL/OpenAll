@@ -298,6 +298,7 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         inputParagraph.headIndent = selected == .sql ? 24 : 0
         input.defaultParagraphStyle = inputParagraph
         input.typingAttributes[.paragraphStyle] = inputParagraph
+        (input as? OpenAllTextView)?.placeholderText = selected == .sql ? "粘贴 SQL 语句" : "粘贴 YAML 或 Properties 内容"
         if !text.isEmpty { input.string = text }
         input.textStorage?.addAttribute(.paragraphStyle, value: inputParagraph, range: NSRange(location: 0, length: input.string.utf16.count))
         run()
@@ -353,7 +354,7 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
             text.autoresizingMask = [.width]
             text.textContainer?.widthTracksTextView = true
             text.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-            text.textContainerInset = NSSize(width: 3, height: 10)
+            text.textContainerInset = NSSize(width: 7, height: 12)
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineSpacing = 4
             text.defaultParagraphStyle = paragraph
@@ -371,7 +372,7 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
             return text
         }
         input = editor(12, "粘贴原文", editable: true)
-        output = editor(492, "处理后的结果显示在这里", editable: false)
+        output = editor(492, "格式化后可在这里选择或复制结果", editable: false)
         input.delegate = self
         for rect in [NSRect(x: 480, y: 60, width: 0.5, height: 326),
                      NSRect(x: 0, y: 60, width: 960, height: 0.5)] {

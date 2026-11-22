@@ -275,6 +275,7 @@ final class ToolPane: NSView {
     private let content: NSView
     private let actions: [NSButton]
     private let headerBand = NSView()
+    private var contentFocused = false
     private let rule = NSView()
 
     init(title: String, content: NSView, actions: [NSButton] = [], size: NSSize) {
@@ -298,13 +299,32 @@ final class ToolPane: NSView {
         needsLayout = true
     }
     required init?(coder: NSCoder) { fatalError("不支持从归档创建") }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didUpdateNotification, object: nil)
+        if let window {
+            NotificationCenter.default.addObserver(self, selector: #selector(updateFocus),
+                name: NSWindow.didUpdateNotification, object: window)
+        }
+        updateFocus()
+    }
+
+    @objc private func updateFocus() {
+        let focused = window?.isKeyWindow == true && (window?.firstResponder as? NSView)?.isDescendant(of: content) == true
+        guard focused != contentFocused else { return }
+        contentFocused = focused
+        heading.textColor = focused ? OpenAllTheme.accentText : OpenAllTheme.ink.withAlphaComponent(0.86)
+        rule.layer?.backgroundColor = focused ? OpenAllTheme.accent.withAlphaComponent(0.65).cgColor : OpenAllTheme.rule.cgColor
+    }
+
     override func layout() {
         super.layout()
         let header: CGFloat = 32
         content.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - header))
         headerBand.frame = NSRect(x: 0, y: bounds.height - header, width: bounds.width, height: header)
         heading.frame = NSRect(x: 14, y: bounds.height - 24, width: 150, height: 18)
-        rule.frame = NSRect(x: 0, y: bounds.height - header, width: bounds.width, height: 0.5)
+        rule.frame = NSRect(x: 0, y: bounds.height - header, width: bounds.width, height: 1)
         var x = bounds.width - 10
         for action in actions.reversed() {
             let width = action.frame.width
@@ -366,11 +386,51 @@ enum OpenAllTheme {
     static var hasCustomization: Bool { followsSystem || settings.backgroundHex != nil || settings.accentHex != nil }
     static var isLight: Bool { luminance(canvas) > 0.55 }
     static var appearance: NSAppearance? { followsSystem ? nil : NSAppearance(named: isLight ? .aqua : .darkAqua) }
-    static var onAccent: NSColor { luminance(accent) > 0.55 ? NSColor(calibratedWhite: 0.08, alpha: 1) : .white }
-    static var accentText: NSColor {
-        guard isLight, luminance(accent) > 0.42 else { return accent }
-        return accent.blended(withFraction: 0.46, of: .black) ?? accent
+    private static func relativeLuminance(_ color: NSColor) -> CGFloat {
+        let rgb = color.usingColorSpace(.sRGB) ?? color
+        func linear(_ value: CGFloat) -> CGFloat {
+            value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return linear(rgb.redComponent) * 0.2126 + linear(rgb.greenComponent) * 0.7152 + linear(rgb.blueComponent) * 0.0722
     }
+
+    private static func contrast(_ a: CGFloat, _ b: CGFloat) -> CGFloat {
+        (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
+
+    // 同一强调色会叠在面板、编辑区或按钮上，保留能在这些背景上读清的最接近原色的文字。
+    private static func readableText(_ preferred: NSColor, on backgrounds: [NSColor]) -> NSColor {
+        let levels = backgrounds.map(relativeLuminance)
+        func score(_ color: NSColor) -> CGFloat {
+            let value = relativeLuminance(color)
+            return levels.map { contrast(value, $0) }.min() ?? 1
+        }
+        guard score(preferred) < 4.5 else { return preferred }
+        let toward: NSColor = score(.black) >= score(.white) ? .black : .white
+        for step in 1..<10 {
+            if let candidate = preferred.blended(withFraction: CGFloat(step) / 10, of: toward), score(candidate) >= 4.5 {
+                return candidate
+            }
+        }
+        return toward
+    }
+
+    private static var cachedColors: (canvas: NSColor, accent: NSColor, raised: NSColor, text: NSColor, onAccent: NSColor)?
+    private static func accentColors() -> (text: NSColor, onAccent: NSColor) {
+        let base = canvas, fill = accent, raisedColor = raised
+        if let cachedColors, cachedColors.canvas == base, cachedColors.accent == fill, cachedColors.raised == raisedColor {
+            return (cachedColors.text, cachedColors.onAccent)
+        }
+        let preferred = isLight && luminance(fill) > 0.42 ? fill.blended(withFraction: 0.46, of: .black) ?? fill : fill
+        let text = readableText(preferred, on: [base, raisedColor, editorCanvas])
+        let dark = NSColor(srgbRed: 0.102, green: 0.102, blue: 0.102, alpha: 1)
+        let level = relativeLuminance(fill)
+        let buttonText = readableText(contrast(level, 1) >= contrast(level, relativeLuminance(dark)) ? .white : dark, on: [fill])
+        cachedColors = (base, fill, raisedColor, text, buttonText)
+        return (text, buttonText)
+    }
+    static var onAccent: NSColor { accentColors().onAccent }
+    static var accentText: NSColor { accentColors().text }
     static var sidebar: NSColor {
         guard followsSystem || settings.backgroundHex != nil else { return NSColor(calibratedRed: 0.125, green: 0.132, blue: 0.132, alpha: 1) }
         return canvas.blended(withFraction: 0.025, of: isLight ? .black : .white) ?? canvas

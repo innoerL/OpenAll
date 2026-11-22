@@ -39,6 +39,10 @@
     .pane + .pane { border-left:.5px solid var(--rule); }
     .heading { flex:none; height:36px; padding:0 12px; display:flex; align-items:center; gap:3px; border-bottom:1px solid var(--rule); }
     .pane-title { min-width:0; display:flex; align-items:baseline; gap:8px; white-space:nowrap; }
+    body:has(#find-query:focus) #hint { visibility:hidden; }
+    .pane[data-target] .pane-title strong {
+      color:var(--accent); text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:5px;
+    }
     .pane-title strong { font-size:13px; font-weight:600; }
     .count { color:var(--secondary); font-size:12px; font-variant-numeric:tabular-nums; }
     .natural-sort { margin-left:auto; }
@@ -133,7 +137,7 @@
     <button id="find-close" title="关闭搜索（Esc）" aria-label="关闭搜索">×</button>
   </div>
   <div class="editors">
-    <section class="pane">
+    <section class="pane" data-target>
       <div class="heading"><div class="pane-title"><strong>左侧</strong><span class="count" id="left-count">0 行</span></div><button class="natural-sort" data-side="0" title="左侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="左侧按行自然升序">自然排序</button><button class="copy" data-side="0" title="复制左侧全文" aria-label="复制左侧全文">复制</button></div>
       <div class="editor" id="left"></div>
     </section>
@@ -142,7 +146,7 @@
       <div class="editor" id="right"></div>
     </section>
   </div>
-  <footer><span id="footer-status" role="status" aria-live="polite">已对齐</span><span id="hint">Ctrl+1 / Ctrl+2 切换左右</span></footer>
+  <footer><span id="footer-status" role="status" aria-live="polite">已对齐</span><span id="hint"><span id="paste-target">粘贴到左侧</span> · Ctrl+1 / Ctrl+2 切换左右</span></footer>
   <script src="../../shared/gold-ui/surface-effects.js"></script>
   <script src="editor-diff-core.js"></script>
   <script src="editor-comparison.js"></script>

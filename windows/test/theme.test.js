@@ -15,7 +15,22 @@ const pale = Theme.palette(light);
 assert.equal(pale.light, true);
 assert.equal(pale.vars['--surface'], '#d4d4d4');
 assert.equal(pale.vars['--editor'], '#eeeeee');
-assert.equal(pale.vars['--accent-text'], '#756855');
+// 校验显示颜色与实际表面的对比度，包含用户选择同色背景和强调色的情况。
+function ratio(a, b) {
+  const luminance = hex => {
+    const channels = hex.slice(1).match(/../g).map(channel => parseInt(channel, 16) / 255)
+      .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+    return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+  };
+  const values = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (values[0] + .05) / (values[1] + .05);
+}
+for (const [backgroundHex, accentHex] of [['#e0e0e0', '#d8c19e'], ['#111111', '#151515'], ['#fafafa', '#ffffff'], ['#183d56', '#22506a']]) {
+  const { vars } = Theme.palette({ backgroundHex, accentHex });
+  assert.equal(vars['--accent'], accentHex);
+  for (const surface of ['--canvas', '--raised', '--editor']) assert.ok(ratio(vars['--accent-text'], vars[surface]) >= 4.5);
+  assert.ok(ratio(vars['--on-accent'], accentHex) >= 4.5);
+}
 assert.equal(Theme.palette({ backgroundHex: '#8d8d8d' }).light, true, '深浅分界沿用 Mac 的 0.55');
 assert.equal(Theme.palette({ backgroundHex: '#8c8c8c' }).light, false);
 assert.equal(Theme.palette({ theme: 'system', backgroundHex: '#ffffff' }, false).vars['--canvas'], '#242626');

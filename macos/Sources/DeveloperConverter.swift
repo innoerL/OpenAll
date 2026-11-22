@@ -76,6 +76,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
     private var asciiSearch: NSTextField?
     private var asciiScroll: NSScrollView?
     private var cronDescription: NSTextField?
+    private var modeHint: NSTextField?
     private var asciiCategory = 0
     private var asciiStatus: NSTextField?
     private let cronSamples = ["*/15 9-18 * * 1-5", "0 9 * * 1-5", "30 8 1 * *"]
@@ -134,8 +135,9 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         }
         content = NSView(frame: NSRect(x: 26, y: 84, width: 928, height: 420))
         surface.addSubview(content)
-        surface.addSubview(label("结果仅在本机计算 · 点击结果右侧可复制", frame: NSRect(x: 28, y: 23, width: 700, height: 20),
-                                 size: 11, color: OpenAllTheme.muted))
+        let hint = label("", frame: NSRect(x: 28, y: 23, width: 700, height: 20), size: 12, color: OpenAllTheme.muted)
+        surface.addSubview(hint)
+        modeHint = hint
         WindowChrome.installControls(on: panel)
         window = panel
         rebuildContent()
@@ -164,9 +166,15 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         asciiScroll = nil
         asciiStatus = nil
         switch selectedMode {
-        case .duration: buildDuration()
-        case .cron: buildCron()
-        case .ascii: buildASCII()
+        case .duration:
+            modeHint?.stringValue = "点击行末图标可复制完整精度的数值"
+            buildDuration()
+        case .cron:
+            modeHint?.stringValue = "执行时间按北京时间（UTC+8）排列"
+            buildCron()
+        case .ascii:
+            modeHint?.stringValue = "搜索支持字符、十进制数和 0x 开头的十六进制数"
+            buildASCII()
         }
     }
 
@@ -321,7 +329,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             row.wantsLayer = true
             row.layer?.backgroundColor = index == 0 ? OpenAllTheme.accent.withAlphaComponent(0.08).cgColor : NSColor.clear.cgColor
             row.addSubview(label(index == 0 ? "下一次" : "\(index + 1)", frame: NSRect(x: 14, y: 8, width: 64, height: 19),
-                                 size: 11, color: OpenAllTheme.accentText))
+                                 size: 12, color: index == 0 ? OpenAllTheme.accentText : OpenAllTheme.muted))
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = zone
             let weekdays = ["", "星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"]
@@ -386,6 +394,12 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         asciiStatus?.stringValue = "\(rows.count) 个字符"
         let height = max(CGFloat(283), CGFloat(rows.count * 29 + 4))
         let document = NSView(frame: NSRect(x: 0, y: 0, width: 886, height: height))
+        if rows.isEmpty {
+            let empty = label("没有匹配的字符，可试试 A、65 或 0x41",
+                              frame: NSRect(x: 12, y: height / 2, width: 862, height: 24), size: 13, color: OpenAllTheme.muted)
+            empty.alignment = .center
+            document.addSubview(empty)
+        }
         for (index, item) in rows.enumerated() {
             let y = height - CGFloat((index + 1) * 29)
             let row = NSView(frame: NSRect(x: 0, y: y, width: 886, height: 28))

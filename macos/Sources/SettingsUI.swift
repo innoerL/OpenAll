@@ -73,6 +73,22 @@ final class SettingsNavItem: NSButton, WindowThemeRefreshing {
         window?.makeFirstResponder(self)
         onChoose?()
     }
+    override func keyDown(with event: NSEvent) {
+        guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
+              let items = superview?.subviews.compactMap({ $0 as? SettingsNavItem }),
+              let current = items.firstIndex(of: self) else { super.keyDown(with: event); return }
+        let next: Int
+        switch event.keyCode {
+        case 126: next = max(0, current - 1)
+        case 125: next = min(items.count - 1, current + 1)
+        case 115: next = 0
+        case 119: next = items.count - 1
+        default: super.keyDown(with: event); return
+        }
+        (window as? SettingsWindow)?.setNavigationFocusVisible(true)
+        if next != current { items[next].choose() }
+    }
+
     private var rowShape: NSBezierPath {
         NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 3), xRadius: 7, yRadius: 7)
     }

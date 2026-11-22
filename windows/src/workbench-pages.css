@@ -73,3 +73,18 @@
   .editor-formatter .editor-formatter-footer { padding-inline: 12px; }
   .editor-formatter-status { white-space: normal; }
 }
+
+.editor-formatter .editor-formatter-pane:has(.cm-content:focus) .editor-pane-heading {
+  box-shadow: inset 0 -1px color-mix(in srgb,var(--accent) 65%,transparent);
+  color: var(--accent-text,var(--ink));
+}
+.aux-backend .aux-report tr.group td:first-child { color: var(--accent-text,var(--ink)); }
+.aux-backend .aux-report tbody tr:not(.group):hover { background: var(--raised); }
+.aux-backend-body.stale-result > .aux-report tbody,
+.aux-backend-body.stale-result > .aux-report .aux-table-footer,
+.aux-backend-body.stale-result[data-mode=sqlRestore] > .aux-pane:last-of-type .aux-editor {
+  visibility: hidden;
+}
+.aux-converter .aux-conversion-row:hover,
+.aux-converter .aux-cron-row:hover,
+.aux-converter .aux-report tbody tr:hover { background: var(--raised); }

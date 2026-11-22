@@ -10,13 +10,39 @@
     root.append(h('div',{class:'settings-layout'},sidebar,body));
     const navigationButtons = new Map();
     for (const [id, title, symbol] of navigation) {
+      if (id === 'linkAliases' || id === 'permissions') sidebar.append(h('hr', {class:'settings-nav-divider'}));
       const link = button('', () => render(id), 'settings-nav');
       link.append(icon(symbol, 16), title);
       navigationButtons.set(id, link);
       sidebar.append(link);
     }
-    const field=(label,input)=>h('div',{class:'field'},h('label',{},label),input);
-    const row=(label,control,hint='',tall=false)=>h('div',{class:'settings-row'+(tall?' tall':'')},h('label',{},label,hint?h('small',{},hint):null),control);
+    sidebar.addEventListener('keydown', event => {
+      if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || !event.target.matches('.settings-nav')) return;
+      const links = [...navigationButtons.values()];
+      const current = links.indexOf(event.target);
+      let next;
+      switch (event.key) {
+        case 'ArrowUp': next = Math.max(0,current-1); break;
+        case 'ArrowDown': next = Math.min(links.length-1,current+1); break;
+        case 'Home': next = 0; break;
+        case 'End': next = links.length-1; break;
+        default: return;
+      }
+      event.preventDefault();
+      if (next !== current) {
+        links[next].focus();
+        render(navigation[next][0]);
+      }
+    });
+    let fieldIndex = 0;
+    let selectedSnippetID;
+    function labelFor(text, control, hint = '') {
+      const input = control.matches('input, select, textarea, button') ? control : control.querySelector('input, select, textarea');
+      if (input && !input.id) input.id = 'settings-field-' + ++fieldIndex;
+      return h('label', {for:input?.id}, text, hint ? h('small', {}, hint) : null);
+    }
+    const field=(label,input)=>h('div',{class:'field'},labelFor(label,input),input);
+    const row=(label,control,hint='',tall=false)=>h('div',{class:'settings-row'+(tall?' tall':'')},labelFor(label,control,hint),control);
     const select=(options,value,fn)=>{const e=h('select',{onchange:()=>fn?.(e.value)},options.map(o=>h('option',{value:String(o[0])},o[1])));e.value=String(value);return e;};
     const input=(value,placeholder='')=>h('input',{value:value??'',placeholder,spellcheck:'false'});
     const checkbox=(text,checked,fn)=>{const e=h('input',{type:'checkbox',checked,onchange:()=>fn(e.checked)});return h('label',{class:'checkbox-label'},e,text);};
@@ -46,7 +72,11 @@
         if (id === tab) link.setAttribute('aria-current', 'page');
         else link.removeAttribute('aria-current');
       }
-      content.replaceChildren();body.scrollTop=0;prefs=await api.settings();if(disposed||revision!==renderRevision)return;
+      content.replaceChildren();
+      body.scrollTop = 0;
+      const updated = await api.settings();
+      if (disposed || revision !== renderRevision) return;
+      prefs = updated;
       if(tab==='general') {
         heading('快捷键','点击快捷键重新录制 · Esc 取消');
         const modes = h('div', {class:'settings-segmented', role:'group', 'aria-label':'搜索唤起方式'});
@@ -91,9 +121,19 @@
         heading('网址别名','输入别名和关键词，直接打开对应网站。');
         let selected=-1;
         const list=h('div',{class:'editor-list alias-list'}),count=h('span',{class:'muted'}),name=input('','显示名称'),keywords=input('','例如 xhs, xiaohongshu, hongshu'),url=h('textarea',{class:'alias-url',placeholder:'https://example.com/search?q={query}',spellcheck:'false'});
-        const form=h('div',{class:'editor-form alias-form'},field('显示名称',name),field('别名 · 最多三个，用逗号分隔',keywords),field('网址模板 · {query} 代表搜索词',url),h('p',{class:'hint small'},'示例：xhs 咖啡 → 搜索小红书中的“咖啡”'));
+        const example = h('p', {class:'hint small alias-example'});
+        function updateExample() {
+          const key = keywords.value.split(/[,，\n]/)[0].trim();
+          const title = name.value.trim();
+          example.textContent = key && title && url.value.trim()
+            ? (url.value.includes('{query}') ? '输入 “'+key+' 咖啡” → 在'+title+'搜索“咖啡”' : '输入 “'+key+'” → 打开'+title)
+            : '';
+          example.title = example.textContent;
+        }
+        for (const control of [name,keywords,url]) control.addEventListener('input', updateExample);
+        const form=h('div',{class:'editor-form alias-form'},field('显示名称',name),field('别名 · 最多三个，用逗号分隔',keywords),field('网址模板 · {query} 代表搜索词',url),example);
         function choose(i){selected=i;const item=prefs.aliases?.[i];name.value=item?.name||'';keywords.value=(item?.keywords||[]).join(', ');url.value=item?.url||'';paint();}
-        function paint(){count.textContent=(prefs.aliases||[]).length+' 个网站';remove.disabled=selected<0;list.replaceChildren(...(prefs.aliases||[]).map((item,i)=>{const b=button('',()=>choose(i),i===selected?'selected':'');b.append(h('strong',{},item.name),h('span',{class:'muted'},item.keywords.join(' · ')));return b;}));}
+        function paint(){updateExample();submit.textContent=selected<0?'添加网址':'保存更改';count.textContent=(prefs.aliases||[]).length+' 个网站';remove.disabled=selected<0;list.replaceChildren(...(prefs.aliases||[]).map((item,i)=>{const b=button('',()=>choose(i),i===selected?'selected':'');b.append(h('strong',{},item.name),h('span',{class:'muted'},item.keywords.join(' · ')));return b;}));}
         const remove=button('删除',async()=>{if(selected<0)return;if(await confirm('删除网址别名','删除后将无法通过这些别名打开此网址。')){await save({aliases:prefs.aliases.filter((_,i)=>i!==selected)});choose(prefs.aliases.length?Math.min(selected,prefs.aliases.length-1):-1);}});
         const submit=button('保存更改',async()=>{
           const keys=keywords.value.split(/[,，\n]/).map(x=>x.trim()).filter(Boolean);
@@ -105,24 +145,136 @@
         const navigation=h('div',{class:'alias-navigation'},h('div',{class:'alias-list-heading'},'网站',count),list,button('＋ 新增网址',()=>{choose(-1);name.focus();}));
         content.append(h('div',{class:'alias-layout'},navigation,form));choose(prefs.aliases?.length?0:-1);
       } else if(tab==='commandAliases') {
-        heading('功能别名','为内置功能添加你习惯的搜索词。');const filter=input('','搜索功能或别名'),list=h('div',{class:'editor-list',style:{maxHeight:'220px'}}),names=input('','多个别名用逗号分隔'),label=h('label',{},'自定义别名');let chosen=null;
-        function paint(){const q=filter.value.toLowerCase();list.replaceChildren(...window.OpenAllCatalog.filter(c=>[c.title,...c.keywords,...(prefs.commandAliases?.[c.id]||[])].join(' ').toLowerCase().includes(q)).map(c=>{const b=button('',()=>{chosen=c;label.textContent=c.title+' · 自定义别名';names.value=(prefs.commandAliases?.[c.id]||[]).join(', ');paint();},chosen?.id===c.id?'selected':'');b.append(h('span',{},c.title),h('span',{class:'muted'},(prefs.commandAliases?.[c.id]||[]).join(' / ')));return b;}));}
-        filter.addEventListener('input',paint);content.append(filter,list,h('div',{class:'editor-form'},h('div',{class:'field'},label,names),h('div',{class:'row'},button('重置',async()=>{if(!chosen)return;const values={...prefs.commandAliases};delete values[chosen.id];await save({commandAliases:values});names.value='';paint();}),button('保存',async()=>{if(!chosen)throw Error('请先选择一个功能');const values=names.value.split(/[,，\n]/).map(x=>x.trim()).filter(Boolean);for(const c of window.OpenAllCatalog){if(c.id===chosen.id)continue;if([c.title,...c.keywords,...(prefs.commandAliases?.[c.id]||[])].some(n=>values.some(v=>v.toLowerCase()===n.toLowerCase())))throw Error('别名与“'+c.title+'”冲突');}await save({commandAliases:{...prefs.commandAliases,[chosen.id]:values}});paint();},'primary'))));paint();
+        heading('功能别名','为内置功能添加你习惯的搜索词。');
+        const filter = input('', '查找功能或别名');
+        filter.type = 'search';
+        filter.setAttribute('aria-label', '查找功能或别名');
+        const list = h('div', {class:'editor-list alias-list command-list', role:'group', 'aria-label':'功能'});
+        const title = h('h2');
+        const builtIn = h('p', {class:'command-words'});
+        const names = input('', '多个别名用逗号分隔');
+        let chosen;
+        function selectCommand(command) {
+          chosen = command;
+          detail.hidden = !chosen;
+          if (chosen) {
+            title.textContent = command.title;
+            builtIn.textContent = [...new Set([command.title, ...command.keywords])].join(' · ');
+            names.value = (prefs.commandAliases?.[command.id] || []).join(', ');
+            reset.disabled = !(prefs.commandAliases?.[command.id]?.length);
+          }
+          markSelection();
+        }
+        function markSelection() {
+          for (const choice of list.querySelectorAll('button')) {
+            const selected = choice.dataset.id === chosen?.id;
+            choice.classList.toggle('selected', selected);
+            choice.setAttribute('aria-pressed', String(selected));
+          }
+        }
+        function paint() {
+          const query = filter.value.trim().toLowerCase();
+          const matches = window.OpenAllCatalog.filter(c =>
+            [c.title, ...c.keywords, ...(prefs.commandAliases?.[c.id] || [])].some(word => word.toLowerCase().includes(query)));
+          list.replaceChildren(...matches.map(command => {
+            const choice = button('', () => selectCommand(command));
+            choice.dataset.id = command.id;
+            const custom = prefs.commandAliases?.[command.id] || [];
+            const words = custom.length ? custom : command.keywords.filter(word => word !== command.title).slice(0,2);
+            choice.append(h('strong', {}, command.title), h('span', {class:'muted'}, words.join(' · ')));
+            return choice;
+          }));
+          if (!matches.length) list.append(h('p', {class:'settings-empty-list',role:'status'}, '没有匹配的功能'));
+          const current = matches.find(command => command.id === chosen?.id);
+          if (current) markSelection();
+          else selectCommand(matches[0]);
+        }
+        const reset = button('重置', async () => {
+          const command = chosen;
+          const values = {...prefs.commandAliases};
+          delete values[command.id];
+          await save({commandAliases:values});
+          if (chosen === command) selectCommand(command);
+          paint();
+        });
+        const apply = button('保存别名', async () => {
+          const command = chosen;
+          const values = names.value.split(/[,，、;；\n]/).map(word => word.trim()).filter(Boolean);
+          for (const c of window.OpenAllCatalog) {
+            if (c.id === command.id) continue;
+            if ([c.title,...c.keywords,...(prefs.commandAliases?.[c.id] || [])].some(n => values.some(v => v.toLowerCase() === n.toLowerCase()))) {
+              throw Error('别名与“'+c.title+'”冲突');
+            }
+          }
+          await save({commandAliases:{...prefs.commandAliases,[command.id]:values}});
+          if (chosen === command) selectCommand(command);
+          paint();
+        }, 'primary');
+        names.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) apply.click(); });
+        const detail = h('section', {class:'command-detail'}, title,
+          h('div', {class:'field'}, h('span', {class:'muted'}, '已有匹配词'), builtIn),
+          field('自定义别名', names), h('div',{class:'row'},apply,reset));
+        const browser = h('div',{class:'alias-navigation'},filter,list);
+        content.append(h('div',{class:'alias-layout command-layout'},browser,detail));
+        filter.addEventListener('input',paint);
+        paint();
       } else if(tab==='snippets') {
-        heading('常用片段','在搜索中输入 ;关键词，快速展开并粘贴。');let all=await api.snippets('list'),selected='';if(!Array.isArray(all))all=all.items||[];
-        const picker=select([['','新建片段'],...all.map(x=>[x.id,x.name+' · ;'+x.keyword])],'',null),name=input('','片段名称'),key=input('','不含空格的关键词'),text=h('textarea',{placeholder:'片段内容，可使用 {{date}}、{{time}}、{{clipboard}}'});
-        picker.style.flex='1';
-        function fill(id){selected=id;const s=all.find(x=>x.id===id);name.value=s?.name||'';key.value=s?.keyword||'';text.value=s?.body||'';}
-        picker.onchange=()=>fill(picker.value);
-        content.append(h('div',{class:'row',style:{margin:'20px 0'}},picker,button('新建',()=>{picker.value='';fill('');})),h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词',key)),field('内容',text),h('p',{class:'hint small'},'日期示例：{{date:yyyy-MM-dd}} · 时间：{{time:HH:mm:ss}} · 剪贴板：{{clipboard}}'),h('div',{class:'row'},button('删除',async()=>{if(selected&&await confirm('删除片段','确认删除所选常用片段？')){await api.snippets('delete',{id:selected});render();}},'danger'),h('span',{class:'spacer'}),button('预览展开',async()=>{const result=await api.snippets('expand',{id:selected,body:text.value});window.OpenAllUI.dialog('展开结果',h('pre',{style:{whiteSpace:'pre-wrap',maxHeight:'300px',overflow:'auto'}},typeof result==='string'?result:result.text||''),[button('关闭',e=>e.currentTarget.closest('dialog').close())]);}),button('保存',async()=>{if(!key.value.trim()||/\s/.test(key.value.trim())||!text.value)throw Error('关键词不能含空格，内容不能为空');const r=await api.snippets('save',{id:selected||undefined,name:name.value.trim(),keyword:key.value.trim(),body:text.value});if(r?.ok===false)throw Error(r.error||'关键词已存在');notify('片段已保存');render();},'primary'))));
+        heading('常用片段','在搜索中输入 ;关键词，快速展开并粘贴。');
+        const data = await api.snippets('list');
+        if (disposed || revision !== renderRevision) return;
+        const all = Array.isArray(data) ? data : data.items || [];
+        const picker = select([['','新建片段'], ...all.map(x => [x.id,x.name+' · ;'+x.keyword])], '', null);
+        picker.style.flex = '1';
+        picker.setAttribute('aria-label','选择片段');
+        const name = input('','片段名称');
+        const key = input('','不含空格的关键词');
+        const text = h('textarea',{placeholder:'片段内容，可使用 {{date}}、{{time}}、{{clipboard}}'});
+        function fill(id) {
+          const item = all.find(x => x.id === id);
+          picker.value = selectedSnippetID = item?.id || '';
+          name.value = item?.name || '';
+          key.value = item?.keyword || '';
+          text.value = item?.body || '';
+          remove.disabled = !item;
+        }
+        const create = button('新建',() => {fill('');name.focus();});
+        const remove = button('删除',async () => {
+          if (selectedSnippetID && await confirm('删除片段','确认删除所选常用片段？')) {
+            await api.snippets('delete',{id:selectedSnippetID});
+            selectedSnippetID = undefined;
+            if (revision === renderRevision) render();
+          }
+        },'danger');
+        const apply = button('保存',async () => {
+          if (!key.value.trim() || /\s/.test(key.value.trim()) || !text.value) throw Error('关键词不能含空格，内容不能为空');
+          const item = await api.snippets('save',{id:selectedSnippetID || undefined,name:name.value.trim(),keyword:key.value.trim(),body:text.value});
+          if (item?.ok === false) throw Error(item.error || '关键词已存在');
+          selectedSnippetID = item.id;
+          notify('片段已保存');
+          if (revision === renderRevision) render();
+        },'primary');
+        const preview = button('预览展开',async () => {
+          const result = await api.snippets('expand',{id:selectedSnippetID,body:text.value});
+          window.OpenAllUI.dialog('展开结果',h('pre',{style:{whiteSpace:'pre-wrap',maxHeight:'300px',overflow:'auto'}},
+            typeof result === 'string' ? result : result.text || ''),[button('关闭',e => e.currentTarget.closest('dialog').close())]);
+        });
+        picker.onchange = () => fill(picker.value);
+        fill(selectedSnippetID ?? all[0]?.id);
+        content.append(h('div',{class:'row',style:{margin:'20px 0'}},all.length ? picker : h('h2',{},'新建片段'),all.length ? create : null),
+          h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词',key)),field('内容',text),
+            h('p',{class:'hint small'},'日期示例：{{date:yyyy-MM-dd}} · 时间：{{time:HH:mm:ss}} · 剪贴板：{{clipboard}}'),
+            h('div',{class:'row'},remove,h('span',{class:'spacer'}),preview,apply)));
       } else if(tab==='permissions') {
         heading('权限与隐私','本地运行，内容保存在当前 Windows 用户目录。');const d=await api.diagnostics();
+        if (disposed || revision !== renderRevision) return;
         content.append(h('section',{class:'settings-section'},h('h2',{},'快捷键与自动粘贴'),h('p',{},'自动粘贴和读取选中内容使用 Windows 键盘与窗口接口。目标应用以管理员运行时，OpenAll 也需要相同权限。'),h('div',{class:'row',style:{marginTop:'16px'}},button('检查状态',()=>render()),button('查看快捷键',()=>render('general')))));
         content.append(h('section',{class:'settings-section'},h('h2',{},'文件访问'),h('p',{},prefs.searchFiles?'文件搜索已开启，仅索引可访问目录。':'文件搜索已关闭，可在搜索设置中开启。'),h('div',{class:'row',style:{marginTop:'14px'}},button('打开搜索设置',()=>render('search')),button('重新扫描',()=>api.windowAction('rescan')))));
         content.append(h('section',{class:'settings-section'},h('h2',{},'图片文字识别'),h('p',{},d.ocrAvailable===false?'当前 Windows 未安装可用的 OCR 语言包，可在 Windows 语言设置中添加。':'使用 Windows 本机文字识别；图片与识别结果不发送到远端。'),h('div',{style:{marginTop:'14px'}},button('打开 Windows 语言设置',()=>api.fileAction('openSystemSettings',{uri:'ms-settings:regionlanguage'})))));
         content.append(h('section',{class:'settings-section'},h('h2',{},'本地数据'),button('打开数据目录',()=>api.fileAction('dataDirectory'))));
       } else if(tab==='diagnostics') {
-        heading('诊断','查看运行状态、索引与本地存储。');const d=await api.diagnostics();const rows=[['版本',d.version||'0.25.6'],['平台',d.platform||'Windows'],['应用索引',d.index?.apps??0],['文件索引',d.index?.files??0],['Chrome 配置',d.index?.profiles??0],['剪贴板记录',d.clipboard??d.clipboardCount??0],['内存',d.memoryMB?d.memoryMB+' MB':'—'],['索引状态',d.index?.indexing?'正在更新':'就绪'],['系统文件索引',d.index?.systemIndex?.available?'已连接 Windows Search':d.index?.systemIndex?.reason||'搜索文件时自动连接']];
+        heading('诊断','查看运行状态、索引与本地存储。');const d=await api.diagnostics();
+        if (disposed || revision !== renderRevision) return;
+        const rows=[['版本',d.version||'—'],['平台',d.platform||'Windows'],['应用索引',d.index?.apps??0],['文件索引',d.index?.files??0],['Chrome 配置',d.index?.profiles??0],['剪贴板记录',d.clipboard??d.clipboardCount??0],['内存',d.memoryMB?d.memoryMB+' MB':'—'],['索引状态',d.index?.indexing?'正在更新':'就绪'],['系统文件索引',d.index?.systemIndex?.available?'已连接 Windows Search':d.index?.systemIndex?.reason||'搜索文件时自动连接']];
         content.append(h('dl',{class:'status-grid'},rows.flatMap(([name,value])=>[h('dt',{},name),h('dd',{},String(value))])),h('div',{class:'row'},button('刷新状态',()=>render()),button('重新建立索引',()=>api.windowAction('rescan')),button('复制诊断',async()=>{await api.copyText(JSON.stringify(d,null,2));notify('诊断信息已复制');})),h('section',{class:'settings-section'},h('h2',{},'更新'),h('div',{class:'row'},bind(input(prefs.updateFeedURL,'更新源地址（HTTPS）'),value=>save({updateFeedURL:value})),button('检查更新',async()=>{const result=await api.windowAction('checkUpdates');notify(result?.message||'已完成更新检查');render();})),h('div',{class:'row',style:{marginTop:'12px'}},button('安装更新',async()=>{if(await confirm('安装更新','将下载并校验安装包，然后关闭 OpenAll 启动安装器。'))await api.windowAction('installUpdate');},'primary'),button('回退上一版',async()=>{if(await confirm('回退上一版','将关闭 OpenAll，重新安装上次保留的版本。'))await api.windowAction('rollbackUpdate');})),h('p',{class:'hint small'},d.updates?.message||'填写可信的 HTTPS 更新源后检查更新。')));
       } else if(tab==='appearance') {
         heading('外观','调整背景和强调色，所有窗口同步生效。');
@@ -174,7 +326,32 @@
       for (const color of content.querySelectorAll('input[data-color-key]')) color.value = prefs[color.dataset.colorKey];
     }
     async function clearHistory(all) {if(await confirm('清理剪贴板历史',all?'将删除全部历史记录，包括收藏。':'将删除未收藏的历史记录，收藏保留。')){await api.clipboardAction('clear',{includeFavorites:all});notify('历史记录已清理');}}
-    async function searchRules() {content.replaceChildren(h('div',{class:'row'},button('← 返回',()=>render('search')),h('h1',{},'置顶与隐藏结果')));const data=await api.windowAction('searchRules');const list=Array.isArray(data)?data:data?.rules||[];const table=h('table',{class:'data-table'},h('thead',{},h('tr',{},h('th',{},'名称'),h('th',{},'规则'),h('th',{},'操作'))),h('tbody',{},list.map(item=>h('tr',{},h('td',{},item.title||item.value),h('td',{},item.hidden?'隐藏':'置顶'),h('td',{},button('恢复',async()=>{await api.windowAction('searchRule',{action:'reset',item});searchRules();}))))));content.append(list.length?table:h('div',{class:'empty'},'暂无置顶或隐藏的结果'),button('清除使用频率记录',async()=>{if(await confirm('清除使用记录','搜索排序将恢复为默认顺序。')){await api.windowAction('searchRule',{action:'clearUsage'});notify('已清除使用记录');}}));}
+    async function searchRules() {
+      const revision = ++renderRevision;
+      const back = button('← 返回搜索设置', () => render('search'), 'ghost');
+      content.replaceChildren(h('div',{class:'settings-rule-heading'},h('h1',{},'搜索排序管理'),back));
+      const data = await api.windowAction('searchRules');
+      if (disposed || revision !== renderRevision) return;
+      const rules = Array.isArray(data) ? data : data?.rules || [];
+      if (rules.length) {
+        const rows = rules.map(item => h('tr',{},h('td',{},item.title || item.value),h('td',{},item.hidden ? '已隐藏' : '已置顶'),
+          h('td',{},button('恢复默认',async () => {
+            await api.windowAction('searchRule',{action:'reset',item});
+            if (!disposed && revision === renderRevision) searchRules();
+          }))));
+        content.append(h('table',{class:'data-table'},h('thead',{},h('tr',{},...['名称','规则','操作'].map(label => h('th',{},label)))),h('tbody',{},rows)));
+      } else {
+        content.append(h('div',{class:'rules-empty'},h('h2',{},'暂无置顶或隐藏的结果'),
+          h('p',{},'在搜索中选中结果，按 Ctrl+K 即可置顶或隐藏。'),
+          button('打开搜索',()=>api.windowAction('showSearch'),'primary')));
+      }
+      content.append(button('清除使用频率记录',async () => {
+        if (await confirm('清除使用记录','搜索排序将恢复为默认顺序。')) {
+          await api.windowAction('searchRule',{action:'clearUsage'});
+          notify('已清除使用记录');
+        }
+      },'ghost'));
+    }
     await render();return {dispose(){disposed=true;recording?.cancel();},selectTab:render,getTab:()=>tab,settingsChanged:syncAppearance};
   }
   window.OpenAllPages.settings=settingsPage;
