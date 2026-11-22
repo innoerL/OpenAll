@@ -455,7 +455,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             const actual = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(quote.price);
             const buttons = [...document.querySelectorAll('#forecast-rows .forecast-day-toggle')];
             const header = document.querySelector('.forecast-baseline');
-            return header.textContent.includes('今日周大福牌价') && document.querySelector('#date').innerText === quote.date &&
+            return document.querySelector('#forecast-title').innerText === '今日周大福牌价' && !header.innerText.includes('今日周大福牌价') && document.querySelector('#date').innerText === quote.date &&
               header.querySelector('time').dateTime === quote.date && !header.innerText.includes(quote.date) && !document.querySelector('#forecast-meta').innerText.includes('模型') &&
               document.querySelector('#method-details').textContent.includes(state.outlook.forecasts.ctf.version) &&
               header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
@@ -537,19 +537,28 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             const state = await openallGold.read();
             const days = state.outlook.forecasts.ctf.days;
             const points = days.filter(day => Number.isFinite(day.low) && Number.isFinite(day.high));
-            const min = Math.min(...points.map(day => day.low)), max = Math.max(...points.map(day => day.high));
             const format = new Intl.NumberFormat('zh-CN', {maximumFractionDigits:0});
+            const readPrice = text => Number.parseFloat(text.replaceAll(',', ''));
+            const min = readPrice(format.format(Math.min(...points.map(day => day.low))));
+            const max = readPrice(format.format(Math.max(...points.map(day => day.high))));
             const scale = document.getElementById('range-scale');
-            const trackOK = [...document.querySelectorAll('.forecast-day')].every((row, index) => {
-              const track = row.querySelector('.range-track'), mark = track?.querySelector('i'), day = days[index];
-              if (!track || !mark || !track.querySelector('.range-today') || document.querySelector('#today-key').hidden) return false;
+            const todayPrice = readPrice(document.querySelector('.forecast-baseline strong').innerText);
+            const samePrices = new Map();
+            const trackOK = [...document.querySelectorAll('.forecast-day')].every(row => {
+              const track = row.querySelector('.range-track'), mark = track?.querySelector('i');
+              const todayLine = row.querySelector('.range-today');
+              if (!track || !mark || !todayLine || document.querySelector('#today-key').hidden) return false;
               const today = parseFloat(getComputedStyle(track).getPropertyValue('--today'));
-              if (Math.abs(today - 100 * (state.instruments.ctf.quote.price - min) / (max - min)) >= .001 || !Number.isFinite(today)) return false;
-              const measured = [track.style.getPropertyValue('--low'), mark.style.left, track.style.getPropertyValue('--high')];
-              const prices = [day.low, day.mid, day.high];
-              const bounds = mark.getBoundingClientRect();
-              return measured.every((value, i) => Math.abs(parseFloat(value) - 100 * (prices[i] - min) / (max - min)) < .001) &&
-                bounds.height > bounds.width && bounds.width > 0;
+              const positions = [track.style.getPropertyValue('--low'), mark.style.left, track.style.getPropertyValue('--high'),today];
+              const ends = row.querySelectorAll('.range-endpoint');
+              const reference = readPrice(row.querySelector('.forecast-price').innerText);
+              const prices = [readPrice(ends[0].innerText),reference,readPrice(ends[1].innerText),todayPrice];
+              const bounds = mark.getBoundingClientRect(), line = todayLine.getBoundingClientRect();
+              const center = bounds.left + bounds.width / 2;
+              const aligned = !samePrices.has(reference) || Math.abs(samePrices.get(reference) - center) < .1;
+              samePrices.set(reference, center);
+              return aligned && positions.every((value,i) => Math.abs(parseFloat(value) - 100 * (prices[i] - min) / (max - min)) < .001) &&
+                line.height > track.getBoundingClientRect().height && bounds.height > bounds.width && bounds.width > 0;
             });
             const detail = document.querySelector('.forecast-detail:not([hidden]) .day-reading');
             if (!detail || !scale || scale.hidden || !(max > min) || !trackOK ||
@@ -571,7 +580,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("document.querySelectorAll('.forecast-day-toggle')[1].click();return true;")
             try check(try await tool.execute("const open=document.querySelectorAll('.forecast-day-toggle[aria-expanded=true]');return open.length===1 && open[0]===document.querySelectorAll('.forecast-day-toggle')[1];") as? Bool == true, "可从已展开的日期直接切换到另一天")
             _ = try await tool.execute("document.querySelector('#forecast-gold').click();return true;")
-            try check(try await tool.execute("return !document.querySelector('.forecast-day-toggle[aria-expanded=true]');") as? Bool == true,"切换品种后重置日期详情")
+            try check(try await tool.execute("return !document.querySelector('.forecast-day-toggle[aria-expanded=true]') && document.querySelector('#forecast-title').innerText === '国际现货基准价' && document.querySelector('.forecast-baseline strong').innerText.includes('/克');") as? Bool == true, "切换国际现货后显示基准价和单位并收起详情")
             try await capture("gold-outlook-gold-narrow")
             _ = try await tool.execute("document.querySelector('#forecast-ctf').click(); return true;")
             panel.setFrame(originalFrame, display: true)

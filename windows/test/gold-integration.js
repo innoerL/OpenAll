@@ -67,11 +67,32 @@ async function verifyForecastMetrics(search, report) {
     check(true, '收到行情刷新后仍展示所选日期的最新概率');
     await execute(gold, () => document.querySelectorAll('.forecast-day-toggle')[2].click());
 
+    for (const [id,step] of [['ctf',1],['gold',.01]]) {
+      await execute(gold, instrument => document.querySelector('#forecast-' + instrument).click(), id);
+      const rounded = structuredClone(original);
+      const forecast = rounded.outlook.forecasts[id];
+      const template = forecast.days.find(day => Number.isFinite(day.mid));
+      [0,1].forEach(index => {
+        forecast.days[index] = {...template,date:forecast.days[index].date,low:1207,high:1209,
+          mid:1208 + (index ? .4 : -.4) * step};
+      });
+      gold.webContents.send('openall:gold-snapshot', rounded);
+      const expected = id === 'ctf' ? '1,208' : '1,208.00';
+      await until(() => execute(gold, text => [...document.querySelectorAll('.forecast-price')].slice(0,2)
+        .every(cell => cell.innerText === text), expected));
+      check(await execute(gold, () => {
+        const bars = [...document.querySelectorAll('.forecast-day .range-track i')].slice(0,2);
+        return bars.length === 2 && bars[0].style.left === bars[1].style.left &&
+          Math.abs(bars[0].getBoundingClientRect().left - bars[1].getBoundingClientRect().left) < .1;
+      }), id === 'ctf' ? '相同整元牌价的两日参考点重合' : '相同分位国际金价的两日参考点重合');
+    }
+    await execute(gold, () => document.querySelector('#forecast-ctf').click());
+
     const stale = structuredClone(original);
     stale.instruments.ctf.quote.date = '2026-11-19';
     stale.instruments.ctf.quote.price = 1058;
     gold.webContents.send('openall:gold-snapshot', stale);
-    await until(() => execute(gold, () => document.querySelector('.forecast-baseline').textContent.includes('最近周大福牌价')));
+    await until(() => execute(gold, () => document.querySelector('#forecast-title').innerText === '最近周大福牌价'));
     check(await execute(gold, () => {
       const lines = document.querySelectorAll('#forecast-meta .forecast-baseline');
       return lines[0].querySelector('strong').textContent === '1,058 人民币/克' &&
@@ -196,7 +217,7 @@ async function verifyForecastMetrics(search, report) {
     empty.outlook.forecasts.ctf = null;
     gold.webContents.send('openall:gold-snapshot', empty);
     await until(() => execute(gold, () => document.querySelector('#forecast-table').hidden));
-    check(await execute(gold, () => document.querySelector('#forecast-meta').textContent.includes('今日周大福牌价') &&
+    check(await execute(gold, () => document.querySelector('#forecast-title').innerText === '今日周大福牌价' &&
       document.querySelector('.forecast-baseline strong').textContent.includes('人民币/克')), '预测未就绪时仍可读取今日实际牌价');
 
     empty.instruments.ctf.quote = null;
