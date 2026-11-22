@@ -615,14 +615,25 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         if DesignPreview.enabled {
             DesignPreview.lastWindow = panel
             verifyCrop = {
-                let region = NSRect(x: 64, y: 45, width: 300, height: 210)
+                // 夹具随实际屏幕倍率产生不同像素尺寸，拖动的两个角都取自当前原图内部。
+                let region = NSRect(x: (maxSize.width * 0.10).rounded(), y: (maxSize.height * 0.125).rounded(),
+                                    width: (maxSize.width * 0.47).rounded(), height: (maxSize.height * 0.58).rounded())
+                panel.contentView?.layoutSubtreeIfNeeded()
                 let selected = guide.verifyDragForDesign(region: region)
-                guard selected, zip(fields,[64,45,300,210]).allSatisfy({ abs($0.0.integerValue - $0.1) <= 2 }) else {
-                    throw NSError(domain: "CropDragCoordinates", code: 1)
+                let expected = [region.minX, region.minY, region.width, region.height].map { Int($0) }
+                let actual = fields.map(\.integerValue)
+                let diagnostic = "裁剪拖动检查：原图 \(maxSize)，画布 \(guide.bounds)，预期 [X,Y,宽,高] \(expected)，实际 \(actual)，选区 \(guide.selection)"
+                print(diagnostic)
+                guard selected, zip(actual, expected).allSatisfy({ abs($0 - $1) <= 2 }) else {
+                    throw NSError(domain: "CropDragCoordinates", code: 1, userInfo: [NSLocalizedDescriptionKey: diagnostic])
                 }
-                fields[2].integerValue = 284
+                let newWidth = max(1, expected[2] - max(1, expected[2] / 16))
+                fields[2].integerValue = newWidth
                 updateGuide()
-                guard guide.selection.width == 284, submit.isEnabled else { throw NSError(domain: "CropInputGuide", code: 1) }
+                guard guide.selection.width == CGFloat(newWidth), submit.isEnabled else {
+                    throw NSError(domain: "CropInputGuide", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "输入宽度 \(newWidth)，实际选区 \(guide.selection)，可提交 \(submit.isEnabled)"])
+                }
             }
             return
         }

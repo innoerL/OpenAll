@@ -363,29 +363,37 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
         check(await evaluate(() => document.querySelector('.snippet-expansion').hidden),'可收起展开结果');
       } else if (tab === 'clipboard') {
         const old = await evaluate(async () => (await openall.settings()).clipboardPreferences.ignoreApplications);
-        await evaluate(async () => {
+        const initialized = await evaluate(async () => {
           const p=(await openall.settings()).clipboardPreferences;
-          await openall.saveSettings({clipboardPreferences:{...p,ignoreApplications:['KeePassXC.exe','旧应用名称']}});
+          const response=await openall.saveSettings({clipboardPreferences:{...p,ignoreApplications:['KeePassXC.exe','旧应用名称']}});
           await OpenAllApp.controller.selectTab('clipboard');
+          return response;
         });
+        check(initialized.ok,'排除项测试配置通过设置 IPC 保存');
         await click('编辑排除列表');
-        await until(() => evaluate(() => document.querySelectorAll('.exclusion-items li').length===2),'显示已有排除项');
+        await until(() => evaluate(() => document.querySelectorAll('dialog.exclusion-dialog[open] .exclusion-items li').length===2),'显示已有排除项');
         await evaluate(() => {
-          document.querySelector('[aria-label="移除 旧应用名称"]').click();
-          const input=document.querySelector('#exclusion-entry');input.value='1Password.exe';
+          const panel=document.querySelector('dialog.exclusion-dialog[open]');
+          panel.querySelector('[aria-label="移除 旧应用名称"]').click();
+          const input=panel.querySelector('input');input.value='1Password.exe';
           input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
         });
-        check(await evaluate(() => [...document.querySelectorAll('.exclusion-items li > span')].map(e=>e.textContent).join(',')==='KeePassXC.exe,1Password.exe'),'排除项可逐项移除和添加');
+        check(await evaluate(() => [...document.querySelectorAll('dialog.exclusion-dialog[open] .exclusion-items li > span')].map(e=>e.textContent).join(',')==='KeePassXC.exe,1Password.exe'),'排除项可逐项移除和添加');
         await capture('settings-clipboard-exclusions');
-        await evaluate(() => [...document.querySelectorAll('dialog .dialog-actions button')].find(b=>b.textContent==='取消').click());
-        check(await evaluate(async () => (await openall.settings()).clipboardPreferences.ignoreApplications.join(',')==='KeePassXC.exe,旧应用名称'),'取消保留原有排除项');
-        await click('编辑排除列表');
         await evaluate(() => {
-          document.querySelector('[aria-label="移除 旧应用名称"]').click();
-          document.querySelector('#exclusion-entry').value='1Password.exe';
-          document.querySelector('dialog .dialog-actions .primary').click();
+          const panel=document.querySelector('dialog.exclusion-dialog[open]');
+          [...panel.querySelectorAll('.dialog-actions button')].find(b=>b.textContent==='取消').click();
+          // 同一事件循环中立即重开，覆盖旧弹窗已关闭、尚未移除的时序。
+          [...document.querySelectorAll('#app button')].find(b=>b.textContent==='编辑排除列表').click();
         });
-        await until(() => evaluate(async () => !document.querySelector('dialog[open]') &&
+        check(await evaluate(async () => (await openall.settings()).clipboardPreferences.ignoreApplications.join(',')==='KeePassXC.exe,旧应用名称'),'取消保留原有排除项');
+        await evaluate(() => {
+          const panel=document.querySelector('dialog.exclusion-dialog[open]');
+          panel.querySelector('[aria-label="移除 旧应用名称"]').click();
+          panel.querySelector('input').value='1Password.exe';
+          panel.querySelector('.dialog-actions .primary').click();
+        });
+        await until(() => evaluate(async () => !document.querySelector('dialog.exclusion-dialog[open]') &&
           (await openall.settings()).clipboardPreferences.ignoreApplications.join(',')==='KeePassXC.exe,1Password.exe'),'保存新的排除列表');
         await evaluate(async entries => {
           const p=(await openall.settings()).clipboardPreferences;

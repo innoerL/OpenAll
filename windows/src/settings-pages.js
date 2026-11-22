@@ -193,8 +193,7 @@
           });
           const editor = h('div',{class:'exclusion-editor'},h('p',{},'这些应用复制的内容会跳过历史记录。'),
             h('div',{class:'exclusion-heading'},h('strong',{},'已排除应用'),count),list,empty,
-            h('label',{for:'exclusion-entry'},'添加应用'),h('div',{class:'row'},filename,addButton),state);
-          filename.id='exclusion-entry';
+            labelFor('添加应用',filename),h('div',{class:'row'},filename,addButton),state);
           const cancel = button('取消',() => panel.close());
           const apply = button('保存',async () => {
             if (filename.value.trim() && !add()) return;
