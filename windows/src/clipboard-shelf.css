@@ -34,8 +34,7 @@
 .clipboard-tab { flex: none; white-space: nowrap; }
 .clip-card:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; }
 .clip-card.selected { background: color-mix(in srgb, var(--raised) 94.5%, var(--accent)); }
-.clip-content { padding: 13px 14px; line-height: 20px; }
-.clip-content.short-text { font-size: 16px; line-height: 22px; font-weight: 500; }
+.clip-content { padding: 13px 14px; }
 .clip-card > .clip-preview-link {
   position: static; flex: none; align-self: flex-end; margin: 0 12px 6px; line-height: 18px;
   color: var(--accent-text);

@@ -292,8 +292,6 @@
           content.append(h('span', {class:'clip-list-image-title'}, r.title || '剪贴板图片'));
         } else {
           const body = r.kind === 'files' ? (r.files || []).map(x => x.split(/[\\/]/).pop()).join('\n') : r.text || r.value || r.title || '';
-          const shortText = !r.truncated && body.length <= 46 && !/[\r\n]/.test(body) && (body.length <= 24 || /[^!-~]/.test(body));
-          content.classList.toggle('short-text', format !== 'JSON' && shortText);
           const excerpt = markFirst(body.slice(0, 1800), pattern);
           if (format === 'JSON') content.append(h('pre', {}, excerpt));
           else content.append(...excerpt);

@@ -9,21 +9,20 @@ private final class GoldRailView: NSView, WindowThemeRefreshing {
     var onOpen: (() -> Void)?
 
     override func draw(_ dirtyRect: NSRect) {
-        let tab = bounds.insetBy(dx: 0.5, dy: 8)
-        let shape = NSBezierPath(roundedRect: tab, xRadius: 6, yRadius: 6)
-        OpenAllTheme.sidebar.setFill()
-        shape.fill()
-        OpenAllTheme.accent.withAlphaComponent(0.65).setStroke()
-        shape.lineWidth = 1
-        shape.stroke()
-        let gold = OpenAllTheme.isLight ? NSColor(srgbRed: 0.49, green: 0.32, blue: 0.06, alpha: 1) :
-            NSColor(srgbRed: 0.99, green: 0.78, blue: 0.42, alpha: 1)
-        let style: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: gold]
-        for (i, word) in ["金", "价"].enumerated() {
-            let label = NSAttributedString(string: word, attributes: style)
-            label.draw(at: NSPoint(x: round(bounds.midX - label.size().width / 2),
-                                   y: round(bounds.midY + 1 - CGFloat(i * 14))))
-        }
+        let bar = NSBezierPath(roundedRect: NSRect(x: (bounds.width - 5) / 2,
+            y: (bounds.height - 43) / 2, width: 5, height: 43), xRadius: 2.5, yRadius: 2.5)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
+        shadow.shadowBlurRadius = 3
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.set()
+        OpenAllTheme.accent.setFill()
+        bar.fill()
+        OpenAllTheme.ink.withAlphaComponent(0.55).setStroke()
+        bar.lineWidth = 1
+        bar.stroke()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     override func mouseDown(with event: NSEvent) { onOpen?() }
@@ -53,7 +52,7 @@ final class GoldEdgeDock {
 
     init(window: NSPanel) {
         self.window = window
-        rail = GoldRailPanel(contentRect: NSRect(x: 0, y: 0, width: 16, height: 78),
+        rail = GoldRailPanel(contentRect: NSRect(x: 0, y: 0, width: 16, height: 68),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         rail.title = "OpenAll 金价贴边条"
         rail.isReleasedWhenClosed = false
@@ -63,7 +62,7 @@ final class GoldEdgeDock {
         rail.hidesOnDeactivate = false
         rail.level = .floating
         rail.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        let view = GoldRailView(frame: NSRect(x: 0, y: 0, width: 16, height: 78))
+        let view = GoldRailView(frame: NSRect(x: 0, y: 0, width: 16, height: 68))
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(.button)
         view.setAccessibilityLabel("展开 OpenAll 金价")
@@ -98,7 +97,7 @@ final class GoldEdgeDock {
     }
 
     static func railBounds(_ panel: NSRect, area: NSRect, side: String) -> NSRect {
-        let height = min(78, area.height)
+        let height = min(68, area.height)
         return NSRect(x: side == "left" ? area.minX : area.maxX - 16,
             y: min(max((panel.midY - height / 2).rounded(), area.minY), area.maxY - height),
             width: 16, height: height)

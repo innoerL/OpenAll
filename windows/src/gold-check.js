@@ -303,6 +303,12 @@ module.exports = async function verifyGold(searchWindow, output) {
     await until(() => execute(gold, () => document.body.dataset.edgeSide === 'left' && document.body.dataset.edgeCollapsing === 'true'), '贴边收起');
     const rail = BrowserWindow.getAllWindows().find(win => /gold-edge-rail\.html/.test(win.webContents.getURL()));
     check(!!rail, '贴边浮条创建并保留展开入口');
+    check(await execute(rail, () => {
+      const handle = document.querySelector('#handle'), grip = handle.querySelector('span');
+      const style = getComputedStyle(grip);
+      return handle.getAttribute('aria-label') === '展开金价' && grip.textContent.trim() === ''
+        && style.width === '5px' && style.height === '43px';
+    }), '贴边使用原版无文字细竖条，保留可访问的展开操作');
     await capture('edge-rail', rail);
     await execute(searchWindow, () => openall.openTool('gold'));
     await until(() => execute(gold, () => document.body.dataset.edgeCollapsing === 'false'), '搜索重新展开贴边窗口');

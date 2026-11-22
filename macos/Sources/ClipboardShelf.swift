@@ -541,8 +541,11 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             let content = item.kind == "files" ? item.filePaths.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: "\n") : item.text
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = item.kind == "link" ? .byCharWrapping : .byWordWrapping
-            paragraph.lineSpacing = 3
+            paragraph.lineSpacing = 2
             let format = formatLabel
+            let attrs: [NSAttributedString.Key: Any] = [.font: format == "JSON" ? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) : NSFont.systemFont(ofSize: 14),
+                                                        .foregroundColor: OpenAllTheme.ink,
+                                                        .paragraphStyle: paragraph]
             if textPreview == nil {
                 // 预览只处理有界内容，长剪贴板条目不会在每次重绘时重新遍历全文。
                 let source = content.isEmpty ? item.title : content
@@ -551,11 +554,6 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
                 textPreview = (String(prefix.prefix(300)), prefix.count > 300)
             }
             let display = textPreview!.text
-            let shortText = !textPreview!.truncated && display.utf16.count <= 46 && display.rangeOfCharacter(from: .newlines) == nil &&
-                (display.utf8.count <= 24 || display.utf8.contains { $0 == 32 || $0 > 127 })
-            let font = format == "JSON" ? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-                : NSFont.systemFont(ofSize: shortText ? 16 : 14, weight: shortText ? .medium : .regular)
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: OpenAllTheme.ink, .paragraphStyle: paragraph]
             let required = (display as NSString).boundingRect(with: NSSize(width: preview.width, height: .greatestFiniteMagnitude),
                                                                options: [.usesLineFragmentOrigin, .usesFontLeading],
                                                                attributes: attrs).height
