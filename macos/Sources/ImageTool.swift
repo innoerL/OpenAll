@@ -479,6 +479,11 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
             fields.append(field)
         }
         alert.accessoryView = container
+        if DesignPreview.enabled {
+            alert.layout()
+            DesignPreview.lastWindow = alert.window
+            return
+        }
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let values = fields.compactMap { Int($0.stringValue) }
         guard values.count == 4, values[0] >= 0, values[1] >= 0, values[2] > 0, values[3] > 0,

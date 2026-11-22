@@ -1047,6 +1047,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         else { imageTool.show() }
         try await Task.sleep(nanoseconds: 500_000_000)
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "07-image")
+        guard NSApp.sendAction(Selector(("cropImage")), to: imageTool, from: nil),
+              let crop = DesignPreview.lastWindow, crop.contentView != nil else {
+            throw NSError(domain: "ImageCropPreview", code: 1)
+        }
+        try DesignPreview.capture(crop, name: "07-image-crop")
         comparer.showDesignSample()
         guard try await comparer.verifyForDesign() else {
             throw NSError(domain: "ComparisonRegression", code: 1)
@@ -1064,8 +1069,30 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             selectionWindow.show(.image(previewImage))
             try DesignPreview.capture(DesignPreview.lastWindow!, name: "09-selection-image")
         }
-        selectionWindow.show(nil, message: "正在识别图片文字…", image: previewImage)
+        // 识别前后截同一张样本图片，使用应用正式的本地 Vision 识别器。
+        let sample = NSImage(size: NSSize(width: 800, height: 210), flipped: false) { bounds in
+            NSColor.white.setFill()
+            NSBezierPath(rect: bounds).fill()
+            ("OPENALL NOTES" as NSString).draw(at: NSPoint(x: 30, y: 115),
+                withAttributes: [.font: NSFont.boldSystemFont(ofSize: 48), .foregroundColor: NSColor.black])
+            ("Meeting room 12345" as NSString).draw(at: NSPoint(x: 30, y: 45),
+                withAttributes: [.font: NSFont.systemFont(ofSize: 36), .foregroundColor: NSColor.black])
+            return true
+        }
+        selectionWindow.show(nil, message: "正在识别图片文字…", image: sample)
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "10-selection-ocr")
+        let (text, recognitionError): (String?, String?) = await withCheckedContinuation { continuation in
+            ImageTextRecognizer.recognize(sample) { continuation.resume(returning: ($0, $1)) }
+        }
+        if let text {
+            guard text.contains("12345") else { throw NSError(domain: "SelectionOCRPreview", code: 1) }
+            selectionWindow.show(.text(text))
+            try DesignPreview.capture(DesignPreview.lastWindow!, name: "10-selection-ocr-result")
+        } else {
+            selectionWindow.show(nil, message: recognitionError)
+            try DesignPreview.capture(DesignPreview.lastWindow!, name: "10-selection-ocr-unavailable")
+            print("本机 Vision 未返回识别结果：\(recognitionError ?? "未识别到文字")")
+        }
         let visibleCount = NSApp.windows.filter { $0.isVisible }.count
         guard visibleCount == 0 else { throw NSError(domain: "DesignPreviewVisibleWindow", code: visibleCount) }
         print("离屏预览完成，visibleWindows=0：\(DesignPreview.output.path)")

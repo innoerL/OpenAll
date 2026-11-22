@@ -670,6 +670,8 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("return await openallGold.action('edge');")
             try await tool.until("左侧贴边收起") { dock.collapsed && !panel.isVisible && dock.rail.isVisible }
             try check(dock.side == "left" && !dock.rail.isOpaque && !dock.rail.canBecomeKey, "透明非激活贴边竖条")
+            try DesignPreview.capture(dock.rail, name: "gold/gold-edge-rail")
+            screenshots.append("gold-edge-rail.png")
             let focus = NSApp.keyWindow
             let hoverTime = ProcessInfo.processInfo.systemUptime
             dock.checkHoverForDesign(at: NSPoint(x: area.midX, y: area.midY), now: hoverTime)
