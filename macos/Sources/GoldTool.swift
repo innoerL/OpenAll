@@ -445,6 +445,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("document.querySelector('#forecast-ctf').click(); return true;")
             try check(try await tool.execute("return document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7 && !!document.querySelector('#verification-note').textContent;") as? Bool == true,
                 "七日表格与实际报价验证展示")
+            try check(try await tool.execute("return ['#drivers','#events','#calendar'].every(selector=>document.querySelector(selector).children.length>0 && document.querySelector(selector).getClientRects().length>0);") as? Bool == true, "市场因素、近期国际事件与未来七日财经日历直接可见")
             let checkPrices = """
             const state = await openallGold.read();
             const quote = state.instruments.ctf.quote;
@@ -453,7 +454,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             const actual = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(quote.price);
             const buttons = [...document.querySelectorAll('#forecast-rows .forecast-day-toggle')];
             const header = document.querySelector('.forecast-baseline');
-            return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date &&
+            return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date && !header.querySelector('time').hidden &&
               header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
               document.querySelector('#forecast-price-heading').textContent.includes('参考价') &&
               document.querySelectorAll('#forecast-table thead th').length === 3 &&
@@ -470,20 +471,20 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             // 用 WebKit 的原生键盘事件操作折叠区及日期，截图前恢复首屏。
             guard let browser = tool.webView else { throw componentError("未出现金价内容视图") }
             _ = panel.makeFirstResponder(browser)
-            func pressReturn() throws {
+            func pressKey(_ characters: String = "\r", code: UInt16 = 36) throws {
                 for type in [NSEvent.EventType.keyDown, .keyUp] {
                     guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber,
-                        context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)
+                        context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)
                     else { throw componentError("无法创建回车事件") }
                     if type == .keyDown { browser.keyDown(with: event) } else { browser.keyUp(with: event) }
                 }
             }
-            for id in ["verification-breakdown", "market-context", "method-details"] {
+            for id in ["verification-breakdown", "method-details"] {
                 let focused = try await tool.execute("const details=document.getElementById('\(id)'), summary=details.querySelector('summary'); summary.focus(); return !details.open && document.activeElement===summary;")
                 try check(focused as? Bool == true, "键盘可聚焦详情摘要：\(id)")
                 for opened in [true, false] {
-                    try pressReturn()
+                    try pressKey()
                     try await tool.until("回车切换详情 \(id)") {
                         try await tool.execute("return document.getElementById('\(id)').open===\(opened);") as? Bool == true
                     }
@@ -508,17 +509,88 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
               })) && document.querySelector('#close').getBoundingClientRect().right <= width + 1;
             """
             try check(try await tool.execute(narrowPrices) as? Bool == true, "窄窗三列的日期、参考价和区间没有裁切")
+            let longPrices = """
+            const original = await openallGold.read(), principal = 123456789.12;
+            const fits = () => {
+              const row = document.querySelector('.forecast-day');
+              const width = document.documentElement.clientWidth;
+              const table = document.querySelector('#forecast-table').getBoundingClientRect();
+              return Math.abs(width - 345) <= 1 && table.left >= 0 && table.right <= width + 1 && [...row.cells].every(cell => {
+                const box = cell.getBoundingClientRect();
+                const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+                for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+                  if (!text.textContent.trim()) continue;
+                  const range = document.createRange();
+                  range.selectNodeContents(text);
+                  if ([...range.getClientRects()].some(rect => rect.left < box.left - 1 || rect.right > box.right + 1)) return false;
+                }
+                return cell.scrollWidth <= cell.clientWidth + 1;
+              });
+            };
+            try {
+              for (const [currency,id] of [['USD','gold'],['CNY','gold'],['CNY','ctf']]) {
+                const snapshot = JSON.parse(JSON.stringify(original));
+                snapshot.currency = currency;
+                document.querySelector('#forecast-' + id).click();
+                const days = snapshot.outlook.forecasts[id].days;
+                days[0] = {...days.find(entry=>entry.model),date:days[0].date,mid:principal,low:principal-100,high:principal+100};
+                window.__openallGoldDeliver({kind:'snapshot',value:snapshot});
+                if (!document.querySelector('.forecast-price').textContent.includes('123,456,789') || !fits()) return false;
+              }
+              return true;
+            } finally {
+              window.__openallGoldDeliver({kind:'snapshot',value:original});
+              document.querySelector('#forecast-ctf').click();
+            }
+            """
+            try check(try await tool.execute(longPrices) as? Bool == true, "345 像素窄窗的长美元和人民币参考价、区间无裁切")
             try await capture("gold-outlook-narrow")
             _ = try await tool.execute("document.querySelector('.forecast-day-toggle').focus(); return true;")
-            try pressReturn()
+            let dayKeys: [(String, UInt16, Int)] = [("\u{F700}", 126, 0), ("\u{F701}", 125, 1), ("\u{F72B}", 119, 6),
+                ("\u{F701}", 125, 6), ("\u{F700}", 126, 5), ("\u{F729}", 115, 0)]
+            for (characters, code, index) in dayKeys {
+                try pressKey(characters, code: code)
+                try await tool.until("方向键或首尾键定位到第 \(index + 1) 天") {
+                    try await tool.execute("return document.activeElement===document.querySelectorAll('.forecast-day-toggle')[\(index)] && !document.querySelector('.forecast-day-toggle[aria-expanded=true]');") as? Bool == true
+                }
+            }
+            try check(true, "方向键及 Home、End 在七天间移动焦点，到首尾保持原位")
+            try pressKey()
             try check(try await tool.execute("""
                 const button=document.querySelector('.forecast-day-toggle'), detail=document.getElementById(button.getAttribute('aria-controls'));
                 const day=(await openallGold.read()).outlook.forecasts.ctf.days[0];
                 return button.getAttribute('aria-expanded')==='true' && detail?.matches('.forecast-detail') &&
                   detail.getClientRects().length>0 && detail.innerText.includes(day.confidence+'%') && detail.innerText.includes('未校准');
                 """) as? Bool == true, "按日期查看对应的方向概率与校准状态")
+            let flatPresentation = """
+            const state = await openallGold.read();
+            const days = state.outlook.forecasts.ctf.days;
+            const points = days.filter(day => Number.isFinite(day.low) && Number.isFinite(day.high));
+            const min = Math.min(...points.map(day => day.low)), max = Math.max(...points.map(day => day.high));
+            const format = new Intl.NumberFormat('zh-CN', {maximumFractionDigits:0});
+            const scale = document.getElementById('range-scale');
+            const trackOK = [...document.querySelectorAll('.forecast-day')].every((row, index) => {
+              const track = row.querySelector('.range-track'), mark = track?.querySelector('i'), day = days[index];
+              if (!track || !mark) return false;
+              const measured = [track.style.getPropertyValue('--low'), mark.style.left, track.style.getPropertyValue('--high')];
+              const prices = [day.low, day.mid, day.high];
+              const bounds = mark.getBoundingClientRect();
+              return measured.every((value, i) => Math.abs(parseFloat(value) - 100 * (prices[i] - min) / (max - min)) < .001) &&
+                bounds.height > bounds.width && bounds.width > 0;
+            });
+            const detail = document.querySelector('.forecast-detail:not([hidden]) .day-reading');
+            if (!detail || !scale || scale.hidden || !(max > min) || !trackOK ||
+                scale.firstElementChild.textContent !== format.format(min) || scale.lastElementChild.textContent !== format.format(max)) return false;
+            for (let node = detail; node && node.tagName !== 'TABLE'; node = node.parentElement) {
+              const style = getComputedStyle(node);
+              if (!['transparent','rgba(0, 0, 0, 0)'].includes(style.backgroundColor) ||
+                  style.boxShadow !== 'none' || parseFloat(style.borderLeftWidth) > 0) return false;
+            }
+            return true;
+            """
+            try check(try await tool.execute(flatPresentation) as? Bool == true, "详情沿用表面底色、逐日区间共用刻度并标出参考竖线")
             try await capture("gold-outlook-narrow-detail")
-            try pressReturn()
+            try pressKey()
             try await tool.until("键盘再次确认收起所选日期") {
                 try await tool.execute("return !document.querySelector('.forecast-day-toggle[aria-expanded=true]');") as? Bool == true
             }

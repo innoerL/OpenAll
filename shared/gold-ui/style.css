@@ -27,29 +27,43 @@ body>.window-bar,body>main { transition:transform .22s cubic-bezier(.22,.61,.36,
 body:has(#outlook:not([hidden])) #layout,
 body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none; }
 
-/* 七日展望与宿主共用一块底色，报价、列标题和逐日明细靠排版区分。 */
-#outlook { --forecast-ink:var(--gold-line); padding:0; }
+/* 顶部沿用实价读数，表格只并列日期、参考价与区间。 */
+#outlook { --forecast-ink:var(--gold-line); }
 #outlook[data-instrument="ctf"] { --forecast-ink:var(--ctf-line); }
-.forecast-sheet { margin:0 2px 8px; }
-.forecast-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:11px 0 15px; }
-#forecast-meta { min-width:0; margin:0; display:grid; gap:5px; font-size:11px; }
-.forecast-baseline { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 6px; font-variant-numeric:tabular-nums; }
-.forecast-label { width:100%; font-size:12px; }
-.forecast-baseline strong { color:var(--foreground); font:650 22px/1.3 system-ui,sans-serif; letter-spacing:-.035em; }
-.forecast-unit { color:var(--secondary); font-size:11px; font-weight:500; white-space:nowrap; letter-spacing:0; }
-.forecast-baseline time { font-size:11px; }
-.forecast-baseline + .forecast-baseline strong { font-size:14px; }
-.forecast-top .view-switch { gap:8px; padding:0; border:0; border-radius:0; }
-.forecast-top .view-switch button { padding:4px 1px; border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; color:var(--secondary); }
-.forecast-top .view-switch button[aria-pressed="true"] { color:var(--foreground); border-color:var(--forecast-ink); }
-#forecast-table { width:100%; border-collapse:collapse; text-align:left; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#outlook > .outlook-heading h2 { font-size:14px; }
+#forecast-meta { display:grid; gap:4px; margin:12px 0 13px; }
+.forecast-baseline {
+  display:grid; grid-template-columns:minmax(0,1fr) auto;
+  align-items:baseline; column-gap:8px; row-gap:2px;
+  font-size:11px; font-variant-numeric:tabular-nums;
+}
+.forecast-label { grid-area:1 / 1; font-weight:600; color:var(--foreground); }
+.forecast-baseline time { grid-area:1 / 2; color:var(--secondary); }
+.forecast-baseline strong {
+  grid-area:2 / 1 / 3 / 3; color:var(--forecast-ink);
+  font-size:28px; line-height:1.12; font-weight:650; letter-spacing:-.035em;
+}
+.forecast-unit { color:var(--secondary); font-size:11px; font-weight:500; letter-spacing:0; white-space:nowrap; }
+.forecast-baseline + .forecast-baseline { display:flex; flex-wrap:wrap; align-items:baseline; margin-top:4px; }
+.forecast-baseline + .forecast-baseline strong { font:inherit; color:var(--foreground); letter-spacing:0; }
+.chart-legend { font-size:11px; }
+.chart-legend.dual-axis { justify-content:space-between; }
+#combined-axis-note { margin:3px 0 0; color:var(--secondary); font-size:10px; line-height:1.45; }
+#forecast-table { width:100%; table-layout:fixed; border-collapse:collapse; text-align:left; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#forecast-table .date-col { width:28%; }
+#forecast-table .price-col { width:22%; }
+#forecast-table .range-col { width:50%; }
 #forecast-table th { color:var(--secondary); font-size:12px; font-weight:500; vertical-align:top; padding:8px 0 6px; border-block:1px solid var(--border); }
 #forecast-table th:first-child { padding-left:13px; }
 #forecast-table th:not(:first-child), .forecast-price, .forecast-range { text-align:right; }
+#forecast-table .range-heading, #forecast-table .forecast-range { padding-left:clamp(14px,4vw,28px); }
+.range-caption { display:flex; align-items:baseline; justify-content:space-between; gap:4px; }
 #range-key { display:inline-flex; align-items:center; gap:3px; margin-left:7px; font-size:10px; }
 #range-key i, .range-track i { width:2px; height:8px; background:var(--forecast-ink); }
-#range-scale { display:flex; width:min(100%,112px); justify-content:space-between; margin:3px 0 0 auto; font-size:10px; font-weight:450; }
-#forecast-table td { border-bottom:1px solid var(--border); }
+#range-scale { display:flex; width:100%; align-items:center; justify-content:space-between; gap:5px; margin-top:3px; font-size:10px; font-weight:450; }
+#range-scale::before { content:''; order:1; flex:1; border-top:1px solid var(--border); }
+#range-scale span:last-child { order:2; }
+#forecast-table td { border-bottom:1px solid color-mix(in srgb,var(--border) 52%,transparent); }
 .forecast-day { cursor:pointer; }
 .forecast-day > td { height:43px; padding:4px 0; }
 .forecast-day-toggle { display:inline-flex; align-items:baseline; gap:6px; min-height:32px; padding:6px 0; margin:0;
@@ -58,15 +72,15 @@ body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none
   border-right:1.5px solid var(--secondary); border-bottom:1.5px solid var(--secondary); transform:rotate(-45deg); }
 .forecast-day-toggle[aria-expanded="true"]::before { transform:rotate(45deg); border-color:var(--forecast-ink); }
 .forecast-day-toggle:focus-visible { outline:none; }
-.forecast-day-toggle:focus-visible time { text-decoration:underline 2px var(--accent); text-underline-offset:4px; }
+.forecast-day-toggle:focus-visible time { text-decoration:underline 2px var(--accent-ink); text-underline-offset:4px; }
 .weekday { font-size:11px; font-weight:450; color:var(--secondary); }
 .next-day .weekday { color:var(--foreground); font-weight:600; }
-.forecast-price { font-size:17px; font-weight:640; letter-spacing:-.02em; }
+.forecast-price { white-space:normal; overflow-wrap:anywhere; font-size:17px; font-weight:640; letter-spacing:-.02em; }
 .forecast-price.no-price { font-size:13px; font-weight:500; color:var(--secondary); }
-.forecast-range { font-size:13px; padding-left:8px; }
-.range-track { display:block; position:relative; width:min(100%,112px); height:7px; margin:4px 0 0 auto; }
+.forecast-range { font-size:13px; }
+.range-track { display:block; position:relative; width:100%; height:7px; margin:4px 0 3px auto; }
 .range-track::before { content:''; position:absolute; left:var(--low); right:calc(100% - var(--high)); top:3px; height:1px; min-width:1px; background:var(--secondary); }
-.range-track::after { content:''; position:absolute; left:var(--low); right:calc(100% - var(--high)); top:1px; bottom:1px; border-inline:1px solid var(--secondary); }
+.range-track::after { content:''; position:absolute; left:var(--low); right:calc(100% - var(--high)); top:1px; bottom:1px; border-inline:1px solid var(--secondary); pointer-events:none; }
 .range-track i { position:absolute; top:0; height:7px; transform:translateX(-50%); }
 #forecast-table .forecast-day:has([aria-expanded="true"]) > td { border-bottom-color:transparent; }
 .forecast-detail td { padding:0; white-space:normal; }
@@ -75,21 +89,7 @@ body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none
 .day-direction { display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 7px; }
 .day-direction b { font-weight:650; }
 .day-direction span { font-variant-numeric:tabular-nums; }
-.day-direction .calibration { color:var(--secondary); font-size:11px; }
-#outlook > .outlook-block { margin:0 2px; padding:7px 0; }
-#outlook > .forecast-sheet + .outlook-block { border-top:0; }
-@media (hover:hover) {
-  .forecast-day:hover time, .forecast-top .view-switch button:hover { color:var(--foreground); text-decoration:underline; text-underline-offset:3px; }
-}
-@media (max-width:390px) {
-  .forecast-top { padding-top:6px; }
-  .forecast-day-toggle { gap:4px; }
-  .forecast-price { font-size:16px; }
-}
-@media (forced-colors:active) {
-  .forecast-day-toggle:focus-visible { outline:2px solid Highlight; }
-  .range-track i, #range-key i { background:CanvasText; forced-color-adjust:none; }
-}
+.day-direction .calibration { color:inherit; font-size:inherit; margin-left:-7px; }
 .outlook-block .outlook-heading { margin-bottom:5px; }
 #events button, #calendar button { white-space:normal; overflow-wrap:anywhere; line-height:1.5; }
 .forecast-disclosure summary {
@@ -106,3 +106,24 @@ body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none
 #verification-note { grid-area:2 / 1 / 3 / 3; font-size:11px; font-weight:450; color:var(--secondary); }
 .validation-body { padding:7px 0 1px; font-size:10px; color:var(--secondary); }
 #method-details .model-note { font-size:11px; }
+
+#forecast-table .forecast-detail td { text-align:left; }
+#forecast-table .range-values { white-space:normal; }
+.range-endpoint { display:inline-block; max-width:100%; overflow-wrap:anywhere; }
+.range-separator { white-space:nowrap; }
+#forecast-table[data-long-amounts] .date-col { width:25%; }
+#forecast-table[data-long-amounts] .price-col { width:30%; }
+#forecast-table[data-long-amounts] .range-col { width:45%; }
+#forecast-table[data-long-amounts] .forecast-price { font-size:14px; }
+#range-scale > span { overflow-wrap:anywhere; white-space:normal; min-width:0; }
+@media (hover:hover) {
+  .forecast-day:hover time { text-decoration:underline; text-underline-offset:3px; }
+}
+@media (max-width:390px) {
+  .forecast-day-toggle { gap:4px; }
+  .forecast-price { font-size:16px; }
+}
+@media (forced-colors:active) {
+  .forecast-day-toggle:focus-visible { outline:2px solid Highlight; }
+  .range-track i, #range-key i { background:CanvasText; forced-color-adjust:none; }
+}

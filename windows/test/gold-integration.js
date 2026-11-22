@@ -75,8 +75,65 @@ async function verifyForecastMetrics(search, checks) {
     check(await execute(gold, () => {
       const lines = document.querySelectorAll('#forecast-meta .forecast-baseline');
       return lines[0].querySelector('strong').textContent === '1,058 人民币/克' &&
-        lines[0].querySelector('time').dateTime === '2026-11-19' && lines[1].textContent.includes('预测基准');
+        !lines[0].querySelector('time').hidden && lines[0].querySelector('time').dateTime === '2026-11-19' && lines[1].textContent.includes('预测基准');
     }), '已有预测与当前报价不同，表头分别标记最近牌价及预测基准');
+
+    const partial = structuredClone(original);
+    const partialDay = partial.outlook.forecasts.ctf.days[2];
+    delete partialDay.confidence;
+    gold.webContents.send('openall:gold-snapshot', partial);
+    await until(() => execute(gold, () => {
+      const button = document.querySelectorAll('.forecast-day-toggle')[2];
+      if (button.getAttribute('aria-expanded') !== 'true') button.click();
+      const detail = document.getElementById(button.getAttribute('aria-controls'));
+      return !detail.querySelector('.day-direction') && /概率/.test(detail.innerText);
+    }));
+    const partialView = await execute(gold, () => {
+      const button=document.querySelectorAll('.forecast-day-toggle')[2], row=button.closest('tr');
+      return {price: row.querySelector('.forecast-price').textContent, range: row.querySelector('.range-values').textContent,
+        detail: document.getElementById(button.getAttribute('aria-controls')).innerText};
+    });
+    const formatCTF = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:0});
+    check(partialView.price === formatCTF.format(partialDay.mid) &&
+      [partialDay.low,partialDay.high].every(n=>partialView.range.includes(formatCTF.format(n))) &&
+      !/样本不足|不生成参考价|不提供参考价|[0-9]+%/.test(partialView.detail),
+      '存档缺概率时保留已有参考价和区间，详情仅提示缺失的信息');
+
+    const savedSize = gold.getContentSize();
+    const principal = 123456789.12;
+    try {
+      gold.setContentSize(345, savedSize[1]);
+      await until(() => execute(gold, () => innerWidth <= 345));
+      for (const [currency,id] of [['USD','gold'],['CNY','gold'],['CNY','ctf']]) {
+        const large = structuredClone(original);
+        large.currency = currency;
+        await execute(gold, id === 'gold' ? () => document.querySelector('#forecast-gold').click()
+          : () => document.querySelector('#forecast-ctf').click());
+        const day = large.outlook.forecasts[id].days.find(entry => entry.model);
+        large.outlook.forecasts[id].days[0] = {...day,date:large.outlook.forecasts[id].days[0].date,mid:principal,low:principal-100,high:principal+100};
+        gold.webContents.send('openall:gold-snapshot', large);
+        await until(() => execute(gold, () => document.querySelector('.forecast-price').textContent.includes('123,456,789')));
+        check(await execute(gold, () => {
+          const row = document.querySelector('.forecast-day');
+          const width = document.documentElement.clientWidth;
+          const table = document.querySelector('#forecast-table').getBoundingClientRect();
+          return Math.abs(width - 345) <= 1 && table.left >= 0 && table.right <= width + 1 && [...row.cells].every(cell => {
+            const box = cell.getBoundingClientRect();
+            const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+            for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+              if (!text.textContent.trim()) continue;
+              const range = document.createRange();
+              range.selectNodeContents(text);
+              if ([...range.getClientRects()].some(rect => rect.left < box.left - 1 || rect.right > box.right + 1)) return false;
+            }
+            return cell.scrollWidth <= cell.clientWidth + 1;
+          });
+        }), '345 像素下长金额完整留在各列：'+currency+' / '+id);
+      }
+    } finally {
+      gold.setContentSize(...savedSize);
+      gold.webContents.send('openall:gold-snapshot', original);
+    }
 
     const sparse = structuredClone(original);
     const reasons = ['gold-history', 'ctf-history', 'paired-history'];

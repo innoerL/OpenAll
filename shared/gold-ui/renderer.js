@@ -228,6 +228,8 @@ function renderForecastDays(data, today, number, unit) {
   if (!days.some(day => day.date === expandedDate)) expandedDate = null;
   const priced = days.filter(day => Number.isFinite(day.low) && Number.isFinite(day.high));
   const min = Math.min(...priced.map(day => day.low)), max = Math.max(...priced.map(day => day.high));
+  $('#forecast-table').toggleAttribute('data-long-amounts', days.some(day =>
+    [day.mid, day.low, day.high].some(value => Number.isFinite(value) && number.format(value).length > 8)));
   const scale = $('#range-scale');
   scale.hidden = $('#range-key').hidden = !(max > min);
   if (!scale.hidden) {
@@ -259,7 +261,9 @@ function renderForecastDays(data, today, number, unit) {
     if (day.pointMethod === 'persistence') price.title = '沿用发行时的基准牌价';
     const range = element('td', undefined, 'forecast-range');
     if (Number.isFinite(day.low) && Number.isFinite(day.high)) {
-      const label = element('span', number.format(day.low) + ' – ' + number.format(day.high), 'range-values');
+      const label = element('span', undefined, 'range-values');
+      label.append(element('span', number.format(day.low), 'range-endpoint'),
+        element('span', ' – ', 'range-separator'), element('span', number.format(day.high), 'range-endpoint'));
       range.append(label);
       if (max > min) {
         const track = element('span', undefined, 'range-track');
@@ -288,12 +292,15 @@ function renderForecastDays(data, today, number, unit) {
       const headline = element('div', undefined, 'day-direction');
       headline.dataset.direction = day.direction;
       headline.append(element('b', FORECAST_LABELS[day.direction] || '方向待定'),
-        element('span', '方向概率 ' + day.confidence + '%'), element('small', '未校准', 'calibration'));
+        element('span', '方向概率 ' + day.confidence + '%'), element('span', '（未校准）', 'calibration'));
       panel.append(headline);
       const evidence = element('p', day.model);
       if (Number.isFinite(day.sample)) evidence.append(' · ' + day.sample + ' 个历史情景');
       panel.append(evidence);
       if (day.pointMethod === 'persistence') panel.append(element('p', '此档参考价沿用基准牌价。'));
+    } else if (hasPrice || (Number.isFinite(day.low) && Number.isFinite(day.high))) {
+      panel.append(element('strong', '方向概率暂缺'));
+      if (day.model) panel.append(element('p', day.model));
     } else {
       panel.append(element('strong', unavailableReason(day)), element('p', day.closed ? '该日休市，不生成参考价和方向概率。' : '该期限可用样本不足，暂无价格或方向估计。'));
     }
@@ -327,6 +334,12 @@ $('#forecast-rows').addEventListener('keydown', event => {
     event.preventDefault();
     event.stopPropagation();
     toggleForecastDay(button, false);
+  } else if (button && ['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+    const buttons = Array.from($('#forecast-rows').querySelectorAll('.forecast-day-toggle'));
+    const current = buttons.indexOf(button);
+    const index = { Home: 0, End: buttons.length - 1, ArrowUp: Math.max(0, current - 1), ArrowDown: Math.min(buttons.length - 1, current + 1) };
+    event.preventDefault();
+    buttons[index[event.key]].focus();
   }
 });
 
@@ -355,7 +368,6 @@ function renderOutlook() {
     const line = element('div', undefined, 'forecast-baseline');
     const stamp = element('time', date);
     stamp.dateTime = date;
-    stamp.hidden = date === today;
     const value = element('strong', price == null ? '待更新' : formatter.format(price));
     if (price != null) value.append(' ', element('span', unit, 'forecast-unit'));
     line.append(element('span', label, 'forecast-label'), value, stamp);
@@ -367,11 +379,10 @@ function renderOutlook() {
   }
   if (data) {
     if (!isCTF || !hasQuote || data.anchor.date !== quote.date || data.anchor.price !== quote.price) {
-      addPrice(isCTF ? '预测基准' : '国际现货基准价', data.anchor.price, data.anchor.date, isCTF ? whole : number);
+      addPrice(isCTF ? '预测基准' : '基准', data.anchor.price, data.anchor.date, isCTF ? whole : number);
     }
-    $('#model-version').textContent = '模型 ' + (data.version || verification.version || '—');
-    const status = [hasFixed ? '旧版沿用基准价' : '', data.provisional ? '数据尚未就绪，暂估' : ''].filter(Boolean).join(' · ');
-    if (status) meta.append(element('span', status));
+    const method = hasFixed ? '旧版沿用基准价 · ' : '';
+    meta.append(element('span', `${method}模型 ${data.version || verification.version || '—'}${data.provisional ? ' · 数据尚未就绪，暂估' : ''}`));
   } else {
     meta.append(element('span', isCTF ? '等待足够的预测数据' : '等待足够的最新历史报价或参考汇率'));
   }

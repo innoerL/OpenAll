@@ -94,7 +94,7 @@ module.exports = async function verifyGold(searchWindow, output) {
       const actual = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(quote.price);
       const buttons = [...document.querySelectorAll('#forecast-rows .forecast-day-toggle')];
       const header = document.querySelector('.forecast-baseline');
-      return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date &&
+      return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date && !header.querySelector('time').hidden &&
         header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
         document.querySelector('#forecast-price-heading').textContent.includes('参考价') &&
         document.querySelectorAll('#forecast-table thead th').length === 3 &&
@@ -111,7 +111,7 @@ module.exports = async function verifyGold(searchWindow, output) {
     gold.show();
     gold.focus();
     gold.webContents.focus();
-    const disclosureIds = ['verification-breakdown', 'market-context', 'method-details'];
+    const disclosureIds = ['verification-breakdown', 'method-details'];
     for (const id of disclosureIds) {
       check(await execute(gold, id => {
         const details = document.getElementById(id);
@@ -127,7 +127,7 @@ module.exports = async function verifyGold(searchWindow, output) {
       }
     }
     await execute(gold, () => { document.activeElement.blur(); document.querySelector('main').scrollTop = 0; window.scrollTo(0,0); });
-    check(true, '回车可分别展开与收拢验证统计、市场日历和预测说明');
+    check(true, '回车可分别展开与收拢验证统计与预测说明');
     const normalSize = gold.getContentSize();
     try {
       gold.setContentSize(345, normalSize[1]);
@@ -146,6 +146,13 @@ module.exports = async function verifyGold(searchWindow, output) {
       }), '最窄窗口三列全部可见，七行日期、参考价和完整区间无裁切');
       await capture('outlook-narrow');
       await execute(gold, () => document.querySelector('.forecast-day-toggle').focus());
+      for (const [keyCode,index] of [['Up',0],['Down',1],['End',6],['Down',6],['Up',5],['Home',0]]) {
+        gold.webContents.sendInputEvent({type:'keyDown',keyCode});
+        gold.webContents.sendInputEvent({type:'keyUp',keyCode});
+        await until(() => execute(gold, i => document.activeElement === document.querySelectorAll('.forecast-day-toggle')[i]
+          && !document.querySelector('.forecast-day-toggle[aria-expanded=true]'), index), '键盘定位日期 ' + keyCode);
+      }
+      check(true,'方向键及 Home、End 切换日期焦点，首尾不越界');
       gold.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
       gold.webContents.sendInputEvent({ type: 'char', keyCode: '\r' });
       gold.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
@@ -158,6 +165,32 @@ module.exports = async function verifyGold(searchWindow, output) {
           detail.innerText.includes('未校准');
       }, 0);
       await until(expandedDetails, '回车查看首日方向概率与校准说明');
+      check(await execute(gold, async () => {
+        const state = await openallGold.read();
+        const days = state.outlook.forecasts.ctf.days;
+        const points = days.filter(day => Number.isFinite(day.low) && Number.isFinite(day.high));
+        const min = Math.min(...points.map(day => day.low)), max = Math.max(...points.map(day => day.high));
+        const format = new Intl.NumberFormat('zh-CN', {maximumFractionDigits:0});
+        const scale = document.getElementById('range-scale');
+        const trackOK = [...document.querySelectorAll('.forecast-day')].every((row, index) => {
+          const track = row.querySelector('.range-track'), mark = track?.querySelector('i'), day = days[index];
+          if (!track || !mark) return false;
+          const measured = [track.style.getPropertyValue('--low'), mark.style.left, track.style.getPropertyValue('--high')];
+          const prices = [day.low, day.mid, day.high];
+          const bounds = mark.getBoundingClientRect();
+          return measured.every((value, i) => Math.abs(parseFloat(value) - 100 * (prices[i] - min) / (max - min)) < .001) &&
+            bounds.height > bounds.width && bounds.width > 0;
+        });
+        const detail = document.querySelector('.forecast-detail:not([hidden]) .day-reading');
+        if (!detail || !scale || scale.hidden || !(max > min) || !trackOK ||
+            scale.firstElementChild.textContent !== format.format(min) || scale.lastElementChild.textContent !== format.format(max)) return false;
+        for (let node = detail; node && node.tagName !== 'TABLE'; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (!['transparent','rgba(0, 0, 0, 0)'].includes(style.backgroundColor) ||
+              style.boxShadow !== 'none' || parseFloat(style.borderLeftWidth) > 0) return false;
+        }
+        return true;
+      }), '共用区间刻度、参考竖线与展开详情采用同一块表面底色');
       await capture('outlook-narrow-detail');
       gold.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});
       gold.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});
@@ -187,7 +220,7 @@ module.exports = async function verifyGold(searchWindow, output) {
       gold.setContentSize(...normalSize);
     }
     check(await execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true' && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7), '两品种七日展望切换');
-    check(await execute(gold, () => !!document.querySelector('#verification-note').textContent && document.querySelector('#drivers').children.length > 0 && document.querySelector('#events').children.length > 0 && document.querySelector('#calendar').children.length > 0), '报价验证、市场因素、国际事件与财经日历');
+    check(await execute(gold, () => !!document.querySelector('#verification-note').textContent && document.querySelector('#drivers').children.length > 0 && document.querySelector('#events').children.length > 0 && document.querySelector('#calendar').children.length > 0 && ['#drivers','#events','#calendar'].every(selector => document.querySelector(selector).getClientRects().length > 0)), '报价验证、市场因素、国际事件与财经日历直接可见');
     check(await execute(gold, () => ['gold', 'goldHistory', 'ctf', 'ctfHistory', 'fx', 'news'].every(key => !!document.querySelector('[data-source="' + key + '"]'))), '报价与新闻来源链接保留');
     await execute(gold, () => { window.__goldDocument = document.documentElement; window.__goldForecast = document.querySelector('#forecast-ctf'); });
     await execute(searchWindow, () => openall.saveSettings({ theme: 'custom', backgroundHex: '#203448', accentHex: '#f5ad52' }));
