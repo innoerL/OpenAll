@@ -181,6 +181,19 @@ module.exports = async function verifyAppearance(initialWindow, output) {
         document.activeElement === second && getComputedStyle(second, '::before').height === '16px' &&
         !document.querySelector('.settings-indicator');
     }), '快速切换分类时选中标记即时就位，保留键盘焦点');
+    check(await run(settings, async () => {
+      const nav=[...document.querySelectorAll('.settings-nav')], content=document.querySelector('.settings-content');
+      const oldTitle=content.querySelector('h1');
+      const pending=[OpenAllApp.controller.selectTab('snippets'),OpenAllApp.controller.selectTab('diagnostics')];
+      const retained=content.querySelector('h1')===oldTitle && nav[7].getAttribute('aria-current')==='page';
+      for(const index of [2,0,4]) { nav[index].focus(); nav[index].click(); }
+      const ready=()=>nav[4].getAttribute('aria-current')==='page' && document.activeElement===nav[4] &&
+        content.dataset.tab==='commandAliases' && !!content.querySelector('.command-list .selected') &&
+        !content.querySelector('.command-detail')?.hidden && !!content.querySelector('.command-detail h2')?.textContent;
+      const immediate=ready();
+      await Promise.all(pending);
+      return retained && immediate && ready() && !content.querySelector('.snippet-picker,.diagnostic-environment');
+    }), '连续切换分类保留原正文与焦点，过期异步结果不会覆盖最后显示的别名列表');
     const probe = await open('unicode', '标题栏按钮检查');
     probe.show(); probe.focus();
     await clickWindowButton(probe, '.window-maximize');

@@ -66,18 +66,21 @@
       },'shortcut-button');return b;
     }
     async function render(next=tab) {
+      if (disposed) return;
       const revision=++renderRevision;
       recording?.cancel();
-      const updated = await api.settings();
-      if (disposed || revision !== renderRevision) return;
-      prefs = updated;
       tab = next;
-      content.dataset.tab = tab;
       for (const [id, link] of navigationButtons) {
         link.classList.toggle('selected', id === tab);
         if (id === tab) link.setAttribute('aria-current', 'page');
         else link.removeAttribute('aria-current');
       }
+      // 偏好由设置广播保持最新。异步分类加载时保留原正文，最后一次导航才可替换。
+      let pageData;
+      if (next === 'snippets') pageData = await api.snippets('list');
+      else if (next === 'permissions' || next === 'diagnostics') pageData = await api.diagnostics();
+      if (disposed || revision !== renderRevision) return;
+      content.dataset.tab = tab;
       content.replaceChildren();
       body.scrollTop = 0;
       if(tab==='general') {
@@ -346,9 +349,7 @@
         paint();
       } else if(tab==='snippets') {
         heading('常用片段','在搜索中输入 ;关键词，快速展开并粘贴。');
-        const data = await api.snippets('list');
-        if (disposed || revision !== renderRevision) return;
-        const all = Array.isArray(data) ? data : data.items || [];
+        const all = Array.isArray(pageData) ? pageData : pageData.items || [];
         const picker = select([['','新建片段'], ...all.map(x => [x.id,x.name+' · ;'+x.keyword])], '', null);
         picker.style.flex = '1';
         picker.setAttribute('aria-label','选择片段');
@@ -418,8 +419,8 @@
           h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词 · 用 ; 调用',key)),h('div',{class:'field snippet-body-field'},h('div',{class:'snippet-body-heading'},labelFor('内容',text),variables),text),h('div',{class:'snippet-template-actions'},preview),resultPanel,
             h('div',{class:'row'},remove,h('span',{class:'spacer'}),apply)));
       } else if(tab==='permissions') {
-        heading('权限与隐私','本地运行，内容保存在当前 Windows 用户目录。');const d=await api.diagnostics();
-        if (disposed || revision !== renderRevision) return;
+        heading('权限与隐私','本地运行，内容保存在当前 Windows 用户目录。');
+        const d=pageData;
         const extraActions = [];
         function capability(title,state,description,actions) {
           extraActions.push(...actions.slice(1));
@@ -439,8 +440,8 @@
             [button('打开数据目录 ↗',()=>api.fileAction('dataDirectory'),'ghost')]),
           h('details',{class:'permission-more'},h('summary',{},'其他操作'),h('div',{class:'row'},...extraActions)));
       } else if(tab==='diagnostics') {
-        heading('状态与诊断');const d=await api.diagnostics();
-        if (disposed || revision !== renderRevision) return;
+        heading('状态与诊断');
+        const d=pageData;
         const shortcutNames = [['search','打开搜索'],['clipboard','剪贴板'],['stack','复制堆栈'],['selection','对选中内容操作']];
         const failed = shortcutNames.filter(([key]) => d.shortcuts?.[key] === false);
         if (failed.length && !d.shortcutRecording) {
