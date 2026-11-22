@@ -96,12 +96,18 @@
   </div>
   <section id="outlook" class="quote-card outlook" aria-labelledby="forecast-title" hidden>
     <div class="outlook-heading"><h2 id="forecast-title">国际现货基准价</h2><nav class="view-switch" aria-label="展望品种"><button id="forecast-gold" aria-pressed="true">国际现货</button><button id="forecast-ctf" aria-pressed="false">周大福</button></nav></div>
-    <div id="forecast-meta" class="outlook-meta"></div>
+    <div class="forecast-summary">
+      <div id="forecast-meta" class="outlook-meta"></div>
+      <div id="range-key" aria-label="区间图例" hidden>
+        <span><i class="estimate-symbol" aria-hidden="true"></i>每日参考价</span>
+        <span id="today-key" hidden><i class="today-symbol" aria-hidden="true"></i>今日实价</span>
+      </div>
+    </div>
     <table id="forecast-table" aria-label="七日参考价与情景区间">
       <colgroup><col class="date-col"><col class="price-col"><col class="range-col"></colgroup>
       <thead><tr>
         <th scope="col">日期</th><th scope="col" id="forecast-price-heading">参考估计</th>
-        <th scope="col" class="range-heading"><span class="range-caption"><span>情景区间</span><span id="range-key" hidden><span><i aria-hidden="true"></i>参考</span><span id="today-key" hidden><i aria-hidden="true"></i>今日</span></span></span>
+        <th scope="col" class="range-heading">情景区间
           <span id="range-scale" hidden><span></span><span></span></span></th>
       </tr></thead>
       <tbody id="forecast-rows"></tbody>

@@ -307,7 +307,8 @@ function renderForecastDays(data, today, number, unit, todayQuote) {
     if (day.model && Number.isFinite(day.confidence)) {
       const headline = element('div', undefined, 'day-direction');
       headline.dataset.direction = day.direction;
-      const chance = element('span', '方向概率 ', 'chance');
+      const chance = element('span', '概率 ', 'chance');
+      chance.setAttribute('aria-label', '方向概率 ' + day.confidence + '%，未校准');
       chance.append(element('strong', day.confidence + '%'), '（未校准）');
       headline.append(element('b', FORECAST_LABELS[day.direction] || '方向待定'), chance);
       panel.append(headline);

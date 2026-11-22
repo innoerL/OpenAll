@@ -31,7 +31,8 @@ body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none
 #outlook { --forecast-ink:var(--gold-line); }
 #outlook[data-instrument="ctf"] { --forecast-ink:var(--ctf-line); }
 #outlook > .outlook-heading h2 { font-size:14px; }
-#forecast-meta { display:grid; gap:4px; margin:3px 0 9px; }
+.forecast-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:5px 12px; margin:4px 0 9px; }
+#forecast-meta { display:grid; gap:4px; min-width:0; margin:0; }
 .forecast-baseline {
   display:flex; flex-wrap:wrap; column-gap:9px; row-gap:2px; align-items:baseline;
   font-size:11px; font-variant-numeric:tabular-nums;
@@ -57,15 +58,19 @@ body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none
 #forecast-table th:not(:first-child), .forecast-price, .forecast-range { text-align:right; }
 #forecast-table { --range-pad:clamp(14px,4vw,28px); }
 #forecast-table .range-heading, #forecast-table .forecast-range { padding-left:var(--range-pad); }
-.range-caption { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:2px 4px; }
-#range-key, #range-key > span { display:inline-flex; align-items:center; gap:3px; font-size:11px; }
-#range-key { gap:6px; }
-#range-key i, .range-track i { width:3px; height:9px; background:var(--forecast-ink); }
-#range-key #today-key i, .range-today { width:0; border-left:1px dashed var(--foreground); background:none; }
+#forecast-table .range-heading { text-align:left; }
+#range-key { display:grid; gap:3px; color:var(--secondary); font-size:11px; line-height:1.25; }
+#range-key > span { display:flex; align-items:center; gap:6px; }
+#range-key i { position:relative; display:inline-block; width:18px; height:10px; }
+.estimate-symbol::before { content:''; position:absolute; inset:4px 0 auto; border-top:2px solid var(--secondary); }
+.estimate-symbol::after { content:''; position:absolute; left:8px; top:0; width:3px; height:10px; background:var(--forecast-ink); }
+.today-symbol::before { content:''; position:absolute; left:9px; inset-block:0; border-left:1px dashed var(--foreground); }
+.range-track i { width:3px; height:9px; background:var(--forecast-ink); }
+.range-today { width:0; border-left:1px dashed var(--foreground); }
 #range-scale { display:flex; width:100%; align-items:center; justify-content:space-between; gap:5px; margin-top:3px; font-size:11px; font-weight:450; }
 #range-scale::before { content:''; order:1; flex:1; border-top:1px solid var(--border); }
 #range-scale span:last-child { order:2; }
-#forecast-table td { border-bottom:1px solid color-mix(in srgb,var(--border) 52%,transparent); }
+#forecast-table td { border-bottom:1px solid color-mix(in srgb,var(--border) 40%,transparent); }
 .forecast-day { cursor:pointer; --reading-surface:var(--surface); }
 .forecast-day > td { height:43px; padding:4px 0; }
 .forecast-day-toggle { display:inline-flex; align-items:baseline; gap:6px; min-height:32px; padding:6px 0; margin:0;
@@ -76,8 +81,9 @@ body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none
 .forecast-day-toggle:focus-visible { outline:none; }
 .forecast-day:has(.forecast-day-toggle:focus-visible) { --reading-surface:color-mix(in srgb,var(--accent-ink) 12%,var(--surface)); }
 #forecast-table .forecast-day:has(.forecast-day-toggle:focus-visible) > td {
-  background:var(--reading-surface); border-bottom-color:var(--accent-ink);
+  background:var(--reading-surface);
 }
+.forecast-day-toggle:focus-visible::before { border-color:var(--accent-ink); }
 .weekday { font-size:12px; font-weight:500; color:var(--secondary); }
 .next-day .weekday, .next-day .forecast-price:not(.no-price) { color:var(--forecast-ink); }
 .next-day .weekday { font-weight:600; }
@@ -117,7 +123,7 @@ body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none
 #method-details .model-note { font-size:11px; }
 
 #forecast-table .forecast-detail td { text-align:left; }
-#forecast-table .range-values { position:relative; background:var(--reading-surface); white-space:normal; }
+#forecast-table .range-values { position:relative; padding-left:4px; background:var(--reading-surface); white-space:normal; }
 .range-endpoint { display:inline-block; max-width:100%; overflow-wrap:anywhere; }
 .range-separator { white-space:nowrap; }
 #forecast-table[data-long-amounts] .date-col { width:25%; }
@@ -142,5 +148,5 @@ html:has(#outlook:not([hidden])) {
 }
 @media (forced-colors:active) {
   .forecast-day-toggle:focus-visible { outline:2px solid Highlight; }
-  .range-track i, #range-key i { background:CanvasText; forced-color-adjust:none; }
+  .range-track i, .estimate-symbol::after { background:CanvasText; forced-color-adjust:none; }
 }
