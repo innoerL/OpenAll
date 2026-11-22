@@ -99,18 +99,30 @@ app.whenReady().then(async()=>{
 
   await mount('configDiff');
   await js('const fields=document.querySelectorAll("textarea,.aux-editor-frame");fields[0].value="server:\\n  port: 80\\npassword: old";fields[1].value="server:\\n  port: 81\\npassword: new\\nfeature: true";');
-  await click('比较配置');await until('document.querySelector(".aux-status").textContent==="3 项差异"','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);await capture('configDiff');
+  await click('比较配置');await until('document.querySelector(".aux-status").textContent==="3 项差异"','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-report-title").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');await capture('configDiff');
   await js('document.querySelector(".aux-editor-frame").value="server: 123";');
   await until('document.querySelector(".aux-status").textContent.includes("重新运行")','配置更改状态');
   assert.equal(await js('return document.querySelector(".aux-report-heading button").disabled'),true,'源配置变更后应禁用旧结果复制');
 
   await mount('explain',JSON.stringify([{Plan:{'Node Type':'Nested Loop','Plan Rows':200,Plans:[{'Node Type':'Index Scan','Relation Name':'users','Index Name':'users_pkey','Plan Rows':1,'Actual Rows':1,'Actual Total Time':0.04},{'Node Type':'Seq Scan','Relation Name':'orders','Plan Rows':200,'Actual Rows':174,'Actual Total Time':1.24}]}}]));await click('分析计划');await until('document.querySelectorAll("tbody tr").length===3','执行计划');assert.match(await js('return document.querySelector("tbody").textContent'),/全表扫描/);await capture('explain');
+  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'1 个节点使用全表扫描');
+  assert.equal(await js('return document.querySelector(".aux-backend-body").classList.contains("has-finding")'),false,'扫描方式本身不等于行数异常');
+  const mismatch=JSON.stringify([{Plan:{'Node Type':'Seq Scan','Relation Name':'orders','Plan Rows':12000,'Actual Rows':3}}]);
+  await fill('.aux-editor-frame',mismatch);await click('分析计划');
+  await until('document.querySelector(".aux-report-title").textContent==="估算偏高 4000 倍"','计划关键结果');
+
 
   await mount('sqlRestore',"SELECT * FROM users WHERE id = ? AND name = ?;");await js('document.querySelectorAll("textarea,.aux-editor-frame")[1].value="Parameters: 42(Integer), OpenAll(String)";');await click('还原 SQL');await until('document.querySelectorAll("textarea,.aux-editor-frame")[2].value.includes("id = 42")','SQL 还原');await capture('sqlRestore');
+  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'已还原 2 个占位符');
+
 
   await mount('logTimeline','{"time":"2026-11-16T12:01:20Z","traceId":"req-001","level":"INFO","message":"request started"}\n{"time":"2026-11-16T12:01:22Z","traceId":"req-001","level":"INFO","message":"request completed"}\n{"time":"2026-11-16T12:02:10Z","traceId":"req-002","level":"ERROR","message":"database timeout"}');await click('识别字段');await until('document.querySelector(".aux-status").textContent.includes("3 条日志")','日志解析');await js('const select=document.querySelectorAll("select")[0];select.value="traceId";select.dispatchEvent(new Event("change"));');await until('document.querySelector(".aux-status").textContent.includes("2 个分组")','日志分组');await capture('logTimeline');
+  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'1 条错误');
+  assert.match(await js('return document.querySelector(".aux-status").textContent'),/traceId = req-002/);
+
 
   await mount('manual');
+  assert.ok(await js(`const picker=document.querySelector('.manual-sections');picker.value='1';picker.dispatchEvent(new Event('change'));return document.activeElement===document.querySelectorAll('.manual-article h2')[1] && document.querySelector('.manual-article').scrollTop>0;`));
   const manualRowCount=await js('return document.querySelectorAll("tbody tr").length');
   assert.ok(manualRowCount>20);
   await fill('input[type=search]','journalctl');

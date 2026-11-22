@@ -263,12 +263,18 @@ function renderOutlook() {
   const ranges = data?.days.filter(day => Number.isFinite(day.low) && Number.isFinite(day.high) && Number.isFinite(day.mid)) ?? [];
   const scaleMin = Math.min(...ranges.map(day => day.low));
   const scaleMax = Math.max(...ranges.map(day => day.high));
+  const tomorrow = new Date(Date.parse(today + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
   for (const item of data?.days ?? []) {
     const row = element('tr');
+    const isTomorrow = item.date === tomorrow;
+    if (isTomorrow) row.className = 'next-day';
     const dateCell = element('td');
     const date = element('time', item.date.slice(5).replace('-', '/'));
     date.dateTime = item.date;
-    dateCell.append(date, ' ', element('span', weekday.format(new Date(item.date)), 'weekday'));
+    const dayName = weekday.format(new Date(item.date));
+    const weekdayLabel = element('span', isTomorrow ? '明日' : dayName, 'weekday');
+    date.title = item.date + ' ' + dayName;
+    dateCell.append(date, ' ', weekdayLabel);
     const trend = element('td', undefined, 'forecast-direction');
     if (item.model) {
       trend.dataset.direction = item.direction;

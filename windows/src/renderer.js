@@ -181,7 +181,6 @@
     const close=iconButton('close','关闭剪贴板',()=>call('close'));close.classList.add('clipboard-close');shelf.append(h('div',{class:'clipboard-header'},search,tabs,select,close),track,footer);host.append(shelf);
     const id=r=>r.id||r.hash;
     const type=r=>r.type||({image:'图片',link:'链接',files:'文件'})[r.kind]||(/^[\s]*[\[{]/.test(r.text||r.value||'')&&(()=>{try{JSON.parse(r.text||r.value);return true;}catch{return false;}})()?'JSON':r.html?'HTML':'文本');
-    const colors={'文本':'#4c5d65','JSON':'#455c69','Markdown':'#4d5d67','HTML':'#53656d','富文本':'#5d596b','链接':'#425d56','图片':'#696454','文件':'#5d5968'};
     const hasFilter = () => Boolean(search.value.trim()) || filter !== '全部';
     function updateHints(target) {
       const commands = [];
@@ -232,7 +231,7 @@
         }
         const card=h('article',{draggable:true,onpointerdown:()=>{if(r.truncated&&!dragContent.has(id(r)))api.clipboardAction('read',{ids:[id(r)]}).then(full=>dragContent.set(id(r),Array.isArray(full)?full[0]:full)).catch(()=>{});},ondragstart:e=>{if(['files','image'].includes(r.kind)){e.preventDefault();api.clipboardAction('drag',{ids:selected.has(id(r))?[...selected]:[id(r)]}).catch(error=>notify(error.message,true));return;}const data=dragContent.get(id(r))||r;if(data.truncated){e.preventDefault();notify('正在读取全文，请稍后重新拖动');return;}e.dataTransfer.setData('text/plain',data.text||data.value||'');if(data.html)e.dataTransfer.setData('text/html',data.html);e.dataTransfer.effectAllowed='copy';},class:'clip-card'+(selected.has(id(r))?' selected':''),tabIndex:index === current ? 0 : -1,'data-index':index,role:'option','aria-selected':String(selected.has(id(r))),onclick:e=>{if(e.shiftKey){const low=Math.min(current,index),high=Math.max(current,index);for(let n=low;n<=high;n++)selected.add(id(filtered[n]));}else if(e.ctrlKey||e.metaKey){if(selected.has(id(r)))selected.delete(id(r));else selected.add(id(r));}else selected=new Set([id(r)]);current=index;paint(true);},ondblclick:()=>paste(),oncontextmenu:e=>{e.preventDefault();if(!selected.has(id(r)))selected=new Set([id(r)]);current=index;paint();cardMenu(e);}},content);
         if((r.text||r.value||'').length>110&&r.kind!=='image')card.append(button('查看全文 ↗',e=>{e.stopPropagation();current=index;selected=new Set([id(r)]);preview();},'clip-preview-link'));
-        const source=r.icon?h('img',{src:r.icon,class:'clip-source',alt:r.sourceName||''}):h('span',{class:'clip-source',title:r.sourceName||r.source||''},icon(r.kind==='files'?'file':'application',16));card.append(h('div',{class:'clip-type-bar',style:{'--type-color':colors[format]||colors['文本']}},h('strong',{},format),h('time',{},UI.relativeTime(r.time||r.date)),source));fragment.append(card);});
+        const source=r.icon?h('img',{src:r.icon,class:'clip-source',alt:r.sourceName||''}):h('span',{class:'clip-source',title:r.sourceName||r.source||''},icon(r.kind==='files'?'file':'application',16));card.append(h('div',{class:'clip-type-bar','data-format':r.kind==='files'?'文件':format},h('strong',{},format),h('time',{},UI.relativeTime(r.time||r.date)),source));fragment.append(card);});
       const empty = hasFilter() ? '没有匹配的记录' : activeBoard === '历史' ? '复制内容后会出现在这里' : '这个标签还没有记录';
       track.replaceChildren(filtered.length ? fragment : h('div', {class:'empty'}, empty));
       const count = `${filtered.length} 条${hasFilter() ? '匹配' : '记录'}`;

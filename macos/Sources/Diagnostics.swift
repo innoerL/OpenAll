@@ -47,9 +47,9 @@ final class DiagnosticsView: NSView {
         hint.textColor = .secondaryLabelColor
         hint.frame = NSRect(x: 28, y: 86, width: 650, height: 22)
         addSubview(hint)
-        updated.font = .systemFont(ofSize: 10.5)
+        updated.font = .systemFont(ofSize: 13, weight: .medium)
         updated.textColor = OpenAllTheme.muted
-        updated.frame = NSRect(x: 28, y: 441, width: 540, height: 18)
+        updated.frame = NSRect(x: 28, y: 443, width: 540, height: 18)
         addSubview(updated)
         metrics.frame = NSRect(x: 28, y: 116, width: 640, height: 330)
         WindowChrome.styleSettingsSection(metrics)

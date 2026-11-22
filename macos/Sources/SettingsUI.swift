@@ -213,7 +213,7 @@ final class PermissionsView: NSView {
         title.font = .systemFont(ofSize: 18, weight: .medium)
         addSubview(title)
         let hint = label("按需授权，权限状态会在返回后自动更新。", x: 28, y: 420, width: 620)
-        hint.textColor = .secondaryLabelColor
+        hint.textColor = OpenAllTheme.muted
         addSubview(hint)
 
         let accessibility = label("辅助功能", x: 28, y: 339, width: 180, size: 13)
@@ -240,7 +240,7 @@ final class PermissionsView: NSView {
         fileStatus.textColor = OpenAllTheme.muted
         addSubview(fileStatus)
         fileHelp = label("文件搜索使用 Spotlight 与本地扫描；受保护目录按提示授权。", x: 28, y: 178, width: 335)
-        fileHelp.textColor = .secondaryLabelColor
+        fileHelp.textColor = OpenAllTheme.muted
         fileHelp.cell?.wraps = true
         fileHelp.cell?.usesSingleLineMode = false
         fileHelp.frame.size.height = 32
@@ -267,7 +267,7 @@ final class PermissionsView: NSView {
         WindowChrome.styleOutputAction(browserButton)
         addSubview(browserButton)
         let browserHelp = label("书签与历史的搜索范围可在搜索设置中调整。", x: 28, y: 68, width: 630)
-        browserHelp.textColor = .secondaryLabelColor
+        browserHelp.textColor = OpenAllTheme.muted
         addSubview(browserHelp)
         subviews.forEach { $0.frame.origin.y += 25 }
         refresh()

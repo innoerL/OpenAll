@@ -1,6 +1,6 @@
 # OpenAll macOS
 
-此目录包含 OpenAll **0.27.7（88）** 的 macOS 源码和离线资源，最低运行系统为 **macOS 13**。默认构建同时包含 Intel `x86_64` 与 Apple Silicon `arm64`。
+此目录包含 OpenAll **0.27.8（89）** 的 macOS 源码和离线资源，最低运行系统为 **macOS 13**。默认构建同时包含 Intel `x86_64` 与 Apple Silicon `arm64`。
 
 ## 构建前置条件
 

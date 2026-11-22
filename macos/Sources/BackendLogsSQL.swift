@@ -110,6 +110,7 @@ struct SQLRestoreResult {
     let sql: String
     let replaced: Int
     let unresolved: Int
+    let unused: Int
 }
 
 enum SQLParameterRestorer {
@@ -123,6 +124,7 @@ enum SQLParameterRestorer {
         var index = 0
         var parameterIndex = 0
         var replaced = 0
+        var usedPositions = Set<Int>(), usedNames = Set<String>()
         var unresolved = 0
         var state = 0
         while index < chars.count {
@@ -148,7 +150,7 @@ enum SQLParameterRestorer {
                 output.append(char); state = char == "'" ? 3 : char == "\"" ? 4 : 5
             } else if char == "?" {
                 if positional.indices.contains(parameterIndex) {
-                    output += positional[parameterIndex]; replaced += 1
+                    output += positional[parameterIndex]; usedPositions.insert(parameterIndex); replaced += 1
                 } else { output.append(char); unresolved += 1 }
                 parameterIndex += 1
             } else if char == ":" && (index == 0 || chars[index - 1] != ":") &&
@@ -156,7 +158,7 @@ enum SQLParameterRestorer {
                 var end = index + 1
                 while end < chars.count && (chars[end].isLetter || chars[end].isNumber || chars[end] == "_") { end += 1 }
                 let key = String(chars[(index + 1)..<end])
-                if let value = named[key] { output += value; replaced += 1 }
+                if let value = named[key] { output += value; usedNames.insert(key); replaced += 1 }
                 else { output += ":\(key)"; unresolved += 1 }
                 index = end - 1
             } else if char == "$" && next.isNumber {
@@ -164,13 +166,14 @@ enum SQLParameterRestorer {
                 while end < chars.count && chars[end].isNumber { end += 1 }
                 let number = Int(String(chars[(index + 1)..<end])) ?? 0
                 if positional.indices.contains(number - 1) {
-                    output += positional[number - 1]; replaced += 1
+                    output += positional[number - 1]; usedPositions.insert(number - 1); replaced += 1
                 } else { output += String(chars[index..<end]); unresolved += 1 }
                 index = end - 1
             } else { output.append(char) }
             index += 1
         }
-        return SQLRestoreResult(sql: output, replaced: replaced, unresolved: unresolved)
+        return SQLRestoreResult(sql: output, replaced: replaced, unresolved: unresolved,
+                                unused: positional.count - usedPositions.count + named.count - usedNames.count)
     }
 
     private static func parameters(_ text: String) -> ([String], [String: String]) {

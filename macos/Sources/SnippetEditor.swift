@@ -29,7 +29,7 @@ final class SnippetEditorView: NSView, NSTableViewDataSource, NSTableViewDelegat
     private func label(_ value: String, frame: NSRect) -> NSTextField {
         let label = NSTextField(labelWithString: value)
         label.frame = frame
-        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.font = .systemFont(ofSize: 13, weight: .medium)
         label.textColor = OpenAllTheme.muted
         return label
     }

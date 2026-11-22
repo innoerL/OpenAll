@@ -30,6 +30,8 @@ import Foundation
         precondition(restored.sql.contains("id=42 AND name='O''Neil'") && restored.replaced == 2 && restored.unresolved == 0)
         let named = SQLParameterRestorer.restore(sql: "SELECT :name::text, $1, :missing", parameterText: "name=Alice, 7")
         precondition(named.sql.contains("'Alice'::text") && named.unresolved == 1)
+        let partial = SQLParameterRestorer.restore(sql: "select $2, $2, :missing", parameterText: "first, second")
+        precondition(partial.replaced == 2 && partial.unresolved == 1 && partial.unused == 1)
         print("配置、计划、日志与 SQL 参数检查通过")
     }
 }

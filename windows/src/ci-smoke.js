@@ -125,6 +125,12 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     ] }));
     await open('clipboard');
     check(await evaluate(() => document.querySelectorAll('.clip-card').length === 5 && document.querySelectorAll('.clip-type-bar').length === 5), '剪贴板大卡片与彩色类型栏');
+    check(await evaluate(() => {
+      const colors = new Map([...document.querySelectorAll('.clip-type-bar')].map(bar =>
+        [bar.dataset.format, getComputedStyle(bar).backgroundColor]));
+      const samples = ['文本', 'JSON', 'Markdown'].map(format => colors.get(format));
+      return samples.every(color => color && color !== 'rgba(0, 0, 0, 0)') && new Set(samples).size === 3;
+    }), '普通文本、JSON 与 Markdown 实际绘制为三种类型色');
     await capture('05-clipboard');
     const before = await evaluate(() => openall.history());
     const previewText = await evaluate(() => {

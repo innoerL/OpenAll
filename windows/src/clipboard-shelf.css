@@ -1,4 +1,14 @@
 /* finesse · register=product · shell=剪贴板底部通栏 */
+/* 颜色的明暗跟随宿主主题；未识别的格式沿用文本色。 */
+.clip-type-bar { background:light-dark(#dce1e7, #485361); color:light-dark(#20232b, #faf9f6); }
+.clip-type-bar[data-format="JSON"] { background:light-dark(#c1d9fc, #345e99); }
+.clip-type-bar[data-format="Markdown"] { background:light-dark(#decce9, #655080); }
+.clip-type-bar[data-format="HTML"] { background:light-dark(#f4c6ac, #83492c); }
+.clip-type-bar[data-format="富文本"] { background:light-dark(#f0bed1, #8a4660); }
+.clip-type-bar[data-format="链接"] { background:light-dark(#b4ddd8, #226666); }
+.clip-type-bar[data-format="图片"] { background:light-dark(#ebd38d, #7c621c); }
+.clip-type-bar[data-format="文件"] { background:light-dark(#c6d7ab, #4c692f); }
+
 .clipboard-footer { gap: 14px; }
 .clipboard-footer button { flex: none; width: 92px; }
 .clipboard-footer .clip-count {

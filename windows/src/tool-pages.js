@@ -28,7 +28,7 @@
   function setStatus(status,text,error=false){status.textContent=text;status.classList.toggle('error',error);}
   function worker(){let source;const pending=new Map();let sequence=0,dead=false;return {run(action,...args){if(dead)return Promise.reject(Error('页面已关闭'));if(!source){source=new Worker('../assets/tool-worker.js');source.onmessage=e=>{const entry=pending.get(e.data.id);if(!entry)return;pending.delete(e.data.id);e.data.error?entry.reject(Error(e.data.error)):entry.resolve(e.data.result);};source.onerror=()=>{for(const entry of pending.values())entry.reject(Error('工具计算失败'));pending.clear();};}return new Promise((resolve,reject)=>{const id=++sequence;pending.set(id,{resolve,reject});source.postMessage({id,action,args});});},dispose(){dead=true;source?.terminate();for(const entry of pending.values())entry.reject(Error('页面已关闭'));pending.clear();}};}
   // 列宽按比例适应容器，避免固定像素合计超过可用宽度。
-  function table(columns,emptyMessage='粘贴内容并运行分析，结果会显示在这里'){const totalWidth=columns.reduce((sum,column)=>sum+(Array.isArray(column)?column[1]:0),0);const box=h('div',{class:'aux-report'}),head=h('thead',{},h('tr',{},columns.map(c=>h('th',{},Array.isArray(c)?c[0]:c)))),body=h('tbody'),grid=h('table',{},h('colgroup',{},columns.map(c=>h('col',Array.isArray(c)?{style:'width:'+(c[1]/totalWidth*100)+'%'}:{}))),head,body),footer=h('div',{class:'aux-table-footer'});box.append(grid,footer);let rows=[],page=0;function render(){body.replaceChildren();for(const row of rows.slice(page*150,(page+1)*150)){const cells=Array.isArray(row)?row:row.cells;body.append(h('tr',{class:row.tone||''},cells.map(cell=>h('td',cell instanceof Node?{}:{title:String(cell??'')},cell??''))));}if(!rows.length)body.append(h('tr',{},h('td',{colspan:columns.length,class:'aux-empty'},emptyMessage)));footer.replaceChildren(h('span',{},rows.length?`${rows.length} 项 · 第 ${page+1} / ${Math.ceil(rows.length/150)} 页`:''));if(rows.length>150){const previous=button('上一页',()=>{page--;render();}),next=button('下一页',()=>{page++;render();});previous.disabled=page===0;next.disabled=(page+1)*150>=rows.length;footer.append(previous,next);}}render();return {node:box,set(value){rows=value;page=0;render();}};}
+  function table(columns,emptyMessage='粘贴内容并运行分析，结果会显示在这里'){const totalWidth=columns.reduce((sum,column)=>sum+(Array.isArray(column)?column[1]:0),0);const box=h('div',{class:'aux-report'}),head=h('thead',{},h('tr',{},columns.map(c=>h('th',{},Array.isArray(c)?c[0]:c)))),body=h('tbody'),grid=h('table',{},h('colgroup',{},columns.map(c=>h('col',Array.isArray(c)?{style:'width:'+(c[1]/totalWidth*100)+'%'}:{}))),head,body),footer=h('div',{class:'aux-table-footer'});box.append(grid,footer);let rows=[],page=0,emptyText=emptyMessage;function render(){body.replaceChildren();for(const row of rows.slice(page*150,(page+1)*150)){const cells=Array.isArray(row)?row:row.cells;body.append(h('tr',{class:row.tone||''},cells.map(cell=>h('td',cell instanceof Node?{}:{title:String(cell??'')},cell??''))));}if(!rows.length)body.append(h('tr',{},h('td',{colspan:columns.length,class:'aux-empty'},emptyText)));footer.replaceChildren(h('span',{},rows.length ? rows.length + ' 项' + (rows.length > 150 ? ' · 第 ' + (page + 1) + ' / ' + Math.ceil(rows.length / 150) + ' 页' : '') : ''));if(rows.length>150){const previous=button('上一页',()=>{page--;render();}),next=button('下一页',()=>{page++;render();});previous.disabled=page===0;next.disabled=(page+1)*150>=rows.length;footer.append(previous,next);}}render();return {node:box,set(value,message=emptyMessage){rows=value;emptyText=message;page=0;render();}};}
   function copyButtonIcon(callback,title){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [key,value]of Object.entries({viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':1.5,'aria-hidden':'true'}))svg.setAttribute(key,value);const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d','M9 8h11v14H9zM15 8V2H3v14h6M15 2l5 6');svg.append(path);const result=button('',callback,'quiet aux-copy-icon');result.title=title;result.setAttribute('aria-label',title);result.append(svg);return result;}
   function backend(ctx,action,...args){return ctx.api.backendTask?ctx.api.backendTask(action,args):Promise.resolve(ctx.api.backend[action](...args));}
 
@@ -108,28 +108,97 @@
   function backendPage(id){return async(root,ctx)=>{
     await loadToolEditor();const syntax=id==='configDiff'?'config':id==='sqlRestore'?'sql':'json';
     const status=shell(root,'backend'),old=backendInputs.get(id)||{},left=editor('粘贴内容',ctx.initialValue||old.left||'',false,syntax),right=editor('粘贴另一份内容',old.right||'',false,id==='sqlRestore'?'json':syntax),copyButton=button('复制结果',()=>copy(ctx,copyValue),'quiet'),actions=h('div',{class:'aux-actions'}),body=h('div',{class:'aux-backend-body'});let copyValue='',sequence=0,dead=false,logs=[];copyButton.disabled=true;
+    const titles = {configDiff:'差异结果',explain:'计划节点',logTimeline:'事件时间线',sqlRestore:'还原结果'};
+    const headline = h('strong', {class:'aux-report-title'}, titles[id]);
+    function setHeadline(message, attention = false) {
+      headline.textContent = message;
+      body.classList.toggle('has-finding', attention);
+    }
     body.dataset.mode=id;root.append(backendTabs(id,ctx),body,status);
-    async function run(action,...args){const serial=++sequence;body.classList.remove('stale-result');setStatus(status,'正在本机处理…');copyButton.disabled=true;try{const result=await backend(ctx,action,...args);if(dead||serial!==sequence)return null;return result;}catch(error){if(!dead&&serial===sequence){copyValue='';setStatus(status,error.message,true);}return null;}}
-    function complete(value,message){copyValue=value;copyButton.disabled=!value;body.classList.remove('stale-result');setStatus(status,message);}
+    async function run(action,...args){const serial=++sequence;setHeadline(titles[id]);body.classList.remove('stale-result');setStatus(status,'正在本机处理…');copyButton.disabled=true;try{const result=await backend(ctx,action,...args);if(dead||serial!==sequence)return null;return result;}catch(error){if(!dead&&serial===sequence){copyValue='';setStatus(status,error.message,true);}return null;}}
+    function complete(value, summary, detail, attention = false) {
+      copyValue = value;
+      copyButton.disabled = !value;
+      body.classList.remove('stale-result');
+      setHeadline(summary, attention);
+      setStatus(status, detail);
+    }
     function invalidate(event){
       if(event && event.target.closest('.aux-findbar'))return;
       if(!sequence)return;
       sequence++;
       copyValue=''; copyButton.disabled=true; logs=[];
       body.classList.add('stale-result');
+      setHeadline(titles[id]);
       setStatus(status,'输入已更改，请重新运行');
     }
     for(const field of [left,right])field.addEventListener('input',invalidate);
-    if(id==='configDiff'){left.placeholder=right.placeholder='粘贴 JSON、YAML 或 .properties';const report=table([['变更',78],['字段路径',330],['原值',270],['新值',270]]),format=select([['auto','自动识别格式'],['json','JSON'],['yaml','YAML'],['properties','Properties']]),reveal=check('结果显示敏感值',false);async function analyze(){report.set([]);const rows=await run('configDiff',left.value,right.value,format.value,reveal.box.checked);if(!rows)return;report.set(rows.map(row=>({tone:row.status==='新增'?'added':row.status==='删除'?'removed':'changed',cells:[({'变化':'~ 修改','新增':'+ 新增','删除':'− 删除'})[row.status],row.key,h('span',{title:row.left},row.left,h('small',{},row.leftType?' · '+row.leftType:'')),h('span',{title:row.right},row.right,h('small',{},row.rightType?' · '+row.rightType:''))]})));complete(rows.map(row=>`${row.status} ${row.key}\n  ${row.left} [${row.leftType}] → ${row.right} [${row.rightType}]`).join('\n\n'),rows.length?`${rows.length} 项差异`:'两份配置没有差异');}actions.append(button('比较配置',analyze,'primary'),format,reveal.node,h('span',{class:'aux-spacer'}),copyButton);body.append(h('div',{class:'aux-split inputs'},pane('左侧配置',left),pane('右侧配置',right)),actions,report.node);reveal.box.onchange=analyze;}
-    if(id==='explain'){left.placeholder='支持 PostgreSQL JSON、文本；MySQL JSON、TREE、表格';const report=table([['计划节点',170],['对象 / 索引',170],['估算行',90],['实际行',90],['耗时 ms',90],['风险信号',338]]);actions.append(button('分析计划',async()=>{report.set([]);const rows=await run('explain',left.value);if(!rows)return;report.set(rows.map(row=>({tone:row.warning?'warning':'',cells:['　'.repeat(Math.min(row.depth||0,12))+row.name,[row.relation,row.index].filter(Boolean).join(' / ')||'—',row.estimated??'—',row.actual??'—',row.time||'—',row.warning?'全表扫描':row.detail||'—']})));complete(rows.map(row=>'  '.repeat(row.depth||0)+(row.warning?'⚠ ':'')+row.name+' · '+row.detail).join('\n'),`${rows[0]?.engine||'执行计划'} · ${rows.length} 个节点 · ${rows.filter(r=>r.warning).length} 项扫描提示`);},'primary'),h('span',{class:'aux-spacer'}),copyButton);body.append(pane('粘贴 PostgreSQL / MySQL 的 EXPLAIN 输出',left),actions,report.node);}
-    if(id==='sqlRestore'){left.placeholder='SELECT * FROM users WHERE id = ?';right.placeholder='Parameters: 42(Integer) 或 [42]、{"id":42}';const output=editor('还原后的 SQL','',true,'sql'),report=table(['已替换','未匹配占位符','未使用参数']);actions.append(button('还原 SQL',async()=>{output.value='';const result=await run('restoreSQL',left.value,right.value);if(!result)return;output.value=result.sql;report.set([[result.replaced,result.missing.join('、')||'无',result.unused.join('、')||'无']]);complete(result.sql,`已替换 ${result.replaced} 处 · ${result.unresolved} 处未匹配`);},'primary'),h('span',{class:'aux-spacer'}),copyButton);body.append(h('div',{class:'aux-split inputs'},pane('带占位符的 SQL',left),pane('参数日志',right)),actions,pane('还原结果',output),report.node);report.node.classList.add('summary');body.querySelector(':scope > .aux-pane .aux-pane-bar')?.remove();}
-    if(id==='logTimeline'){left.placeholder='每行一条日志，最多解析 10000 行';const group=select([['','先识别字段']]),time=select([['','原始顺序']]),manual=input('字段名=正则表达式（使用第 1 个捕获组）',old.rule||''),manualHolder=h('div',{class:'aux-inline aux-log-rule',hidden:'true'},manual),report=table([['时间 / 聚合项',320],['级别',96],['消息',532]]);async function renderGroups(){if(!logs.length||!group.value)return;const groups=await run('logGroups',logs,group.value,time.value);if(!groups)return;const rows=[];for(const g of groups){rows.push({tone:'group',cells:[g.name,`${g.entries.length} 条`,'']});for(const row of g.entries)rows.push([row.fields[time.value]||'#'+(row.position+1),row.fields.level||row.fields.severity||row.fields.loglevel||'—',row.fields.message||row.fields.msg||row.raw]);}report.set(rows);complete(groups.map(g=>`▸ ${g.name} · ${g.entries.length} 条\n`+g.entries.map(row=>'  '+(row.fields[time.value]||'#'+(row.position+1))+'  '+row.raw).join('\n')).join('\n\n'),`${logs.length} 条日志 · ${groups.length} 个分组`);}
-      const recognize=button('识别字段',async()=>{report.set([]);const parsed=await run('parseLogs',left.value,manual.value);if(!parsed)return;logs=parsed;const fields=await run('logFields',logs);if(!fields)return;group.replaceChildren(...fields.map(v=>h('option',{value:v.key},`${v.key}（${v.count} 条）`)));time.replaceChildren(h('option',{value:''},'原始顺序'),...fields.map(v=>h('option',{value:v.key},v.key)));const detected=fields.find(v=>/time|时间|timestamp|date/i.test(v.key));if(detected)time.value=detected.key;if(!fields.length){setStatus(status,'没有识别到字段，可展开手动规则补充提取');return;}await renderGroups();if(left.value.split('\n').length>10000)setStatus(status,'已分析前 10000 行日志 · 可分批处理剩余内容');},'primary');group.onchange=time.onchange=renderGroups;
+    if(id==='configDiff'){left.placeholder=right.placeholder='粘贴 JSON、YAML 或 .properties';const report=table([['变更',78],['字段路径',330],['原值',270],['新值',270]]),format=select([['auto','自动识别格式'],['json','JSON'],['yaml','YAML'],['properties','Properties']]),reveal=check('结果显示敏感值',false);async function analyze(){report.set([]);const rows=await run('configDiff',left.value,right.value,format.value,reveal.box.checked);if(!rows)return;report.set(rows.map(row=>({tone:row.status==='新增'?'added':row.status==='删除'?'removed':'changed',cells:[({'变化':'~ 修改','新增':'+ 新增','删除':'− 删除'})[row.status],row.key,h('span',{title:row.left},row.left,h('small',{},row.leftType?' · '+row.leftType:'')),h('span',{title:row.right},row.right,h('small',{},row.rightType?' · '+row.rightType:''))]})),'没有变更记录');complete(rows.map(row=>`${row.status} ${row.key}\n  ${row.left} [${row.leftType}] → ${row.right} [${row.rightType}]`).join('\n\n'),rows.length ? ['新增','变化','删除'].map(kind => {
+        const count = rows.filter(row => row.status === kind).length;
+        return count ? (kind === '变化' ? '修改' : kind) + ' ' + count : '';
+      }).filter(Boolean).join('　') : '两份配置相同', rows.length ? rows.length + ' 项差异' : '');}actions.append(button('比较配置',analyze,'primary'),format,reveal.node,h('span',{class:'aux-spacer'}),copyButton);body.append(h('div',{class:'aux-split inputs'},pane('左侧配置',left),pane('右侧配置',right)),actions,report.node);reveal.box.onchange=analyze;format.onchange=invalidate;}
+    if (id === 'explain') {
+      left.placeholder = '支持 PostgreSQL JSON、文本；MySQL JSON、TREE、表格';
+      const report = table([['计划节点',170],['对象 / 索引',170],['估算行',90],['实际行',90],['耗时 ms',90],['观察项',338]]);
+      async function analyzePlan() {
+        report.set([]);
+        const rows = await run('explain', left.value);
+        if (!rows) return;
+        let largest = null, scans = 0, firstScan = '';
+        report.set(rows.map(row => {
+          const node = row.relation || row.name.split(' (')[0].trim();
+          const notes = [];
+          if (row.warning) {
+            scans++;
+            if (!firstScan) firstScan = node;
+            notes.push('全表扫描');
+          }
+          // MySQL JSON 的连接输出也是估算值，不能拿它当实测行数。
+          const measured = row.engine === 'MySQL · JSON' ? null : row.actual;
+          if (row.engine === 'MySQL · JSON' && row.actual !== '' && row.actual != null) notes.push('估算输出 ' + row.actual + ' 行');
+          if (row.engine === 'MySQL · 表格' && row.detail) notes.push(row.detail);
+          const estimate = Number(row.estimated), actual = Number(measured);
+          const ratio = Math.max(estimate, actual) / Math.min(estimate, actual);
+          const deviation = estimate > 0 && actual > 0 && Number.isFinite(ratio) && ratio >= 10;
+          if (deviation) {
+            const label = '估算偏' + (estimate > actual ? '高 ' : '低 ') + Math.round(ratio) + ' 倍';
+            notes.push(label);
+            if (!largest || ratio > largest.ratio) largest = { ratio, label, node };
+          }
+          return {tone:deviation ? 'estimate-gap' : '', cells:[
+            '　'.repeat(Math.min(row.depth || 0,12)) + row.name, [row.relation,row.index].filter(Boolean).join(' / ') || '—',
+            String(row.estimated ?? '') || '—', String(measured ?? '') || '—', String(row.time ?? '') || '—', notes.join(' · ') || '—'
+          ]};
+        }));
+        const title = largest ? largest.label : scans ? scans + ' 个节点使用全表扫描' : rows.length + ' 个计划节点';
+        const detail = [largest?.node || firstScan, rows[0]?.engine, (largest || scans) ? rows.length + ' 个节点' : ''].filter(Boolean).join(' · ');
+        complete(rows.map(row => '  '.repeat(row.depth || 0) + (row.warning ? '⚠ ' : '') + row.name + ' · ' + row.detail).join('\n'), title, detail, !!largest);
+      }
+      actions.append(button('分析计划',analyzePlan,'primary'),h('span',{class:'aux-spacer'}),copyButton);
+      body.append(pane('粘贴 PostgreSQL / MySQL 的 EXPLAIN 输出',left),actions,report.node);
+    }
+    if(id==='sqlRestore'){left.placeholder='SELECT * FROM users WHERE id = ?';right.placeholder='Parameters: 42(Integer) 或 [42]、{"id":42}';const output=editor('还原后的 SQL','',true,'sql'),report=table(['已替换','未匹配占位符','未使用参数']);actions.append(button('还原 SQL',async()=>{output.value='';if(!left.value.trim()){report.node.hidden=true;setHeadline(titles[id]);setStatus(status,'请输入带占位符的 SQL');return;}const result=await run('restoreSQL',left.value,right.value);if(!result)return;output.value=result.sql;report.set([[result.replaced,result.missing.join('、')||'无',result.unused.join('、')||'无']]);const pending = result.unresolved > 0 || result.unused.length > 0;
+        const title = result.unresolved ? result.unresolved + ' 个占位符缺少参数' : result.unused.length ? result.unused.length + ' 个参数未使用' :
+          result.replaced ? '已还原 ' + result.replaced + ' 个占位符' : 'SQL 中没有占位符';
+        const details = pending ? ['已还原 ' + result.replaced + ' 处',result.unresolved && result.unused.length ? result.unused.length + ' 个参数未使用' : ''].filter(Boolean).join(' · ') : '';
+        report.node.hidden = !pending;
+        complete(result.sql,title,details,pending);},'primary'),h('span',{class:'aux-spacer'}),copyButton);body.append(h('div',{class:'aux-split inputs'},pane('带占位符的 SQL',left),pane('参数日志',right)),actions,pane('还原结果',output),report.node);report.node.classList.add('summary');report.node.hidden=true;body.querySelector(':scope > .aux-pane .aux-pane-bar')?.remove();}
+    if(id==='logTimeline'){left.placeholder='每行一条日志，最多解析 10000 行';const group=select([['','先识别字段']]),time=select([['','原始顺序']]),manual=input('字段名=正则表达式（使用第 1 个捕获组）',old.rule||''),manualHolder=h('div',{class:'aux-inline aux-log-rule',hidden:'true'},manual),report=table([['时间 / 聚合项',320],['级别',96],['消息',532]]);async function renderGroups(){if(!logs.length||!group.value)return;const groups=await run('logGroups',logs,group.value,time.value);if(!groups)return;const rows=[];let errors=0, warnings=0;const affected=new Set();for(const g of groups){rows.push({tone:'group',cells:[g.name,`${g.entries.length} 条`,'']});for(const row of g.entries) {
+          const level = row.fields.level || row.fields.severity || row.fields.loglevel || '—';
+          const normalized = String(level).trim().toUpperCase();
+          const error = ['ERROR','ERR','FATAL','CRITICAL','CRIT','PANIC','EMERG','EMERGENCY','ALERT','错误','严重'].includes(normalized);
+          const warn = ['WARN','WARNING','警告'].includes(normalized);
+          if (error) errors++;
+          if (warn) warnings++;
+          if (error || warn) affected.add(g.name);
+          rows.push({tone:error ? 'log-error' : warn ? 'log-warning' : '', cells:[row.fields[time.value] || '#'+(row.position+1),level,row.fields.message || row.fields.msg || row.raw]});
+        }}report.set(rows);complete(groups.map(g=>`▸ ${g.name} · ${g.entries.length} 条\n`+g.entries.map(row=>'  '+(row.fields[time.value]||'#'+(row.position+1))+'  '+row.raw).join('\n')).join('\n\n'),[errors ? errors+' 条错误' : '', warnings ? warnings+' 条警告' : ''].filter(Boolean).join(' · ') || '已整理事件时间线',
+        [logs.length+' 条日志',groups.length+' 个分组',affected.size===1 ? group.value+' = '+[...affected][0] : affected.size>1 ? '涉及 '+affected.size+' 个分组' : ''].filter(Boolean).join(' · '), !!affected.size);}
+      const recognize=button('识别字段',async()=>{report.set([]);const parsed=await run('parseLogs',left.value,manual.value);if(!parsed)return;logs=parsed;const fields=await run('logFields',logs);if(!fields)return;group.replaceChildren(...fields.map(v=>h('option',{value:v.key},`${v.key}（${v.count} 条）`)));time.replaceChildren(h('option',{value:''},'原始顺序'),...fields.map(v=>h('option',{value:v.key},v.key)));const request=fields.find(v=>['requestid','traceid','trace.id'].includes(v.key.toLowerCase()));if(request)group.value=request.key;const detected=fields.find(v=>/time|时间|timestamp|date/i.test(v.key));if(detected)time.value=detected.key;if(!fields.length){setStatus(status,'没有识别到字段，可展开手动规则补充提取');return;}await renderGroups();if(left.value.split('\n').length>10000 && logs.length)setStatus(status,status.textContent+' · 仅前 10000 行');},'primary');group.onchange=time.onchange=renderGroups;
       actions.append(recognize,label('聚合字段',group),label('时间字段',time),button('手动规则',()=>{manualHolder.hidden=!manualHolder.hidden;if(!manualHolder.hidden)manual.focus();},'quiet'),h('span',{class:'aux-spacer'}),copyButton);body.append(pane('粘贴 JSON Lines 或 key=value 日志',left),actions,manualHolder,report.node);body.dataset.rule=manual.value;manual.oninput=()=>{body.dataset.rule=manual.value;invalidate();};
     }
-    const resultTitles={configDiff:'差异结果',explain:'计划节点',logTimeline:'日志时间线',sqlRestore:'还原结果'};
     const result=body.querySelector(id==='sqlRestore'?':scope > .aux-pane':':scope > .aux-report');
-    const reportHeading=h('div',{class:'aux-section-bar aux-report-heading'},h('strong',{},resultTitles[id]),status,copyButton);
+    const reportHeading=h('div',{class:'aux-section-bar aux-report-heading'},h('div',{class:'aux-report-reading','aria-live':'polite'},headline,status),copyButton);
     body.insertBefore(reportHeading,result);
     let activeEditor=left;for(const field of [left,right])field.addEventListener('focusin',()=>activeEditor=field);const keydown=event=>{if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();actions.querySelector('.primary')?.click();}};root.addEventListener('keydown',keydown);return {focus:()=>left.focus(),paste(text){activeEditor.setRangeText(text,activeEditor.selectionStart,activeEditor.selectionEnd,'end');if(activeEditor instanceof HTMLTextAreaElement)invalidate();activeEditor.focus();},dispose(){root.removeEventListener('keydown',keydown);dead=true;sequence++;backendInputs.set(id,{left:left.value,right:right.value,rule:body.dataset.rule??old.rule??''});for(const node of root.querySelectorAll('.aux-editor-frame'))node.disposeEditor?.();}};
   };}

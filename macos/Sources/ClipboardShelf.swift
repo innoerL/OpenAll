@@ -251,6 +251,23 @@ final class ShelfTab: NSButton {
     }
 }
 
+private enum ClipTypePalette {
+    // 与 Windows 类型栏使用同一组 sRGB 色值，颜色描述内容，文字保留具体格式。
+    private static let backgrounds: [String: (light: NSColor, dark: NSColor)] = [
+        "文本": ("#DCE1E7", "#485361"), "JSON": ("#C1D9FC", "#345E99"),
+        "Markdown": ("#DECCE9", "#655080"), "HTML": ("#F4C6AC", "#83492C"),
+        "富文本": ("#F0BED1", "#8A4660"), "链接": ("#B4DDD8", "#226666"),
+        "图片": ("#EBD38D", "#7C621C"), "文件": ("#C6D7AB", "#4C692F")
+    ].mapValues { (OpenAllTheme.color($0.0)!, OpenAllTheme.color($0.1)!) }
+    static let lightInk = OpenAllTheme.color("#20232B")!
+    static let darkInk = OpenAllTheme.color("#FAF9F6")!
+
+    static func background(for format: String, light: Bool) -> NSColor {
+        let colors = backgrounds[format] ?? backgrounds["文本"]!
+        return light ? colors.light : colors.dark
+    }
+}
+
 final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
     func refreshWindowTheme() { needsDisplay = true }
     private static let imageCache: NSCache<NSString, NSImage> = {
@@ -273,7 +290,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
     var imageURL: URL?
     private var previewImage: NSImage?
     private var loadingImage = false
-    var headerColor: NSColor = .systemBlue
+    var boardColor: NSColor?
     var sourceIcon: NSImage?
     var selected = false { didSet { needsDisplay = true } }
     var onChoose: ((ClipboardRecord, Bool, NSEvent.ModifierFlags) -> Void)?
@@ -384,7 +401,17 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         // 保留彩色类型栏，类型、时间与来源图标分别占用明确的区域。
         let head = NSBezierPath(roundedRect: NSRect(x: 5, y: bounds.maxY - 31, width: bounds.width - 4, height: 30),
                                 xRadius: 9, yRadius: 9)
-        headerColor.withAlphaComponent(0.24).setFill()
+        let light = OpenAllTheme.isLight
+        let format = item.kind == "files" ? "文件" : formatLabel
+        let barInk: NSColor
+        if let boardColor {
+            let base = OpenAllTheme.raised.blended(withFraction: 0.24, of: boardColor) ?? OpenAllTheme.raised
+            barInk = OpenAllTheme.readableText(OpenAllTheme.ink, on: [base])
+            boardColor.withAlphaComponent(0.24).setFill()
+        } else {
+            barInk = light ? ClipTypePalette.lightInk : ClipTypePalette.darkInk
+            ClipTypePalette.background(for: format, light: light).setFill()
+        }
         head.fill()
         let heading = (item.pinned ? "★ " : "") + formatLabel
         let age = max(0, Date().timeIntervalSince(item.date))
@@ -399,12 +426,14 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         typeStyle.lineBreakMode = .byTruncatingTail
         (heading as NSString).draw(in: NSRect(x: 15, y: bounds.maxY - 22, width: max(0, ageRect.minX - 25), height: 18),
                                   withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-                                                   .foregroundColor: OpenAllTheme.ink,
+                                                   .foregroundColor: barInk,
                                                    .paragraphStyle: typeStyle])
         (ageText as NSString).draw(in: ageRect,
                                   withAttributes: [.font: ageFont,
-                                                   .foregroundColor: OpenAllTheme.ink.withAlphaComponent(0.8)])
-        sourceIcon?.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1,
+                                                   .foregroundColor: barInk.withAlphaComponent(boardColor == nil ? 0.90 : 1)])
+        let icon = sourceIcon?.isTemplate == true
+            ? sourceIcon?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [barInk])) ?? sourceIcon : sourceIcon
+        icon?.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1,
                          respectFlipped: true, hints: nil)
         let preview = NSRect(x: 15, y: 15, width: bounds.width - 30, height: bounds.height - 55)
         var nextMoreRect: NSRect?
@@ -1274,8 +1303,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             card.toolTip = "来源：\(item.sourceName)\n\(item.kind == "files" ? item.filePaths.joined(separator: "\n") : item.text.prefix(500).description)"
             card.imageURL = store.imageURL(for: item)
             let board = item.pinboard ?? (item.pinned ? store.preferences.pinboards.first : nil)
-            card.headerColor = board.map { BoardPalette.color(store.preferences.pinboardColors[$0] ?? "blue") }
-                ?? BoardPalette.color(item.kind == "image" ? "orange" : item.kind == "link" ? "teal" : item.kind == "files" ? "purple" : "blue")
+            card.boardColor = board.map { BoardPalette.color(store.preferences.pinboardColors[$0] ?? "blue") }
             card.sourceIcon = sourceIcon(for: item)
             card.selected = selectedIDs.contains(item.id)
             card.onChoose = { [weak self] selected, double, modifiers in

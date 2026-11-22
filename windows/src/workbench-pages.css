@@ -88,3 +88,25 @@
 .aux-converter .aux-conversion-row:hover,
 .aux-converter .aux-cron-row:hover,
 .aux-converter .aux-report tbody tr:hover { background: var(--raised); }
+
+.aux-backend .aux-report-heading {
+  min-height: 44px;
+  gap: 14px;
+  justify-content: space-between;
+}
+.aux-report-reading { display: grid; min-width: 0; gap: 2px; }
+.aux-report-reading .aux-report-title {
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.aux-report-reading .aux-status { margin: 0; line-height: 1.4; overflow-wrap: anywhere; }
+.aux-report-reading .aux-status:empty { display: none; }
+.aux-backend .has-finding .aux-report-title,
+.aux-backend .aux-report tr.estimate-gap td:last-child,
+.aux-backend .aux-report tr.log-warning td:nth-child(2) { color: var(--accent-text); }
+.aux-backend .aux-report tr.log-error td:nth-child(2) { color: var(--ink); font-weight: 700; }
+.aux-backend .aux-report[hidden] { display: none; }

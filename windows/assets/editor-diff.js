@@ -6,6 +6,8 @@
   const summary = document.getElementById('summary');
   const previous = document.getElementById('previous');
   const next = document.getElementById('next');
+  const differenceNavigation = document.querySelector('.navigation');
+  const matchNavigation = document.querySelector('.match-nav');
   const navigationCount = document.getElementById('navigation-count');
   const syncScroll = document.getElementById('sync-scroll');
   const ignoreSpace = document.getElementById('ignore-space');
@@ -222,6 +224,7 @@
     summary.replaceChildren(...parts);
     summary.title = description;
     summary.setAttribute('aria-label', description);
+    differenceNavigation.hidden = !hunks.length;
     navigationCount.textContent = `${current >= 0 ? current + 1 : hunks.length ? '—' : '0'} / ${hunks.length}`;
     const navigationDescription = current >= 0 ? `第 ${current + 1} 个差异组，共 ${hunks.length} 组` :
       hunks.length ? `尚未选择差异组，共 ${hunks.length} 组` : '没有差异组';
@@ -492,8 +495,9 @@
 
   function updateSearchCount() {
     const current = findResults[findIndex];
+    matchNavigation.hidden = !findQuery.value;
     findCount.textContent = !findQuery.value ? '' : !current ? '无匹配结果' :
-      (findIndex + 1) + ' / ' + findResults.length + (findLimited ? '+' : '') + ' · ' + (current.side === 0 ? '左侧' : '右侧');
+      '匹配 ' + (findIndex + 1) + ' / ' + findResults.length + (findLimited ? '+' : '') + ' · ' + (current.side === 0 ? '左侧' : '右侧');
     findCount.title = findLimited ? '每侧显示前 10,000 处匹配，请增加搜索词以缩小范围' : findCount.textContent;
     findPrevious.disabled = findNext.disabled = !findResults.length;
   }
@@ -639,17 +643,21 @@
         if (!limited || totals.changed !== 80000) throw new Error('大范围变化降级错误');
         const descending = text.split('\n').reverse().join('\n');
         setTexts(descending, text);
-        let sortTicks = 0; const heartbeat = setInterval(() => sortTicks++, 10), sortStart = performance.now();
+        // 离屏 WebKit 会合并定时器；用真正的消息事件验证排序尚未结束时主线程能处理事件。
+        const heartbeat = new MessageChannel(), sortStart = performance.now();
+        result.sortTicks = 0;
+        heartbeat.port1.onmessage = () => { if (sortJobs[0]?.worker) result.sortTicks++; };
         try {
           const sorting = naturalSort(0);
           if (!sortJobs[0]?.worker) throw new Error('大文本排序没有进入后台');
+          heartbeat.port2.postMessage(null);
           if (!await sorting) throw new Error('大文本自然排序未完成');
           result.sortMilliseconds = performance.now() - sortStart; result.sortWorkerMilliseconds = lastSortMilliseconds;
           await wait();
           if (inputs[0].value !== text || inputs[1].value !== text || hunks.length) throw new Error('后台排序结果或重算错误');
-          if (!sortTicks || inputs[0].view.contentDOM.querySelectorAll('.cm-line').length > 250) throw new Error('排序期间没有保持响应与虚拟化');
-          result.sortTicks = sortTicks;
-        } finally { clearInterval(heartbeat); }
+          if (!result.sortTicks) throw new Error('后台排序期间主线程未响应消息');
+          if (inputs[0].view.contentDOM.querySelectorAll('.cm-line').length > 250) throw new Error('排序后未保持虚拟化');
+        } finally { heartbeat.port1.close(); heartbeat.port2.close(); }
         if (!inputs[0].undo() || inputs[0].value !== descending || !inputs[0].redo() || inputs[0].value !== text) throw new Error('大文本自然排序撤销重做失败');
         setTexts(descending, text);
         const outdatedSort = naturalSort(0);
@@ -861,6 +869,10 @@
         findQuery.value = 'openall'; refreshSearch(true); await settle(); paintSearch();
         require(!findBar.hidden && document.activeElement === findQuery && findResults.length === 2 &&
           inputs.every(input => input.view.contentDOM.querySelector('.cm-contentMatch')), 'Ctrl+F 打开内容搜索并高亮左右正文');
+        require(matchNavigation.contains(findNext) && matchNavigation.contains(findCount) &&
+          matchNavigation.closest('.query-field').contains(findQuery) && differenceNavigation.contains(next) &&
+          !differenceNavigation.contains(findNext) && findCount.textContent.startsWith('匹配 1 / 2'),
+          '差异与搜索匹配的计数和跳转按钮分别归组');
         const originals = inputs.map(input => input.value);
         findQuery.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         require(findResults[findIndex].side === 1 && document.activeElement === findQuery &&

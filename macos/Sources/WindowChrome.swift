@@ -399,7 +399,7 @@ enum OpenAllTheme {
     }
 
     // 同一强调色会叠在面板、编辑区或按钮上，保留能在这些背景上读清的最接近原色的文字。
-    private static func readableText(_ preferred: NSColor, on backgrounds: [NSColor]) -> NSColor {
+    static func readableText(_ preferred: NSColor, on backgrounds: [NSColor]) -> NSColor {
         let levels = backgrounds.map(relativeLuminance)
         func score(_ color: NSColor) -> CGFloat {
             let value = relativeLuminance(color)

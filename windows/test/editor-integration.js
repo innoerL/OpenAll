@@ -69,6 +69,29 @@ app.whenReady().then(async () => {
     await delay(80);
     check(await execute(json, () => getComputedStyle(document.querySelector('.editor-json-key')).color === 'rgb(31, 87, 117)'), 'JSON 浅色主题语法配色响应设置广播');
     check(await execute(comparison, () => { const root = OpenAllApp.controller.frame.contentDocument.documentElement, parent = getComputedStyle(document.documentElement); return getComputedStyle(root).colorScheme === 'light' && root.style.getPropertyValue('--removed-ink') === '#9c3345' && root.style.getPropertyValue('--secondary') === parent.getPropertyValue('--secondary').trim() && root.style.getPropertyValue('--surface') === parent.getPropertyValue('--editor').trim(); }), '对比 iframe 浅色主题、编辑表面与辅助文字响应设置广播');
+    await execute(comparison, async () => {
+      const tool = OpenAllApp.controller;
+      tool.setTexts('版本 1.2\n文本对比\n旧值\n结束', '版本 1.3\n文本对比\n新值\n结束');
+      await tool.waitIdle();
+      tool.search('文本对比');
+    });
+    const normalSize = comparison.getContentSize();
+    comparison.setContentSize(480, normalSize[1]);
+    await until(() => execute(comparison, () => OpenAllApp.controller.frame.contentWindow.innerWidth <= 480));
+    check(await execute(comparison, () => {
+      const doc = OpenAllApp.controller.frame.contentDocument;
+      const rect = selector => doc.querySelector(selector).getBoundingClientRect();
+      const field = rect('.query-field'), query = rect('#find-query'), matches = rect('.match-nav');
+      return doc.querySelector('#navigation-count').textContent === '1 / 2' &&
+        doc.querySelector('#find-count').textContent === '匹配 1 / 2 · 左侧' &&
+        rect('.navigation').right <= rect('#summary').left && query.width >= 66 &&
+        query.right <= matches.left && matches.right <= field.right &&
+        doc.documentElement.scrollWidth <= doc.defaultView.innerWidth;
+    }), '480 像素宽时两组导航各自紧邻计数，搜索、范围与箭头均可见');
+    await delay(100);
+    fs.writeFileSync(path.join(output, 'comparison-search-narrow.png'), (await comparison.webContents.capturePage()).toPNG());
+    comparison.setContentSize(...normalSize);
+    await delay(100);
     fs.writeFileSync(path.join(output, 'json-light.png'), (await json.webContents.capturePage()).toPNG());
     fs.writeFileSync(path.join(output, 'comparison-light.png'), (await comparison.webContents.capturePage()).toPNG());
     report.passed = true;

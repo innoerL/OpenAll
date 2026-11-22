@@ -32,10 +32,10 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         return scroll.contentView.bounds.origin.y < 1 && selection == last.tag
     }
 
-    private func label(_ title: String, x: CGFloat, y: CGFloat, width: CGFloat, size: CGFloat = 11) {
+    private func label(_ title: String, x: CGFloat, y: CGFloat, width: CGFloat, size: CGFloat = 13) {
         let text = NSTextField(labelWithString: title)
-        text.font = .systemFont(ofSize: size, weight: size >= 18 ? .medium : .regular)
-        text.textColor = size >= 18 ? OpenAllTheme.ink : OpenAllTheme.muted
+        text.font = .systemFont(ofSize: size, weight: size == 12 ? .regular : .medium)
+        text.textColor = size == 12 ? OpenAllTheme.muted : OpenAllTheme.ink
         text.frame = NSRect(x: x, y: y, width: width, height: 20)
         addSubview(text)
     }
@@ -73,7 +73,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         addSubview(left)
         addSubview(right)
         label("网站", x: 36, y: 393, width: 150)
-        countLabel.font = .systemFont(ofSize: 10, weight: .medium)
+        countLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         countLabel.textColor = OpenAllTheme.muted
         countLabel.frame = NSRect(x: 135, y: 393, width: 80, height: 20)
         countLabel.alignment = .right

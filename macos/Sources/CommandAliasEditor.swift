@@ -102,7 +102,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         commandTitle.font = .systemFont(ofSize: 16, weight: .medium)
         detail.addSubview(commandTitle)
         let builtInLabel = label("已有匹配词", x: 20, y: 280, width: 340, size: 11)
-        builtInLabel.textColor = OpenAllTheme.muted
+        builtInLabel.textColor = OpenAllTheme.ink
         detail.addSubview(builtInLabel)
         builtInNames = NSTextField(wrappingLabelWithString: "")
         builtInNames.font = .systemFont(ofSize: 12)
@@ -110,7 +110,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         builtInNames.frame = NSRect(x: 20, y: 239, width: 348, height: 40)
         detail.addSubview(builtInNames)
         let customLabel = label("自定义别名", x: 20, y: 219, width: 340, size: 11)
-        customLabel.textColor = OpenAllTheme.muted
+        customLabel.textColor = OpenAllTheme.ink
         detail.addSubview(customLabel)
         aliasField = NSTextField(frame: NSRect(x: 20, y: 184, width: 348, height: 32))
         aliasField.placeholderString = "输入此功能的其他叫法"

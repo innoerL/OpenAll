@@ -666,17 +666,17 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         buildSearch(root: root)
         w.handleSearchKey = { [weak self] in self?.handleSearchKey($0) ?? false }
         status = NSTextField(labelWithString: "就绪")
-        status.font = .systemFont(ofSize: 12)
+        status.font = .systemFont(ofSize: 13)
         status.textColor = OpenAllTheme.muted
         status.lineBreakMode = .byTruncatingTail
-        status.frame = NSRect(x: 20, y: 7, width: 730, height: 18)
+        status.frame = NSRect(x: 20, y: 7, width: 700, height: 18)
         status.autoresizingMask = [.width]
         root.addSubview(status)
         documentSummary = NSTextField(labelWithString: "0 行")
-        documentSummary.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        documentSummary.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         documentSummary.textColor = OpenAllTheme.muted
         documentSummary.alignment = .right
-        documentSummary.frame = NSRect(x: 772, y: 7, width: 168, height: 18)
+        documentSummary.frame = NSRect(x: 730, y: 7, width: 210, height: 18)
         documentSummary.autoresizingMask = [.minXMargin]
         root.addSubview(documentSummary)
         WindowChrome.installControls(on: w, editorStyle: true)
@@ -780,7 +780,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         searchField = NSSearchField(frame: NSRect(x: 3, y: 3, width: 231, height: 26))
         searchField.autoresizingMask = [.width]
         searchField.placeholderString = "搜索 JSON 内容"
-        searchField.font = .systemFont(ofSize: 13)
+        searchField.font = .systemFont(ofSize: 14)
         searchField.focusRingType = .none
         searchField.isBezeled = false
         (searchField.cell as? NSSearchFieldCell)?.searchButtonCell = nil
@@ -796,14 +796,14 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         searchBorder.layer?.borderWidth = 0.5
         searchBorder.layer?.borderColor = OpenAllTheme.rule.cgColor
         searchBorder.layer?.backgroundColor = OpenAllTheme.editorCanvas.cgColor
-        searchField.frame = searchBorder.bounds.insetBy(dx: 10, dy: 4)
+        searchField.frame = searchBorder.bounds.insetBy(dx: 8, dy: 2)
         searchBorder.addSubview(searchField)
         searchBar.addSubview(searchBorder)
         searchCount = NSTextField(labelWithString: "")
         searchCount.frame = NSRect(x: 238, y: 7, width: 110, height: 18)
         searchCount.autoresizingMask = [.minXMargin]
-        searchCount.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        searchCount.textColor = OpenAllTheme.muted
+        searchCount.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        searchCount.textColor = OpenAllTheme.ink
         searchCount.alignment = .center
         searchBar.addSubview(searchCount)
         searchCase = WindowChrome.checkbox("Aa", target: self, action: #selector(searchOptionsChanged))

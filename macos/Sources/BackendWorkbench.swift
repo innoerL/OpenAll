@@ -105,6 +105,7 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
         }
         text.textColor = item.tone == "group" ? OpenAllTheme.muted : OpenAllTheme.ink
         if (item.tone == "warning" && index == 1) || (item.tone == "risk" && index == 5) { text.textColor = .systemOrange }
+        if item.tone == "error", index == 1 { text.font = .systemFont(ofSize: 13, weight: .bold) }
         if item.tone == "added", index > 0 { text.textColor = .systemGreen }
         if item.tone == "removed", index > 0 { text.textColor = .systemRed }
         if item.tone == "changed", index == 2 { text.textColor = OpenAllTheme.muted }
@@ -137,6 +138,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
     private var reportView: AnalysisReportView?
     private var manualRuleExpanded = false
     private var reportSummary: NSTextField?
+    private var reportDetail: NSTextField?
     private weak var copyResultButton: NSButton?
     private var result: NSTextView?
     private var status: NSTextField!
@@ -434,11 +436,21 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                 WindowChrome.styleOutputAction(copyResultButton)
             }
         }
+        if let heading = reportSummary, let output = result?.enclosingScrollView {
+            heading.frame.size.width = 810
+            heading.font = .systemFont(ofSize: 18, weight: .semibold)
+            heading.lineBreakMode = .byTruncatingTail
+            let detail = label("", x: 4, y: heading.frame.minY - 19, w: 810, h: 19, color: OpenAllTheme.muted)
+            detail.lineBreakMode = .byTruncatingTail
+            body.addSubview(detail)
+            reportDetail = detail
+            output.frame.size.height = max(72, detail.frame.minY - output.frame.minY - 8)
+        }
         if mode != .sql, let output = result?.enclosingScrollView {
             let columns: [(String, CGFloat)]
             switch mode {
             case .config: columns = [("变更", 78), ("字段路径", 330), ("原值", 270), ("新值", 270)]
-            case .explain: columns = [("计划节点", 170), ("对象 / 索引", 170), ("估算行", 90), ("实际行", 90), ("耗时 ms", 90), ("风险信号", 338)]
+            case .explain: columns = [("计划节点", 170), ("对象 / 索引", 170), ("估算行", 90), ("实际行", 90), ("耗时 ms", 90), ("观察项", 338)]
             case .logs: columns = [("时间 / 聚合项", 320), ("级别", 96), ("消息", 532)]
             case .sql: columns = []
             }
@@ -465,13 +477,28 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         if let field = notification.object as? NSTextField, field === manualRule { markResultsStale() }
     }
 
+    private func setHeadline(_ title: String, detail: String = "", attention: Bool = false) {
+        reportSummary?.stringValue = title
+        reportSummary?.textColor = attention ? OpenAllTheme.accentText : OpenAllTheme.ink
+        reportDetail?.stringValue = detail
+        reportDetail?.toolTip = detail
+    }
+
+    private var defaultHeadline: String {
+        switch mode {
+        case .config: return "差异结果"
+        case .explain: return "计划节点"
+        case .logs: return "事件时间线"
+        case .sql: return "还原结果"
+        }
+    }
+
     private func markResultsStale() {
         guard copyResultButton?.isEnabled == true || !(logs.isEmpty && logFields.isEmpty) else { return }
         copyResultButton?.isEnabled = false
         result?.string = ""
         reportView?.display([], emptyText: "输入已更改，请重新运行分析")
-        reportSummary?.textColor = OpenAllTheme.muted
-        reportSummary?.stringValue = mode == .config ? "差异结果" : mode == .explain ? "计划节点" : mode == .logs ? "事件时间线" : "还原结果"
+        setHeadline(defaultHeadline)
         status.stringValue = "输入已更改，请重新运行"
         if mode == .logs {
             logs.removeAll()
@@ -484,8 +511,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
     @objc private func analyze() {
         guard let input = left?.string, let result else { return }
         reportView?.display([])
-        reportSummary?.textColor = OpenAllTheme.ink
-        reportSummary?.stringValue = mode == .config ? "差异结果" : mode == .explain ? "计划节点" : mode == .logs ? "事件时间线" : "还原结果"
+        setHeadline(defaultHeadline)
         defer { copyResultButton?.isEnabled = !result.string.isEmpty }
         switch mode {
         case .config:
@@ -495,11 +521,17 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                 let diff = ConfigDiff.compare(a, b, revealSecrets: reveal?.state == .on)
                 result.string = diff.text
                 let keys = Set(a.keys).union(b.keys).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-                reportView?.display(keys.filter { a[$0] != b[$0] }.map { key in
+                let differences = keys.filter { a[$0] != b[$0] }
+                let added = differences.filter { a[$0] == nil }.count
+                let removed = differences.filter { b[$0] == nil }.count
+                reportView?.display(differences.map { key in
                     let masked = reveal?.state != .on && key.range(of: #"password|passwd|secret|token|api.?key|credential|authorization|private.?key"#, options: [.regularExpression, .caseInsensitive]) != nil
                     return AnalysisReportView.Row(values: [a[key] == nil ? "＋ 新增" : b[key] == nil ? "− 删除" : "~ 修改", key, a[key].map { (masked ? "••••" : $0.value) + " · " + $0.type } ?? "—", b[key].map { (masked ? "••••" : $0.value) + " · " + $0.type } ?? "—"], tone: a[key] == nil ? "added" : b[key] == nil ? "removed" : "changed")
                 }, emptyText: "两份配置相同")
-                reportSummary?.stringValue = "差异结果 · \(diff.changed) 项变更"
+                let breakdown = [("新增", added), ("修改", differences.count - added - removed), ("删除", removed)]
+                    .filter { $0.1 > 0 }.map { "\($0.0) \($0.1)" }.joined(separator: "　")
+                setHeadline(differences.isEmpty ? "两份配置相同" : breakdown,
+                            detail: differences.isEmpty ? "" : "\(differences.count) 项差异")
                 status.stringValue = "左侧 \(a.count) 项 · 右侧 \(b.count) 项"
             } catch let issue as BackendIssue {
                 result.string = ""; status.stringValue = issue.message
@@ -507,6 +539,8 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         case .explain:
             if let report = ExplainReader.parse(input) {
                 result.string = "\(report.engine) · 执行计划\n\n" + report.lines.joined(separator: "\n\n")
+                var largest: (ratio: Double, label: String, node: String)?
+                var scans = 0, firstScan = ""
                 reportView?.display(report.lines.map { line in
                     let parts = line.components(separatedBy: " · ")
                     func metric(_ prefix: String, suffix: String = " 行") -> String {
@@ -514,23 +548,34 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                         return part.replacingOccurrences(of: prefix, with: "").replacingOccurrences(of: suffix, with: "")
                     }
                     let estimated = metric("估算 ") == "—" ? metric("扫描 ") : metric("估算 ")
-                    let actual = metric("实际 ") == "—" ? metric("输出 ") : metric("实际 ")
+                    let actual = metric("实际 ")
                     let time = parts.first(where: { $0.hasSuffix(" ms") })?.replacingOccurrences(of: " ms", with: "") ?? "—"
                     var signals: [String] = line.contains("⚠") ? ["全表扫描"] : []
+                    var deviation = false
+                    let node = (parts.first ?? line).replacingOccurrences(of: "⚠ ", with: "").replacingOccurrences(of: "• ", with: "")
+                    let name = parts.dropFirst().first(where: { !$0.hasPrefix("估算 ") && !$0.hasPrefix("实际 ") && !$0.hasPrefix("索引 ") && !$0.hasSuffix(" ms") && !$0.hasPrefix("扫描 ") && !$0.hasPrefix("输出 ") && $0 != "ALL" }) ?? node
+                    if !signals.isEmpty {
+                        scans += 1
+                        if firstScan.isEmpty { firstScan = name }
+                    }
                     if let estimate = Double(estimated), let count = Double(actual), estimate > 0, count > 0 {
                         let ratio = max(estimate, count) / min(estimate, count)
-                        if ratio >= 10 { signals.append("估算偏\(estimate > count ? "高" : "低") \(String(format: "%.0f", ratio))×") }
+                        if ratio.isFinite && ratio >= 10 {
+                            let label = "估算偏\(estimate > count ? "高" : "低") \(String(format: "%.0f", ratio)) 倍"
+                            signals.append(label)
+                            deviation = true
+                            if ratio > (largest?.ratio ?? 0) { largest = (ratio, label, name) }
+                        }
                     }
                     let object = parts.dropFirst().filter { !$0.hasPrefix("估算 ") && !$0.hasPrefix("扫描 ") && !$0.hasPrefix("实际 ") && !$0.hasPrefix("输出 ") && !$0.hasSuffix(" ms") }.joined(separator: " · ")
-                    let node = (parts.first ?? line).replacingOccurrences(of: "⚠ ", with: "").replacingOccurrences(of: "• ", with: "")
                     return AnalysisReportView.Row(values: [node, object.isEmpty ? "—" : object, estimated, actual, time,
-                                                           signals.isEmpty ? "—" : signals.joined(separator: " · ")], tone: signals.isEmpty ? "normal" : "risk")
+                                                           signals.isEmpty ? "—" : signals.joined(separator: " · ")], tone: deviation ? "risk" : "normal")
                 })
-                let scanCount = report.lines.filter { $0.contains("⚠") }.count
-                reportSummary?.stringValue = scanCount == 0 ? "计划节点 · \(report.lines.count) 项" : "\(scanCount) 个全表扫描节点 · 请结合表规模评估"
-                reportSummary?.textColor = scanCount == 0 ? OpenAllTheme.muted : OpenAllTheme.accentText
-                status.stringValue = "\(report.engine) · \(report.lines.count) 个节点" +
-                    (report.warning.map { " · \($0)" } ?? "")
+                let title = largest?.label ?? (scans > 0 ? "\(scans) 个节点使用全表扫描" : "\(report.lines.count) 个计划节点")
+                let detail = [largest?.node ?? firstScan, report.engine, largest != nil || scans > 0 ? "\(report.lines.count) 个节点" : ""]
+                    .filter { !$0.isEmpty }.joined(separator: " · ")
+                setHeadline(title, detail: detail, attention: largest != nil)
+                status.stringValue = report.warning ?? ""
             } else {
                 result.string = ""; status.stringValue = "无法识别执行计划，请粘贴完整的 EXPLAIN 输出"
             }
@@ -561,22 +606,40 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         case .sql:
             let restored = SQLParameterRestorer.restore(sql: input, parameterText: right?.string ?? "")
             result.string = restored.sql
-            status.stringValue = "已替换 \(restored.replaced) 个参数" +
-                (restored.unresolved > 0 ? " · \(restored.unresolved) 个占位符未匹配" : "") +
-                " · 仅生成调试文本"
+            guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                result.string = ""
+                setHeadline("还原结果", detail: "请输入带占位符的 SQL")
+                return
+            }
+            let attention = restored.unresolved > 0 || restored.unused > 0
+            let title: String
+            if restored.unresolved > 0 { title = "\(restored.unresolved) 个占位符缺少参数" }
+            else if restored.unused > 0 { title = "\(restored.unused) 个参数未使用" }
+            else if restored.replaced > 0 { title = "已还原 \(restored.replaced) 个占位符" }
+            else { title = "SQL 中没有占位符" }
+            var detail = attention ? "已还原 \(restored.replaced) 处" : ""
+            if restored.unresolved > 0, restored.unused > 0 { detail += " · \(restored.unused) 个参数未使用" }
+            setHeadline(title, detail: detail, attention: attention)
+            status.stringValue = "仅生成调试文本"
         }
     }
 
     @objc private func renderLogs() {
         guard mode == .logs, let result else { return }
         guard !logFields.isEmpty else {
-            result.string = logs.isEmpty ? "没有可解析的日志行" : "未识别出字段；请使用 JSON Lines 或 key=value 日志。"
+            let message = logs.isEmpty ? "没有可解析的日志行" : "未识别出字段，请使用 JSON Lines 或 key=value 日志"
+            result.string = ""
+            reportView?.display([], emptyText: message)
+            setHeadline(defaultHeadline)
+            copyResultButton?.isEnabled = false
             return
         }
         let group = logFields[max(0, groupField?.indexOfSelectedItem ?? 0)]
         let time = logFields[max(0, timeField?.indexOfSelectedItem ?? 0)]
         let groups = Dictionary(grouping: logs) { $0.fields[group] ?? "未分组" }
         var reportRows: [AnalysisReportView.Row] = []
+        var errors = 0, warnings = 0
+        var affected = Set<String>()
         result.string = groups.keys.sorted().map { key in
             let rows = groups[key]!.sorted {
                 let a = LogTimeline.timestamp($0.fields[time] ?? "")
@@ -587,7 +650,13 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
             reportRows.append(.init(values: ["\(group) · \(key)", "\(rows.count) 条", ""], tone: "group"))
             var previousDate: String?
             for entry in rows {
-                let level = entry.fields["level"] ?? entry.fields["severity"] ?? "—"
+                let level = entry.fields["level"] ?? entry.fields["severity"] ?? entry.fields["loglevel"] ?? "—"
+                let normalized = level.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                let error = ["ERROR","ERR","FATAL","CRITICAL","CRIT","PANIC","EMERG","EMERGENCY","ALERT","错误","严重"].contains(normalized)
+                let warning = ["WARN","WARNING","警告"].contains(normalized)
+                if error { errors += 1 }
+                if warning { warnings += 1 }
+                if error || warning { affected.insert(key) }
                 let rawTime = entry.fields[time] ?? "—"
                 var displayTime = rawTime
                 if rawTime.count >= 19, rawTime.contains("T") {
@@ -596,7 +665,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                     displayTime = previousDate == date ? "            " + clock : date + "  " + clock
                     previousDate = date
                 }
-                reportRows.append(.init(values: [displayTime, level, entry.fields["message"] ?? entry.fields["msg"] ?? entry.raw], tone: ["ERROR", "WARN", "FATAL"].contains(level.uppercased()) ? "warning" : "normal"))
+                reportRows.append(.init(values: [displayTime, level, entry.fields["message"] ?? entry.fields["msg"] ?? entry.raw], tone: error ? "error" : warning ? "warning" : "normal"))
             }
             return "\(group)  \(key)  ·  \(rows.count) 条\n" + rows.map { entry in
                 let timestamp = entry.fields[time] ?? "—"
@@ -606,7 +675,11 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
             }.joined(separator: "\n\n")
         }.joined(separator: "\n\n────────────────────────────────────────\n\n")
         reportView?.display(reportRows)
-        reportSummary?.stringValue = "事件时间线 · \(logs.count) 条日志 · \(groups.count) 个分组"
+        let alerts = [errors > 0 ? "\(errors) 条错误" : "", warnings > 0 ? "\(warnings) 条警告" : ""].filter { !$0.isEmpty }
+        var scope = "\(logs.count) 条日志 · \(groups.count) 个分组"
+        if affected.count == 1, let value = affected.first { scope += " · \(group) = \(value)" }
+        else if affected.count > 1 { scope += " · 涉及 \(affected.count) 个分组" }
+        setHeadline(alerts.isEmpty ? "已整理事件时间线" : alerts.joined(separator: " · "), detail: scope, attention: !alerts.isEmpty)
         copyResultButton?.isEnabled = !result.string.isEmpty
     }
 

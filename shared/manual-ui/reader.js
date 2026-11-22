@@ -42,6 +42,22 @@ window.mountOpenAllManual = function (host, article, actions) {
     const entries = rows.length ? rows : blocks.filter(block => block.matches('pre,p,ul,ol'));
     groups.push({heading, blocks, entries});
   }
+  const sectionPicker = document.createElement('select');
+  if (groups.length > 1) {
+    sectionPicker.className = 'manual-sections';
+    sectionPicker.setAttribute('aria-label', '跳转到手册章节');
+    sectionPicker.add(new Option('跳转章节', ''));
+    groups.forEach(({ heading }, index) => sectionPicker.add(new Option(heading.textContent, String(index))));
+    sectionPicker.addEventListener('change', () => {
+      if (sectionPicker.value === '') return;
+      const heading = groups[Number(sectionPicker.value)].heading;
+      heading.tabIndex = -1;
+      heading.focus({preventScroll:true});
+      heading.scrollIntoView({block:'start'});
+      sectionPicker.value = '';
+    });
+    toolbar.insertBefore(sectionPicker, toolbar.querySelector('button'));
+  }
   const intro = [...article.children].filter(element => !groups.some(group => group.heading === element || group.blocks.includes(element)));
   const empty = document.createElement('div');
   empty.className = 'manual-empty';
@@ -69,6 +85,10 @@ window.mountOpenAllManual = function (host, article, actions) {
       for (const block of blocks) block.hidden = !visible.length;
       for (const entry of entries) entry.hidden = !visible.includes(entry);
       matches += visible.length;
+    }
+    if (groups.length > 1) {
+      groups.forEach(({ heading }, i) => { sectionPicker.options[i + 1].disabled = heading.hidden; });
+      sectionPicker.disabled = matches === 0;
     }
     for (const block of intro) block.hidden = !!query;
     empty.hidden = !query || matches > 0;
