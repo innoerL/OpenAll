@@ -474,7 +474,8 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
                 textPreview = (String(prefix.prefix(300)), prefix.count > 300)
             }
             let display = textPreview!.text
-            let shortText = !textPreview!.truncated && display.utf16.count <= 46 && display.rangeOfCharacter(from: .newlines) == nil
+            let shortText = !textPreview!.truncated && display.utf16.count <= 46 && display.rangeOfCharacter(from: .newlines) == nil &&
+                (display.utf8.count <= 24 || display.utf8.contains { $0 == 32 || $0 > 127 })
             let font = format == "JSON" ? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
                 : NSFont.systemFont(ofSize: shortText ? 16 : 14, weight: shortText ? .medium : .regular)
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: OpenAllTheme.ink, .paragraphStyle: paragraph]
@@ -1207,10 +1208,26 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         guard newBoardField == nil else { return }
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 130, height: 28))
         field.placeholderString = "新标签名称"
+        field.setAccessibilityLabel("新标签名称")
+        field.widthAnchor.constraint(equalToConstant: 128).isActive = true
+        field.font = .systemFont(ofSize: 13)
+        field.focusRingType = .none
+        field.wantsLayer = true
+        field.layer?.borderWidth = 1
+        field.layer?.borderColor = OpenAllTheme.accent.cgColor
+        field.layer?.cornerRadius = 4
         field.delegate = self
         field.target = self
         field.action = #selector(commitNewBoard)
         tabs.addArrangedSubview(field)
+        let save = NSButton(title: "↵ 创建", target: self, action: #selector(commitNewBoard))
+        save.setAccessibilityLabel("创建标签")
+        WindowChrome.styleAction(save)
+        save.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        tabs.addArrangedSubview(save)
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        tabs.addArrangedSubview(spacer)
         newBoardField = field
         panel?.makeFirstResponder(field)
     }
@@ -1932,11 +1949,15 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         editor.borderType = .bezelBorder
         let textView = NSTextView(frame: editor.bounds)
         textView.string = item.text
-        textView.font = .systemFont(ofSize: 13)
+        textView.font = .systemFont(ofSize: 14)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.textColor = OpenAllTheme.ink
+        textView.backgroundColor = OpenAllTheme.editorCanvas
         textView.isRichText = false
         editor.documentView = textView
         root.addSubview(editor)
         let confirm = NSButton(title: "保存并粘贴", target: nil, action: nil)
+        WindowChrome.styleAction(confirm, primary: true)
         confirm.frame = NSRect(x: 286, y: 12, width: 120, height: 30)
         let action = ClipboardEditAction { [weak self, weak popover] in
             guard let self, self.store.editText(item.id, text: textView.string) else { return }

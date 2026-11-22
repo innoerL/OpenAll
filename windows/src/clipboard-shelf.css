@@ -33,6 +33,13 @@
 .clip-key-hints span { flex: none; line-height: 18px; white-space: nowrap; }
 .clipboard-tab { flex: none; white-space: nowrap; }
 .clip-card:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; }
+.clip-card.selected { background: color-mix(in srgb, var(--raised) 94.5%, var(--accent)); }
+.clip-content { padding: 13px 14px; line-height: 20px; }
+.clip-content.short-text { font-size: 16px; line-height: 22px; font-weight: 500; }
+.clip-card > .clip-preview-link {
+  position: static; flex: none; align-self: flex-end; margin: 0 12px 6px; line-height: 18px;
+  color: var(--accent-text);
+}
 @media (max-width: 620px) {
   .clipboard-header { padding-inline: 12px; align-items: flex-start; gap: 6px; }
   .clipboard-header .clipboard-search { width: clamp(92px, 25vw, 145px); }
@@ -74,3 +81,17 @@
 .clip-preview .preview-content:focus-visible { outline: none; border-color: var(--accent-text); }
 
 .clip-content mark { color: var(--ink); background: color-mix(in srgb, var(--accent) 26%, transparent); text-decoration: underline; text-underline-offset: 2px; }
+
+.clip-edit-dialog[open] {
+  display:grid;
+  grid-template-rows:auto minmax(48px,1fr) auto;
+  gap:10px;
+  width:min(560px,calc(100vw - 32px));
+  min-width:0;
+  height:min(320px,calc(100vh - 20px));
+  max-height:calc(100vh - 20px);
+  padding:14px 18px;
+  overflow:hidden;
+}
+.clip-edit-dialog h2, .clip-edit-dialog .dialog-actions { margin:0; }
+.clip-edit-dialog textarea { width:100%; height:100%; min-height:0; resize:none; overflow:auto; padding:8px 10px; }

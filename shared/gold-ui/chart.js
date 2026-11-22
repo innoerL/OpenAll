@@ -101,14 +101,18 @@ class Chart {
     const right = width - (this.dualAxis ? axisWidth(axes[1]) : 5);
     this.plotWidth = right - this.left;
 
-    for (const tick of [0, .5, 1]) {
+    // 百分比图保留共同基线，方便直接比较相对涨跌。
+    const isChange = this.series[0]?.unit === '%';
+    const hasZeroInside = isChange && shared[0] < 0 && shared[1] > 0;
+    const middle = hasZeroInside ? shared[1] / (shared[1] - shared[0]) : .5;
+    for (const tick of [0, middle, 1]) {
       const y = 6 + tick * (height - 12);
       for (const [index, axis] of axes.entries()) {
         if (!axis || (!this.dualAxis && index > 0)) continue;
         const [min, max] = axis;
         draw.textAlign = index ? 'right' : 'left';
         draw.fillStyle = this.dualAxis ? this.series[index].accent : theme.getPropertyValue('--secondary').trim();
-        draw.fillText(tickLabel(max - tick * (max - min)), index ? width - 1 : 0, y + 3);
+        draw.fillText(tickLabel(hasZeroInside && tick === middle ? 0 : max - tick * (max - min)), index ? width - 1 : 0, y + 3);
       }
       draw.strokeStyle = theme.getPropertyValue('--chart-grid').trim();
       draw.lineWidth = 1;

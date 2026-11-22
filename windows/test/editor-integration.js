@@ -87,7 +87,7 @@ app.whenReady().then(async () => {
     comparison.setContentSize(480, normalSize[1]);
     function measureNavigation() {
       const doc = OpenAllApp.controller.frame.contentDocument;
-      const selectors = ['.toolbar', '.navigation', '#navigation-count', '#previous', '#next', '#summary',
+      const selectors = ['.toolbar', '.comparison-status', '.navigation', '#navigation-count', '#previous', '#next', '#summary',
         '#open-search', '#options-toggle', '#find-filters', '#findbar', '.query-field', '#find-query',
         '.match-nav', '#find-count', '#find-previous', '#find-next', '#find-close', '.editors'];
       const boxes = Object.fromEntries(selectors.map(id => [id, doc.querySelector(id).getBoundingClientRect().toJSON()]));
@@ -105,8 +105,9 @@ app.whenReady().then(async () => {
       };
       const differenceRow = inOneRow('.toolbar', ['#navigation-count', '#previous', '#next', '#summary', '#options-toggle']);
       const searchRow = inOneRow('#findbar', ['#find-query', '#find-count', '#find-previous', '#find-next', '#find-close']);
-      const geometryCorrect = differenceRow && searchRow && boxes['.toolbar'].bottom <= boxes['#findbar'].top + 1 &&
-        boxes['#findbar'].bottom <= boxes['.editors'].top + 1 &&
+      const firstRowBottom = Math.max(boxes['.comparison-status'].bottom, boxes['#options-toggle'].bottom);
+      const geometryCorrect = differenceRow && searchRow && firstRowBottom <= boxes['#findbar'].top + 1 &&
+        boxes['#findbar'].bottom <= boxes['.toolbar'].bottom + 1 && boxes['.toolbar'].bottom <= boxes['.editors'].top + 1 &&
         boxes['.navigation'].right <= boxes['#summary'].left + 1 &&
         boxes['#find-query'].width >= 66 && boxes['#find-query'].right <= boxes['.match-nav'].left + 1 &&
         boxes['.match-nav'].right <= boxes['.query-field'].right + 1 &&

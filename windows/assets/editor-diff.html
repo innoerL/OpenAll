@@ -10,7 +10,7 @@
     :root { color-scheme: dark; --canvas:#1b1c1d; --surface:#202425; --raised:#30332f; --ink:#efeee6; --muted:#a2a69e; --secondary:#b8b7b2; --rule:rgba(255,255,255,.065); --accent:#cfb58d; --removed:rgba(197,92,105,.22); --added:rgba(65,164,112,.22); --changed-left:rgba(197,92,105,.12); --changed-right:rgba(65,164,112,.12); --removed-token:rgba(197,92,105,.50); --added-token:rgba(65,164,112,.50); --removed-ink:#d99b9e; --added-ink:#8dbea1; font:13px "Microsoft YaHei UI",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
     * { box-sizing:border-box; }
     body { margin:0; height:100vh; display:flex; flex-direction:column; background:var(--canvas); color:var(--ink); overflow:hidden; }
-    .toolbar { height:44px; flex:none; display:flex; align-items:center; gap:12px; padding:0 20px; }
+    .toolbar { --toolbar-height:44px; height:var(--toolbar-height); flex:none; display:flex; align-items:center; gap:12px; padding:0 20px; }
     .comparison-status { display:flex; align-items:center; gap:12px; flex:1; min-width:0; }
     #summary { display:flex; align-items:baseline; gap:12px; flex:0 1 auto; min-width:0; color:var(--ink); white-space:nowrap; overflow:hidden; }
     .summary-primary { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:13px; font-weight:500; }
@@ -75,7 +75,7 @@
     .heading button:is(:hover,:focus-visible) { background:var(--raised); color:var(--ink); }
     #open-search { display:inline-flex; align-items:center; gap:7px; color:var(--secondary); white-space:nowrap; }
     #open-search kbd { padding:0 4px; border:1px solid color-mix(in srgb,currentColor 24%,transparent); border-radius:3px; font-family:inherit; font-size:11px; line-height:16px; font-variant-numeric:tabular-nums; }
-    .findbar { flex:none; display:flex; align-items:center; gap:10px; margin:0 20px; padding:0 0 7px; }
+    .findbar { display:flex; align-items:center; flex:1; min-width:0; max-width:520px; margin-left:auto; gap:4px; }
     .findbar[hidden] { display:none; }
     .query-field {
       flex:1; min-width:0; display:flex; align-items:center; height:32px; gap:7px; padding:0 2px 0 9px;
@@ -153,12 +153,11 @@
       #hint { max-width:40%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
     }
     @media (max-width:730px) {
-      .toolbar { height:38px; padding-inline:12px; }
+      .toolbar { --toolbar-height:38px; padding-inline:12px; }
       .options { gap:6px; padding-left:0; border:0; }
-      .editors,.findbar { margin-inline:12px; }
+      .editors { margin-inline:12px; }
       footer { padding-inline:12px; }
       .heading { padding-inline:8px; }
-      .findbar { gap:6px; padding-bottom:6px; }
     }
     .diff-symbol { margin-inline-end:4px; font:600 14px/1 ui-monospace,monospace; }
     @media (max-width:620px) {
@@ -171,13 +170,26 @@
       .heading button { padding-inline:5px; }
       #hint .switch-keys { display:none; }
     }
-    .toolbar .findbar { flex:1; min-width:0; max-width:520px; margin:0 0 0 auto; padding:0; gap:4px; }
-    .toolbar:has(.findbar:not([hidden])) .comparison-status { flex:0 1 auto; }
+    @media (min-width:791px) {
+      .toolbar:has(.findbar:not([hidden])) .comparison-status { flex:0 1 auto; }
+    }
+    /* 查找控件始终留在原节点，窄窗换行时保留焦点、查询和选区。 */
+    @media (max-width:790px) {
+      .toolbar:has(.findbar:not([hidden])) {
+        display:grid; height:auto; column-gap:8px; row-gap:0;
+        grid-template-columns:minmax(0,1fr) auto;
+        grid-template-rows:var(--toolbar-height) auto;
+        grid-template-areas:"status options" "search search";
+      }
+      .comparison-status { grid-area:status; }
+      .options { grid-area:options; }
+      .findbar { grid-area:search; max-width:none; margin:0; padding-bottom:6px; gap:6px; }
+    }
     .toolbar:has(.findbar:not([hidden])) .options { padding-left:0; border:0; }
     .pane-menu { margin-left:auto; position:relative; }
     .pane-menu > summary { display:none; }
     .pane-menu .pane-actions { display:flex; gap:2px; }
-    @media (max-width:900px) {
+    @media (min-width:791px) and (max-width:900px) {
       .toolbar:has(.findbar:not([hidden])) .comparison-status:has(.navigation:not([hidden])) #summary { display:none; }
       .toolbar:has(.findbar:not([hidden])) #summary { max-width:120px; }
     }
@@ -205,6 +217,24 @@
       </div>
       <div id="summary" role="status" aria-live="polite" aria-atomic="true"><span class="summary-primary notice">在左右两侧输入文本，差异会直接标出</span></div>
     </div>
+    <div class="findbar" id="findbar" role="search" aria-label="搜索对比内容" hidden>
+      <div class="query-field">
+        <span class="find-icon" aria-hidden="true"></span>
+        <input id="find-query" type="search" placeholder="搜索内容" aria-label="搜索内容" autocomplete="off" spellcheck="false">
+        <div class="match-nav" role="group" aria-label="搜索匹配导航" hidden>
+          <span id="find-count" role="status" aria-live="polite" aria-atomic="true"></span>
+          <button id="find-previous" title="上一个匹配（Shift+Enter / Shift+F3）" aria-label="上一个搜索结果" disabled>↑</button>
+          <button id="find-next" title="下一个匹配（Enter / F3）" aria-label="下一个搜索结果" disabled>↓</button>
+        </div>
+      </div>
+      <div id="find-filter-slot" class="filter-slot">
+        <div id="find-filters" class="filters" role="group" aria-label="查找选项" hidden>
+          <select id="find-scope" aria-label="搜索范围"><option value="both">左右两侧</option><option value="0">仅左侧</option><option value="1">仅右侧</option></select>
+          <label><input id="find-case" type="checkbox">区分大小写</label>
+        </div>
+      </div>
+      <button id="find-close" title="关闭搜索（Esc）" aria-label="关闭搜索">×</button>
+    </div>
     <div class="options">
     <button id="open-search" aria-controls="findbar" aria-expanded="false" title="搜索内容（Ctrl+F）" aria-keyshortcuts="Control+F">搜索<kbd aria-hidden="true">Ctrl+F</kbd></button>
       <div id="comparison-filter-slot" class="filter-slot">
@@ -218,24 +248,6 @@
         <div id="options-panel" class="options-panel" role="group" aria-label="文本对比选项" hidden></div>
       </div>
     </div>
-  </div>
-  <div class="findbar" id="findbar" role="search" aria-label="搜索对比内容" hidden>
-    <div class="query-field">
-      <span class="find-icon" aria-hidden="true"></span>
-      <input id="find-query" type="search" placeholder="搜索内容" aria-label="搜索内容" autocomplete="off" spellcheck="false">
-      <div class="match-nav" role="group" aria-label="搜索匹配导航" hidden>
-        <span id="find-count" role="status" aria-live="polite" aria-atomic="true"></span>
-        <button id="find-previous" title="上一个匹配（Shift+Enter / Shift+F3）" aria-label="上一个搜索结果" disabled>↑</button>
-        <button id="find-next" title="下一个匹配（Enter / F3）" aria-label="下一个搜索结果" disabled>↓</button>
-      </div>
-    </div>
-    <div id="find-filter-slot" class="filter-slot">
-      <div id="find-filters" class="filters" role="group" aria-label="查找选项" hidden>
-        <select id="find-scope" aria-label="搜索范围"><option value="both">左右两侧</option><option value="0">仅左侧</option><option value="1">仅右侧</option></select>
-        <label><input id="find-case" type="checkbox">区分大小写</label>
-      </div>
-    </div>
-    <button id="find-close" title="关闭搜索（Esc）" aria-label="关闭搜索">×</button>
   </div>
   <div class="editors">
     <section class="pane" data-target>

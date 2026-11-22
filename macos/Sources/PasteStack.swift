@@ -212,7 +212,7 @@ final class PasteStackWindow: NSObject {
         }
         let records = store.stackRecords()
         let shown = Array(records.prefix(6))
-        let rowHeight: CGFloat = 44
+        let rowHeight: CGFloat = 50
         let height = CGFloat(104) + CGFloat(max(1, shown.count)) * rowHeight
         let root = panel.contentView!
         root.frame.size.height = height
@@ -228,7 +228,7 @@ final class PasteStackWindow: NSObject {
         }
         for (index, item) in shown.enumerated() {
             let y = list.frame.height - CGFloat(index + 1) * rowHeight
-            let row = StackRow(frame: NSRect(x: 0, y: y, width: 308, height: 40))
+            let row = StackRow(frame: NSRect(x: 0, y: y, width: 308, height: rowHeight - 4))
             row.isBordered = false
             row.title = item.title
             row.tag = index
@@ -240,21 +240,26 @@ final class PasteStackWindow: NSObject {
             let indexLabel = NSTextField(labelWithString: index == 0 ? "下一项" : "\(index + 1)")
             indexLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
             indexLabel.textColor = index == 0 ? OpenAllTheme.accentText : OpenAllTheme.muted
-            indexLabel.frame = NSRect(x: 10, y: 10, width: 39, height: 18)
+            indexLabel.frame = NSRect(x: 10, y: row.bounds.midY - 9, width: 39, height: 18)
             row.addSubview(indexLabel)
             let types = ["image": ("photo", "图片"), "files": ("folder", "文件"), "link": ("link", "链接")]
             let (symbol, kind) = types[item.kind] ?? ("text.alignleft", "文本")
-            let typeIcon = NSImageView(frame: NSRect(x: 54, y: 13, width: 14, height: 14))
+            let typeIcon = NSImageView(frame: NSRect(x: 54, y: row.bounds.midY - 7, width: 14, height: 14))
             typeIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
             typeIcon.contentTintColor = OpenAllTheme.muted
             row.addSubview(typeIcon)
             row.setAccessibilityLabel("第 \(index + 1) 项，\(kind)，\(item.title)")
             row.toolTip = item.title
-            let preview = NSTextField(labelWithString: item.kind == "image" ? "图片" : item.title)
-            preview.lineBreakMode = .byWordWrapping
+            let preview = NSTextField(wrappingLabelWithString: "")
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineSpacing = 2
+            preview.attributedStringValue = NSAttributedString(string: item.kind == "image" ? "图片" : item.title, attributes: [
+                .font: NSFont.systemFont(ofSize: 13), .paragraphStyle: paragraph])
+            preview.preferredMaxLayoutWidth = 189
             preview.maximumNumberOfLines = 2
             preview.textColor = OpenAllTheme.ink
-            preview.frame = NSRect(x: 76, y: 4, width: 189, height: 32)
+            let previewHeight = min(40, ceil(preview.intrinsicContentSize.height))
+            preview.frame = NSRect(x: 76, y: floor(row.bounds.midY - previewHeight / 2), width: 189, height: previewHeight)
             row.addSubview(preview)
             let remove = NSButton(title: "×", target: self, action: #selector(removeRow(_:)))
             remove.tag = index
@@ -262,7 +267,7 @@ final class PasteStackWindow: NSObject {
             remove.contentTintColor = OpenAllTheme.muted
             remove.setAccessibilityLabel("移除第 \(index + 1) 项")
             remove.toolTip = "从待粘贴队列中移除此项"
-            remove.frame = NSRect(x: 271, y: 8, width: 28, height: 25)
+            remove.frame = NSRect(x: 271, y: floor(row.bounds.midY - 13), width: 28, height: 26)
             row.addSubview(remove)
             list.addSubview(row)
         }

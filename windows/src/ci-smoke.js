@@ -67,9 +67,15 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     check(await evaluate(async () => (await openall.search('jishiben')).some(x => x.title === '记事本')), '中文应用拼音搜索');
     await evaluate(() => OpenAllApp.controller.search('json'));
     await capture('02-search-results');
+    check(await evaluate(() => {
+      const row = document.querySelector('.search-result.selected');
+      return row?.querySelector('.search-result-context')?.textContent === 'Ctrl+K 操作'
+        && !document.querySelector('.search-footer').textContent.includes('Ctrl+K');
+    }), '上下文操作跟随当前搜索结果');
     await evaluate(() => OpenAllApp.controller.search('?json'));
     await evaluate(() => document.querySelector('.search-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })));
     await until(() => evaluate(async () => (await openall.settings()).commandFavorites?.includes('json')), '命令收藏');
+    await until(() => evaluate(() => document.querySelector('.search-result.selected .search-result-context')?.textContent === 'Ctrl+K 取消收藏'), '收藏后行内键位提示更新');
     check(true, '命令目录 Ctrl+K 收藏与持久化');
     report.performance.search = await evaluate(async () => { const start = performance.now(); for (let i = 0; i < 50; i++) await OpenAllApp.controller.search(['j', 'js', 'json'][i % 3]); return { queries: 50, elapsedMS: performance.now() - start }; });
     check(report.performance.search.elapsedMS < 5000, '连续输入 50 次搜索响应');
@@ -139,6 +145,11 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     await evaluate(() => document.querySelector('.clip-card').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:80,clientY:80})));
     await evaluate(() => [...document.querySelectorAll('.context-menu button')].find(item=>item.textContent === '编辑后粘贴…').click());
     await until(() => evaluate(() => !!document.querySelector('dialog[open] textarea')), '剪贴板编辑后粘贴');
+    check(await evaluate(() => {
+      const sheet = document.querySelector('.clip-edit-dialog'), editor = sheet.querySelector('textarea');
+      const footer = sheet.querySelector('.dialog-actions').getBoundingClientRect();
+      return sheet.scrollHeight <= sheet.clientHeight + 1 && editor.clientHeight > 32 && footer.bottom <= innerHeight;
+    }), '编辑后粘贴时正文可滚动，提交操作在剪贴板内完整可见');
     await capture('tool-clipboard-edit-before-paste');
     await evaluate(() => document.querySelector('dialog[open] button').click());
     const before = await evaluate(() => openall.history());
@@ -152,7 +163,7 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       && !!document.querySelector('.clip-preview-action button.primary:not(:disabled)'), previewText), '剪贴板预览显示全文和直接粘贴操作');
     await click('用工具打开 ▾');
     check(await evaluate(() => document.querySelectorAll('.context-menu [role=menuitem]:not(:disabled)').length === 4), '预览提供四个可用工具入口');
-    await evaluate(() => document.querySelector('.context-menu button').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+    await evaluate(() => document.querySelector('.context-menu button').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
     await click('复制全文');
     await until(() => evaluate(() => document.querySelector('.clip-preview-status')?.textContent === '已复制'), '预览复制全文');
     await capture('tool-clipboard-preview');
@@ -260,6 +271,24 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     await click('⌗ 裁剪');
     check(await evaluate(() => !!document.querySelector('[role="dialog"] .aux-crop-fields')), '显示图片裁剪编辑器');
     await capture('tool-image-crop');
+    const drag = await evaluate(() => {
+      const guide = document.querySelector('.image-crop-guide');
+      const matrix = guide.getScreenCTM();
+      return [[64,60],[472,320]].map(([x,y])=>{
+        const point = new DOMPoint(x,y).matrixTransform(matrix);
+        return {x: Math.round(point.x), y: Math.round(point.y)};
+      });
+    });
+    active.webContents.sendInputEvent({type:'mouseDown',...drag[0],button:'left',clickCount:1});
+    active.webContents.sendInputEvent({type:'mouseMove',...drag[1],modifiers:['leftButtonDown']});
+    active.webContents.sendInputEvent({type:'mouseUp',...drag[1],button:'left',clickCount:1});
+    await until(() => evaluate(() => Number(document.querySelector('.aux-crop-fields input').value)>0), '拖动选区回填像素坐标');
+    check(await evaluate(() => {
+      const fields = document.querySelectorAll('.aux-crop-fields input');
+      fields[2].value = '300'; fields[2].dispatchEvent(new Event('input'));
+      return document.querySelector('.image-crop-guide rect').getAttribute('width') === '300';
+    }), '输入裁剪像素修改可见选区');
+    await capture('tool-image-crop-selected');
     await click('取消');
     for (const format of ['png', 'jpeg', 'tiff', 'heic']) {
       const encoded = await evaluate((dataUrl, format) => openall.fileAction('encodeImage', { dataUrl, format, quality: 0.8 }), image, format);
@@ -312,16 +341,56 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
         await until(() => evaluate(() => !!document.querySelector('.rules-empty, .settings-content .data-table')), '搜索排序管理内容');
         await capture('settings-search-manager');
       } else if (tab === 'snippets') {
-        await evaluate(() => { document.querySelector('.editor-form textarea').value = '会议日期 {{date:yyyy-MM-dd}}'; });
+        await evaluate(() => {
+          const text=document.querySelector('.editor-form textarea');
+          text.value='会议日期 {{date:yyyy-MM-dd}}';
+          text.dispatchEvent(new Event('input',{bubbles:true}));
+        });
         await click('预览展开');
-        await until(() => evaluate(() => !!document.querySelector('dialog[open] pre')), '查看片段展开结果');
+        await until(() => evaluate(() => /会议日期 \d{4}-\d{2}-\d{2}/.test(document.querySelector('.snippet-expanded-text')?.textContent)), '查看片段展开结果');
+        check(await evaluate(() => {
+          const panel=document.querySelector('.snippet-expansion'), text=document.querySelector('.editor-form textarea');
+          return !document.querySelector('dialog[open]') && !panel.hidden && text.value.includes('{{date:') &&
+            panel.getBoundingClientRect().top >= text.getBoundingClientRect().bottom;
+        }), '片段模板与就地展开结果同时可读');
         await capture('settings-snippet-expansion');
-        await evaluate(() => document.querySelector('dialog[open] button').click());
+        await evaluate(() => {
+          const text=document.querySelector('.editor-form textarea'); text.value='修改后的模板';
+          text.dispatchEvent(new Event('input',{bubbles:true}));
+        });
+        await until(() => evaluate(() => document.querySelector('.snippet-expanded-text').textContent==='修改后的模板'),'展开结果随模板修改');
+        await click('收起预览');
+        check(await evaluate(() => document.querySelector('.snippet-expansion').hidden),'可收起展开结果');
       } else if (tab === 'clipboard') {
-        await evaluate(() => [...document.querySelectorAll('.settings-content button')].find(item=>item.textContent.includes('排除')).click());
-        await until(() => evaluate(() => !!document.querySelector('dialog[open] input')), '剪贴板排除应用');
+        const old = await evaluate(async () => (await openall.settings()).clipboardPreferences.ignoreApplications);
+        await evaluate(async () => {
+          const p=(await openall.settings()).clipboardPreferences;
+          await openall.saveSettings({clipboardPreferences:{...p,ignoreApplications:['KeePassXC.exe','旧应用名称']}});
+          await OpenAllApp.controller.selectTab('clipboard');
+        });
+        await click('编辑排除列表');
+        await until(() => evaluate(() => document.querySelectorAll('.exclusion-items li').length===2),'显示已有排除项');
+        await evaluate(() => {
+          document.querySelector('[aria-label="移除 旧应用名称"]').click();
+          const input=document.querySelector('#exclusion-entry');input.value='1Password.exe';
+          input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+        });
+        check(await evaluate(() => [...document.querySelectorAll('.exclusion-items li > span')].map(e=>e.textContent).join(',')==='KeePassXC.exe,1Password.exe'),'排除项可逐项移除和添加');
         await capture('settings-clipboard-exclusions');
-        await evaluate(() => document.querySelector('dialog[open] button').click());
+        await evaluate(() => [...document.querySelectorAll('dialog .dialog-actions button')].find(b=>b.textContent==='取消').click());
+        check(await evaluate(async () => (await openall.settings()).clipboardPreferences.ignoreApplications.join(',')==='KeePassXC.exe,旧应用名称'),'取消保留原有排除项');
+        await click('编辑排除列表');
+        await evaluate(() => {
+          document.querySelector('[aria-label="移除 旧应用名称"]').click();
+          document.querySelector('#exclusion-entry').value='1Password.exe';
+          document.querySelector('dialog .dialog-actions .primary').click();
+        });
+        await until(() => evaluate(async () => !document.querySelector('dialog[open]') &&
+          (await openall.settings()).clipboardPreferences.ignoreApplications.join(',')==='KeePassXC.exe,1Password.exe'),'保存新的排除列表');
+        await evaluate(async entries => {
+          const p=(await openall.settings()).clipboardPreferences;
+          await openall.saveSettings({clipboardPreferences:{...p,ignoreApplications:entries}});
+        }, old);
       }
     }
     await evaluate(() => OpenAllApp.controller.selectTab('general'));

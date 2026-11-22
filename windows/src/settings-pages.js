@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const {h,button,icon,notify,menu,prompt,confirm}=window.OpenAllUI;
+  const {h,button,icon,notify,menu,dialog,confirm}=window.OpenAllUI;
   const navigation=[['general','通用','settings'],['search','搜索','search'],['clipboard','剪贴板','clipboard'],['linkAliases','网址别名','link'],['commandAliases','功能别名','command'],['snippets','常用片段','snippets'],['permissions','权限','permissions'],['diagnostics','诊断','diagnostics'],['appearance','外观','appearance']];
   async function settingsPage(root,ctx) {
     const {api}=ctx;let prefs=await api.settings(),tab=typeof ctx.initialValue==='string'?ctx.initialValue:'general',disposed=false,recording=null,renderRevision=0;
@@ -158,9 +158,61 @@
         content.append(h('div',{class:'recording-settings'},enabled,recording,row('记录安排',pause)),h('hr'),
           checkbox('默认粘贴为纯文本（关闭则保留原样式）',!!p.plainTextByDefault,value=>saveClip({plainTextByDefault:value})),h('hr'));
         content.append(row('保留时间',select([[7,'一周'],[30,'一月'],[90,'三月'],[365,'一年']],p.retentionDays||30,value=>saveClip({retentionDays:Number(value)}))),row('单条内容大小上限',select([5,10,20,50].map(n=>[n,n+' MB']),(p.maxItemBytes||20000000)/1000000,value=>saveClip({maxItemBytes:Number(value)*1000000}))));
-        content.append(row('排除应用',button((p.ignoreApplications||[]).length?'已排除 '+p.ignoreApplications.length+' 个应用':'未排除应用 · 点击选择',async()=>{
-          const value=await prompt('排除应用名称或 exe 文件名（逗号分隔）',(p.ignoreApplications||[]).join(', '));if(value!=null){await saveClip({ignoreApplications:value.split(/[,，\n]/).map(x=>x.trim()).filter(Boolean)});render();}
-        })),h('p',{class:'hint small',style:{marginTop:'18px'}},'只在本机保存；排除应用和隐藏内容不会记录。'));
+        const exclusions = button('编辑排除列表', () => {
+          const draft = [...(prefs.clipboardPreferences.ignoreApplications || [])];
+          const filename = input('', '例如 1Password.exe');
+          filename.setAttribute('aria-label','应用名称或 exe 文件名');
+          const count = h('span',{class:'exclusion-count'});
+          const list = h('ul',{class:'exclusion-items','aria-label':'已排除应用'});
+          const empty = h('p',{class:'exclusion-empty'},'暂未排除应用');
+          const state = h('p',{class:'exclusion-status',role:'status'});
+          function paint() {
+            count.textContent = draft.length + ' 项';
+            empty.hidden = draft.length > 0;
+            list.hidden = !draft.length;
+            list.replaceChildren(...draft.map((name,index) => {
+              const remove = button('移除', () => {
+                draft.splice(index,1); paint();
+                (list.querySelectorAll('button')[Math.min(index,draft.length-1)] || filename).focus();
+              },'ghost');
+              remove.setAttribute('aria-label','移除 '+name);
+              return h('li',{},h('span',{title:name},name),remove);
+            }));
+          }
+          function add() {
+            const name = filename.value.trim();
+            if (!name) return false;
+            if (draft.some(item => item.toLowerCase() === name.toLowerCase())) {
+              state.textContent = '列表中已有该应用。'; filename.select(); return false;
+            }
+            draft.push(name); filename.value=''; state.textContent=''; paint(); filename.focus(); return true;
+          }
+          const addButton = button('添加',add);
+          filename.addEventListener('keydown', event => {
+            if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); add(); }
+          });
+          const editor = h('div',{class:'exclusion-editor'},h('p',{},'这些应用复制的内容会跳过历史记录。'),
+            h('div',{class:'exclusion-heading'},h('strong',{},'已排除应用'),count),list,empty,
+            h('label',{for:'exclusion-entry'},'添加应用'),h('div',{class:'row'},filename,addButton),state);
+          filename.id='exclusion-entry';
+          const cancel = button('取消',() => panel.close());
+          const apply = button('保存',async () => {
+            if (filename.value.trim() && !add()) return;
+            apply.disabled = true;
+            try {
+              await save({clipboardPreferences:{...prefs.clipboardPreferences,ignoreApplications:draft}},true);
+              summary.textContent = draft.length ? '已排除 '+draft.length+' 个应用' : '暂未排除应用';
+              panel.close();
+            } finally { apply.disabled = false; }
+          },'primary');
+          const panel = dialog('剪贴板排除列表',editor,[cancel,apply]);
+          panel.classList.add('exclusion-dialog');
+          panel.setAttribute('aria-label','剪贴板排除列表');
+          paint(); filename.focus();
+        });
+        const summary = h('span',{class:'muted'},(p.ignoreApplications||[]).length?'已排除 '+p.ignoreApplications.length+' 个应用':'暂未排除应用');
+        content.append(row('排除应用',h('div',{class:'exclusion-control'},summary,exclusions)),
+          h('p',{class:'hint small',style:{marginTop:'18px'}},'只在本机保存；排除应用和隐藏内容不会记录。'));
         content.append(h('div',{class:'settings-footer'},button('打开剪贴板历史',()=>api.windowAction('showClipboard')),button('清理历史… ▾',e=>menu([{label:'清理未收藏记录',action:()=>clearHistory(false)},{label:'清理全部历史',danger:true,action:()=>clearHistory(true)}],e.currentTarget),'danger')));
       } else if(tab==='linkAliases') {
         heading('网址别名','输入别名和关键词，直接打开对应网站。');
@@ -291,7 +343,14 @@
         const name = input('','片段名称');
         const key = input('','不含空格的关键词');
         const text = h('textarea',{placeholder:'片段内容，可使用 {{date}}、{{time}}、{{clipboard}}'});
+        const expanded = h('pre',{class:'snippet-expanded-text',tabindex:'0','aria-label':'片段展开结果'});
+        const resultPanel = h('section',{class:'snippet-expansion',id:'snippet-expansion',hidden:true},
+          h('h2',{},'展开结果'),expanded);
+        let expansionRequest = 0;
         function fill(id) {
+          ++expansionRequest;
+          resultPanel.hidden = true;
+          preview.setAttribute('aria-expanded','false'); preview.textContent='预览展开';
           const item = all.find(x => x.id === id);
           picker.value = selectedSnippetID = item?.id || '';
           name.value = item?.name || '';
@@ -315,10 +374,22 @@
           notify('片段已保存');
           if (revision === renderRevision) render();
         },'primary');
+        async function updateExpansion() {
+          const request = ++expansionRequest;
+          const result = await api.snippets('expand',{body:text.value});
+          if (request === expansionRequest && revision === renderRevision && !resultPanel.hidden) {
+            expanded.textContent = typeof result === 'string' ? result : result.text || '';
+          }
+        }
         const preview = button('预览展开',async () => {
-          const result = await api.snippets('expand',{id:selectedSnippetID,body:text.value});
-          window.OpenAllUI.dialog('展开结果',h('pre',{style:{whiteSpace:'pre-wrap',maxHeight:'300px',overflow:'auto'}},
-            typeof result === 'string' ? result : result.text || ''),[button('关闭',e => e.currentTarget.closest('dialog').close())]);
+          resultPanel.hidden = !resultPanel.hidden;
+          preview.setAttribute('aria-expanded',String(!resultPanel.hidden));
+          preview.textContent = resultPanel.hidden ? '预览展开' : '收起预览';
+          if (!resultPanel.hidden) await updateExpansion();
+        },'ghost');
+        preview.setAttribute('aria-controls',resultPanel.id);
+        text.addEventListener('input',() => {
+          if (!resultPanel.hidden) updateExpansion().catch(error=>notify(error.message,true));
         });
         picker.onchange = () => fill(picker.value);
         fill(selectedSnippetID ?? all[0]?.id);
@@ -332,8 +403,8 @@
         }
         text.placeholder='例如：已于 {{date}} 收到，稍后回复。';
         content.append(h('div',{class:'row snippet-picker'},all.length ? picker : h('h2',{},'新建片段'),all.length ? create : null),
-          h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词 · 用 ; 调用',key)),field('内容',text),variables,
-            h('div',{class:'row'},remove,h('span',{class:'spacer'}),preview,apply)));
+          h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词 · 用 ; 调用',key)),field('内容',text),h('div',{class:'snippet-template-actions'},variables,preview),resultPanel,
+            h('div',{class:'row'},remove,h('span',{class:'spacer'}),apply)));
       } else if(tab==='permissions') {
         heading('权限与隐私','本地运行，内容保存在当前 Windows 用户目录。');const d=await api.diagnostics();
         if (disposed || revision !== renderRevision) return;

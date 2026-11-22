@@ -335,6 +335,7 @@ final class SearchSurfaceView: NSVisualEffectView {
 
 final class SearchResultRowView: NSTableRowView {
     var returnAction = ""
+    static let contextHint = "⌘K 操作"
 
     override func drawSelection(in dirtyRect: NSRect) {
         guard selectionHighlightStyle != .none else { return }
@@ -345,11 +346,18 @@ final class SearchResultRowView: NSTableRowView {
             .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: OpenAllTheme.ink
         ])
         let size = label.size()
-        let badge = NSRect(x: row.maxX - ceil(size.width) - 26, y: row.midY - 11,
-                           width: ceil(size.width) + 14, height: 22)
+        let right = row.maxX - 12
+        let badge = NSRect(x: right - ceil(size.width) - 14, y: isFlipped ? row.minY + 5 : row.maxY - 26,
+                           width: ceil(size.width) + 14, height: 21)
         OpenAllTheme.ink.withAlphaComponent(0.16).setStroke()
         NSBezierPath(roundedRect: badge, xRadius: 5, yRadius: 5).stroke()
         label.draw(at: NSPoint(x: badge.minX + 7, y: round(badge.midY - size.height / 2)))
+        let context = NSAttributedString(string: Self.contextHint, attributes: [
+            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: OpenAllTheme.muted
+        ])
+        let contextSize = context.size()
+        context.draw(at: NSPoint(x: right - ceil(contextSize.width),
+                                 y: isFlipped ? badge.maxY + 3 : badge.minY - 3 - ceil(contextSize.height)))
     }
 }
 
@@ -703,7 +711,60 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         goldTool.stop()
     }
 
+    @MainActor private func captureContentToolsForDesign() async throws {
+        commandManual.show()
+        try await commandManual.verifyForDesign()
+        guard MarkdownRenderer.verifyRenderingForDesign() else { throw NSError(domain: "MarkdownRenderRegression", code: 1) }
+        markdownTool.show("""
+        # 项目记录
+
+        ## 本周进展
+        OpenAll 将常用操作放在键盘触手可及的位置：搜索、剪贴板与开发工具可以连续使用。
+
+        - [x] 支持在 JSON 中原地格式化和编辑
+        - [x] 文本对比左右区域可直接修改
+        - [ ] 收集下一轮使用反馈
+
+        ## 验收清单
+        | 场景 | 预期结果 |
+        | --- | --- |
+        | 剪贴板粘贴 | 保留目标编辑区与选区 |
+        | 大内容处理 | 计算期间仍可继续操作 |
+        | 搜索定位 | 当前匹配清楚可见 |
+
+        > 每次调整都需要回到真实的使用路径中检查。
+
+        ## 常用快捷键
+        使用 `⌘F` 查找内容，使用 `⌘Z` 撤销最近一次修改。
+        """)
+        try await markdownTool.waitForPreviewForDesign()
+        try await DesignPreview.captureWeb(DesignPreview.lastWindow!, name: "04-markdown")
+        markdownTool.showHelpForDesign()
+        try DesignPreview.capture(DesignPreview.lastWindow!, name: "04-markdown-help")
+        unicodeTool.show("你好，OpenAll 👋")
+        try DesignPreview.capture(DesignPreview.lastWindow!, name: "05-unicode")
+        idGenerator.show()
+        try DesignPreview.capture(DesignPreview.lastWindow!, name: "06-id")
+        let imageSample = DesignPreview.home.appendingPathComponent("Library/Application Support/OpenAll/Clipboard/preview-image.png")
+        if let image = NSImage(contentsOf: imageSample) { imageTool.show(image) }
+        else { imageTool.show() }
+        try await Task.sleep(nanoseconds: 500_000_000)
+        try DesignPreview.capture(DesignPreview.lastWindow!, name: "07-image")
+        guard NSApp.sendAction(Selector(("cropImage")), to: imageTool, from: nil),
+              let crop = DesignPreview.lastWindow, crop.contentView != nil else {
+            throw NSError(domain: "ImageCropPreview", code: 1)
+        }
+        try DesignPreview.capture(crop, name: "07-image-crop")
+        try imageTool.verifyCropForDesign()
+        try DesignPreview.capture(crop, name: "07-image-crop-selected")
+    }
+
     @MainActor private func renderDesignSnapshots() async throws {
+        if ProcessInfo.processInfo.environment["OPENALL_CONTENT_TOOLS_CHECK"] == "1" {
+            clipboardStore.seedPreviewRecords()
+            try await captureContentToolsForDesign()
+            return
+        }
         if ProcessInfo.processInfo.environment["OPENALL_MANUAL_CHECK"] == "1" {
             commandManual.show()
             try await commandManual.verifyForDesign()
@@ -1011,49 +1072,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             previewTool.showDesignSample(mode)
             try DesignPreview.capture(DesignPreview.lastWindow!, name: "03-\(name)")
         }
-        commandManual.show()
-        try await commandManual.verifyForDesign()
-        guard MarkdownRenderer.verifyRenderingForDesign() else { throw NSError(domain: "MarkdownRenderRegression", code: 1) }
-        markdownTool.show("""
-        # 项目记录
-
-        ## 本周进展
-        OpenAll 将常用操作放在键盘触手可及的位置：搜索、剪贴板与开发工具可以连续使用。
-
-        - [x] 支持在 JSON 中原地格式化和编辑
-        - [x] 文本对比左右区域可直接修改
-        - [ ] 收集下一轮使用反馈
-
-        ## 验收清单
-        | 场景 | 预期结果 |
-        | --- | --- |
-        | 剪贴板粘贴 | 保留目标编辑区与选区 |
-        | 大内容处理 | 计算期间仍可继续操作 |
-        | 搜索定位 | 当前匹配清楚可见 |
-
-        > 每次调整都需要回到真实的使用路径中检查。
-
-        ## 常用快捷键
-        使用 `⌘F` 查找内容，使用 `⌘Z` 撤销最近一次修改。
-        """)
-        try await markdownTool.waitForPreviewForDesign()
-        try await DesignPreview.captureWeb(DesignPreview.lastWindow!, name: "04-markdown")
-        markdownTool.showHelpForDesign()
-        try DesignPreview.capture(DesignPreview.lastWindow!, name: "04-markdown-help")
-        unicodeTool.show("你好，OpenAll 👋")
-        try DesignPreview.capture(DesignPreview.lastWindow!, name: "05-unicode")
-        idGenerator.show()
-        try DesignPreview.capture(DesignPreview.lastWindow!, name: "06-id")
-        let imageSample = DesignPreview.home.appendingPathComponent("Library/Application Support/OpenAll/Clipboard/preview-image.png")
-        if let image = NSImage(contentsOf: imageSample) { imageTool.show(image) }
-        else { imageTool.show() }
-        try await Task.sleep(nanoseconds: 500_000_000)
-        try DesignPreview.capture(DesignPreview.lastWindow!, name: "07-image")
-        guard NSApp.sendAction(Selector(("cropImage")), to: imageTool, from: nil),
-              let crop = DesignPreview.lastWindow, crop.contentView != nil else {
-            throw NSError(domain: "ImageCropPreview", code: 1)
-        }
-        try DesignPreview.capture(crop, name: "07-image-crop")
+        try await captureContentToolsForDesign()
         comparer.showDesignSample()
         guard try await comparer.verifyForDesign() else {
             throw NSError(domain: "ComparisonRegression", code: 1)
@@ -1198,11 +1217,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             if query == "?" {
                 guard results.count > 7, table.rowHeight == 56 else { throw NSError(domain: "RestoredSearchCatalog", code: 1) }
                 move(1)
-                guard table.selectedRow == 1, footer.stringValue.contains("⌘K 操作") else { throw NSError(domain: "RestoredSearchNavigation", code: 1) }
+                guard table.selectedRow == 1, footer.stringValue.contains("↑↓ 选择") else { throw NSError(domain: "RestoredSearchNavigation", code: 1) }
             }
             if query == "2+3" {
                 let row = table.rowView(atRow: 0, makeIfNecessary: true) as? SearchResultRowView
-                guard results.first?.value == "5", row?.returnAction == "复制", footer.stringValue == "⌘K 操作" else {
+                guard results.first?.value == "5", row?.returnAction == "复制", footer.stringValue == "1 项结果" else {
                     throw NSError(domain: "SearchCalculatorAction", code: 1)
                 }
             }
@@ -2103,7 +2122,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
 
     private var searchNavigationHint: String {
         if results.isEmpty { return "没有匹配结果 · 输入 ? 浏览命令" }
-        return results.count > 1 ? "↑↓ 选择    ⌘K 操作" : "⌘K 操作"
+        return results.count > 1 ? "\(results.count) 项结果　↑↓ 选择" : "1 项结果"
     }
 
     private func presentSearchResults() {
@@ -2205,7 +2224,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         }
         cell.viewWithTag(2).flatMap { $0 as? NSTextField }?.stringValue = results[row].detail
         let item = results[row]
-        cell.setAccessibilityHelp("回车" + item.returnAction)
+        cell.setAccessibilityHelp("回车" + item.returnAction + "，Command K 显示操作菜单")
         let symbol: String
         switch item.kind {
         case .application: symbol = "app"

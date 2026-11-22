@@ -9,7 +9,7 @@ const CTF_PAGE = 'https://www.ctfmall.com/todaygold';
 
 function hostTheme(settings) {
   const { light, vars } = palette(settings, !nativeTheme.shouldUseDarkColors);
-  return { background: vars['--canvas'], surface: vars['--surface'], foreground: vars['--ink'], secondary: vars['--muted'], border: vars['--rule'], accent: vars['--accent'], dark: !light };
+  return { background: vars['--canvas'], surface: vars['--surface'], foreground: vars['--ink'], secondary: vars['--muted'], border: vars['--rule'], accent: vars['--accent'], onAccent: vars['--on-accent'], dark: !light };
 }
 
 // 行情服务属于 OpenAll 生命周期；关闭工具窗口后保留数据和定时更新。

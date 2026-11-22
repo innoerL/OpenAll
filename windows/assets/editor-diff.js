@@ -464,16 +464,6 @@
   const comparisonFilters = document.getElementById('comparison-filters');
   const findFilters = document.getElementById('find-filters');
 
-  const searchFitsToolbar = window.matchMedia('(min-width:791px)');
-  function placeFindBar() {
-    const toolbar = document.querySelector('.toolbar');
-    const focused = findBar.contains(document.activeElement) ? document.activeElement : null;
-    if (searchFitsToolbar.matches) toolbar.insertBefore(findBar,document.querySelector('.options'));
-    else toolbar.after(findBar);
-    if (focused) focused.focus({preventScroll:true});
-  }
-  searchFitsToolbar.addEventListener('change',placeFindBar);
-  placeFindBar();
   const paneMenus = [...document.querySelectorAll('.pane-menu')];
   function placePaneActions() {
     for (const menu of paneMenus) menu.open = !compactLayout.matches;

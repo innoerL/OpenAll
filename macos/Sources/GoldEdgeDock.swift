@@ -9,23 +9,24 @@ private final class GoldRailView: NSView, WindowThemeRefreshing {
     var onOpen: (() -> Void)?
 
     override func draw(_ dirtyRect: NSRect) {
-        let bar = NSBezierPath(roundedRect: NSRect(x: (bounds.width - 5) / 2,
-            y: (bounds.height - 43) / 2, width: 5, height: 43), xRadius: 2.5, yRadius: 2.5)
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
-        shadow.shadowBlurRadius = 3
-        shadow.shadowOffset = NSSize(width: 0, height: -1)
-        shadow.set()
+        let tab = NSRect(x: bounds.midX - 8, y: bounds.midY - 12, width: 16, height: 24)
         OpenAllTheme.accent.setFill()
-        bar.fill()
-        OpenAllTheme.ink.withAlphaComponent(0.55).setStroke()
-        bar.lineWidth = 1
-        bar.stroke()
-        NSGraphicsContext.restoreGraphicsState()
+        NSBezierPath(roundedRect: tab, xRadius: 5, yRadius: 5).fill()
+        // 两层金锭在窄边条上保留一个像素的间隙。
+        let mark = NSBezierPath()
+        for (x, y) in [(CGFloat(5), CGFloat(12.5)), (1.5, 8), (8.5, 8)] {
+            mark.move(to: NSPoint(x: tab.minX + x, y: tab.minY + y))
+            mark.line(to: NSPoint(x: tab.minX + x + 6, y: tab.minY + y))
+            mark.line(to: NSPoint(x: tab.minX + x + 5, y: tab.minY + y + 3.5))
+            mark.line(to: NSPoint(x: tab.minX + x + 1, y: tab.minY + y + 3.5))
+            mark.close()
+        }
+        OpenAllTheme.onAccent.setFill()
+        mark.fill()
     }
 
     override func mouseDown(with event: NSEvent) { onOpen?() }
+    override func accessibilityPerformPress() -> Bool { onOpen?(); return true }
     func refreshWindowTheme() { needsDisplay = true }
 }
 
@@ -62,6 +63,8 @@ final class GoldEdgeDock {
         rail.level = .floating
         rail.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         let view = GoldRailView(frame: NSRect(x: 0, y: 0, width: 16, height: 68))
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.button)
         view.setAccessibilityLabel("展开 OpenAll 金价")
         view.onOpen = { [weak self] in self?.expand() }
         rail.contentView = view

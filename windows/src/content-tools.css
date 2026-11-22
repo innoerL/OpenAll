@@ -101,3 +101,13 @@
 @media (max-width:660px) {
   .aux-markdown .aux-help-popover { left:20px; right:20px; top:50%; width:auto; max-height:calc(50% - 30px); }
 }
+.aux-image .aux-dialog { width:500px; max-height:100%; overflow:auto; gap:10px; }
+.aux-image .aux-dialog > :is(h3,p) { margin:0; }
+.aux-image .aux-dialog .aux-crop-fields { grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.aux-image .aux-dialog .aux-inline-error:empty { display:none; }
+.aux-image .aux-dialog .image-crop-guide { height:clamp(100px,33vh,210px); margin:2px 0; }
+@media (max-width:420px) {
+  .aux-image .aux-dialog-shade { padding:10px; }
+  .aux-image .aux-dialog { padding:14px; }
+  .aux-image .aux-dialog .aux-crop-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}

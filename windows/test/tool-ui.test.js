@@ -187,8 +187,29 @@ app.whenReady().then(async()=>{
   await mount('markdown','# OpenAll 笔记\n\n在一处编辑与预览。\n\n- [x] Markdown\n- [x] Mermaid 图表\n\n```mermaid\nflowchart LR\nA[输入] --> B[编辑]\nB --> C[导出]\n```\n\n| 工具 | 状态 |\n| --- | --- |\n| JSON | 可用 |');await until('document.querySelector(".aux-diagram svg")!==null','Mermaid 图表');await capture('markdown');await js('document.querySelector(".aux-editor-frame").focus();');win.webContents.sendInputEvent({type:'keyDown',keyCode:'F',modifiers:[process.platform==='darwin'?'meta':'control']});await until('!document.querySelector(".aux-findbar").hidden','Markdown 搜索框');await fill('.aux-findbar input','OpenAll');await until('document.querySelector(".aux-findbar span").textContent.includes("1 / 1")','Markdown 内容搜索');await js('document.querySelector(".aux-findbar button:last-child").click();');await click('复制 Markdown');assert.match(await js('return window.copied'),/# OpenAll/);await click('导出 HTML…');await until('window.saved.length===1','HTML 导出');assert.match(await js('return window.saved[0].text'),/<svg/);
   await fill('textarea,.aux-editor-frame','<script>window.hacked=1</script>\n<img src=x onerror="window.hacked=1">\n[bad](javascript:alert(1))');await until('document.querySelector(".aux-status").textContent.includes("预览已更新")','Markdown 安全预览');assert.equal(await js('return Boolean(window.hacked||document.querySelector(".aux-markdown-preview script")||document.querySelector(".aux-markdown-preview [onerror]"))'),false);
 
+  await fill('.aux-editor-frame','前后');
+  await js("const input=document.querySelector('.aux-editor-frame'); input.focus();");
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'Home'});
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'Right'});
+  await until('document.querySelector(".aux-editor-frame").selectionStart===1','移动至 Markdown 插入位置');
+  await click('语法示例');
+  assert.ok(await js('const right=document.querySelector(".aux-help-popover"), left=document.querySelector(".aux-editor-frame"); return right.getBoundingClientRect().left>=left.getBoundingClientRect().right-1 && right.querySelector("h4").textContent==="基础语法";'));
+  await capture('markdown-help');
+  await click('加粗');
+  assert.equal(await js('return document.querySelector(".aux-editor-frame").value'),'前**加粗文字**后');
+
   const image=await js('const canvas=document.createElement("canvas");canvas.width=800;canvas.height=500;const ctx=canvas.getContext("2d"),g=ctx.createLinearGradient(0,0,800,500);g.addColorStop(0,"#d8c19e");g.addColorStop(1,"#49716b");ctx.fillStyle=g;ctx.fillRect(0,0,800,500);ctx.fillStyle="#f8f7ef";ctx.font="42px sans-serif";ctx.fillText("OpenAll",60,100);ctx.strokeStyle="#ffffff90";ctx.lineWidth=3;ctx.strokeRect(60,150,680,290);return canvas.toDataURL();');
-  await mount('image',image);await until('document.querySelector(".aux-image-size").textContent.includes("PNG")','图片编码');await capture('image');assert.match(await js('return document.querySelector(".aux-image-summary p").textContent'),/体积相近|减小|增大/);await click('↷ 右转');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="500" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片旋转');await click('⌗ 裁剪');await js('const fields=document.querySelectorAll(".aux-crop-fields input");fields[0].value="20";fields[1].value="30";fields[2].value="100";fields[3].value="120";');await click('裁剪');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="100" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片裁剪');await click('保存文件…');await until('window.saved.length===2','图片保存');await click('复制图片');await until('Boolean(window.copiedImage)','图片复制');
+  await mount('image',image);await until('document.querySelector(".aux-image-size").textContent.includes("PNG")','图片编码');await capture('image');assert.match(await js('return document.querySelector(".aux-image-summary p").textContent'),/体积相近|减小|增大/);await click('↷ 右转');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="500" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片旋转');await click('⌗ 裁剪');
+  const dragPoints = await js(`const matrix=document.querySelector('.image-crop-guide').getScreenCTM();
+    return [[30,50],[320,370]].map(([x,y])=>{const p=new DOMPoint(x,y).matrixTransform(matrix);return {x:Math.round(p.x),y:Math.round(p.y)};});`);
+  win.webContents.sendInputEvent({type:'mouseDown',...dragPoints[0],button:'left',clickCount:1});
+  win.webContents.sendInputEvent({type:'mouseMove',...dragPoints[1],modifiers:['leftButtonDown']});
+  win.webContents.sendInputEvent({type:'mouseUp',...dragPoints[1],button:'left',clickCount:1});
+  await until('Number(document.querySelector(".aux-crop-fields input").value)>0','拖动图片更新裁剪坐标');
+  await js(`const fields=[...document.querySelectorAll(".aux-crop-fields input")];[20,30,100,120].forEach((value,i)=>{fields[i].value=String(value);fields[i].dispatchEvent(new Event('input'));});`);
+  assert.equal(await js('return document.querySelector(".image-crop-guide rect").getAttribute("width")'),'100');
+  await capture('image-crop-selected');
+  await click('裁剪');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="100" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片裁剪');await click('保存文件…');await until('window.saved.length===2','图片保存');await click('复制图片');await until('Boolean(window.copiedImage)','图片复制');
   const copied=await js('return window.copiedImage');assert.ok(copied.startsWith('data:image/png;'));
 
   for(const id of ['id','markdown','unicode','image','manual']){

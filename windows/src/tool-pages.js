@@ -149,7 +149,7 @@
       }));
       setStatus(status,birthday?'出生日期 '+birthdayText(birthday):'');
     }catch(error){setStatus(status,error.message,true);}},'primary');
-    root.append(h('div',{class:'aux-id-top'},label('省份',province),label('城市',city),label('区县',region)),h('div',{class:'aux-id-date'},label('按年龄推算',age),label('出生日期 · 可手填',h('div',{class:'aux-inline'},year,month,day)),label('性别',gender),label('生成数量 · 1–500',count)),h('div',{class:'aux-actions'},generate,h('span',{class:'muted'},'按周岁沿用今天的月日；生日留空则随机。')),h('div',{class:'aux-section-bar'},heading,button('复制全部',()=>copy(ctx,numbers.join('\n')),'accent')),result,status);const keydown=event=>{if(event.key==='Enter'&&event.target.matches('input')&&!event.isComposing){event.preventDefault();generate.click();}};root.addEventListener('keydown',keydown);generate.click();return {focus:()=>age.focus(),dispose(){root.removeEventListener('keydown',keydown);}};
+    root.append(h('div',{class:'aux-id-top'},label('省份',province),label('城市',city),label('区县',region)),h('div',{class:'aux-id-date'},label('按年龄推算',age),label('出生日期 · 可手填',h('div',{class:'aux-inline'},year,month,day)),label('性别',gender),label('生成数量 · 1–500',count)),h('div',{class:'aux-actions'},generate,h('span',{class:'muted'},'按周岁沿用今天的月日，生日留空则随机。')),h('div',{class:'aux-section-bar'},heading,button('复制全部',()=>copy(ctx,numbers.join('\n')),'accent')),result,status);const keydown=event=>{if(event.key==='Enter'&&event.target.matches('input')&&!event.isComposing){event.preventDefault();generate.click();}};root.addEventListener('keydown',keydown);generate.click();return {focus:()=>age.focus(),dispose(){root.removeEventListener('keydown',keydown);}};
   };
   pages.converter=async(root,ctx)=>{
     const status=shell(root,'converter'),job=worker(),modes=h('div',{class:'aux-tabs wide',role:'group','aria-label':'转换模式'}),content=h('div',{class:'aux-converter-body'});let mode='duration',timer,dead=false,cronSequence=0;const tabs=[['duration','时间单位'],['cron','Cron 表达式'],['ascii','ASCII 码表']];root.append(modes,content,status);
@@ -352,10 +352,10 @@
     examples.append(h('div',{class:'aux-section-bar'},h('strong',{},'语法速查'),button('关闭',()=>{examples.hidden=true;source.focus();},'quiet')));
     for (const [title,items] of [['基础语法', markdownExamples.slice(4)], ['Mermaid 图形', markdownExamples.slice(0,4)]]) {
       examples.append(h('h4',{},title),...items.map(([name,text])=>{
-      const row=button(name,()=>insert(text),'quiet'),line=text.split('\n');
-      row.dataset.sample=line[0]==='```mermaid'?line[1]:line[0];
-      row.title=text;
-      return row;
+        const row=button(name,()=>insert(text),'quiet'),line=text.split('\n');
+        row.dataset.sample=line[0]==='```mermaid'?line[1]:line[0];
+        row.title=text;
+        return row;
       }));
     }
     async function saveHTML(){try{await ctx.api.fileAction('save',{name:'OpenAll.html',text:'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>OpenAll Markdown</title><style>body{max-width:900px;margin:40px auto;font:16px/1.65 system-ui;padding:24px}pre{white-space:pre-wrap;background:#f4f4f4;padding:16px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:8px}img,svg{max-width:100%}</style><body>'+preview.innerHTML+'</body></html>'});}catch(error){setStatus(status,error.message,true);}}

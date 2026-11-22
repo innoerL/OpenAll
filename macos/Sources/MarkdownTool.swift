@@ -183,7 +183,7 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
         if helpView != nil { dismissHelp(); return }
         let width = root.bounds.width / 2 - 20
         let card = NSView(frame: NSRect(x: root.bounds.width / 2, y: 20,
-                                        width: width, height: root.bounds.height - 118))
+                                        width: width, height: root.bounds.height - 86))
         card.autoresizingMask = [.minXMargin, .height]
         card.wantsLayer = true
         card.layer?.cornerRadius = 10
@@ -214,8 +214,7 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
         close.frame = NSRect(x: width - 48, y: card.bounds.height - 47, width: 30, height: 30)
         close.autoresizingMask = [.minYMargin]
         card.addSubview(close)
-        let visibleHeight = floor((card.bounds.height - 131) / 34) * 34 + 24
-        let scroll = NSScrollView(frame: NSRect(x: 14, y: card.bounds.height - 76 - visibleHeight, width: width - 28, height: visibleHeight))
+        let scroll = NSScrollView(frame: NSRect(x: 14, y: 12, width: width - 28, height: card.bounds.height - 88))
         scroll.autoresizingMask = [.height]
         scroll.hasVerticalScroller = true
         scroll.scrollerStyle = .overlay

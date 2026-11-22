@@ -66,6 +66,8 @@
     const list = h('div', {class: 'search-results', id: 'launcher-results', role: 'listbox', 'aria-label': '搜索结果'});
     const footer = h('div', {class: 'search-footer', id: 'launcher-hint'});
     const returnHint = h('kbd', {class: 'search-result-action'});
+    const contextHint = h('span', {class: 'search-result-context'});
+    const rowCommands = h('span', {class: 'search-result-commands'}, returnHint, contextHint);
     let rows = [], selected = -1, request = 0, pinned = !!ownContext.pinned, disposed = false, searchMessage = '';
     const pin = iconButton('pin', '固定搜索窗口', async () => {
       pinned = !pinned;
@@ -97,8 +99,7 @@
         else message = '没有匹配结果 · 输入 ? 浏览命令';
       }
       if (!message) {
-        const shortcut = isCatalog() && item.type === 'tool' ? (isFavorite(item) ? 'Ctrl+K 取消收藏' : 'Ctrl+K 收藏') : 'Ctrl+K 操作';
-        message = (q.startsWith('=') ? '精确匹配 · ' : '') + (rows.length > 1 ? '↑↓ 选择　' : '') + shortcut;
+        message = (q.startsWith('=') ? '精确匹配 · ' : '') + rows.length + ' 项结果' + (rows.length > 1 ? '　↑↓ 选择' : '');
       }
       if (footer.textContent !== message) footer.textContent = message;
     }
@@ -115,10 +116,12 @@
         current.setAttribute('aria-selected', 'true');
         input.setAttribute('aria-activedescendant', current.id);
         returnHint.textContent = '↵  ' + returnAction(rows[selected]);
-        current.append(returnHint);
+        contextHint.textContent = isCatalog() && rows[selected].type === 'tool'
+          ? (isFavorite(rows[selected]) ? 'Ctrl+K 取消收藏' : 'Ctrl+K 收藏') : 'Ctrl+K 操作';
+        current.append(rowCommands);
       } else {
         input.removeAttribute('aria-activedescendant');
-        returnHint.remove();
+        rowCommands.remove();
       }
       updateHint();
     }
@@ -225,6 +228,8 @@
           content.append(h('img', {src:r.dataUrl || 'data:image/png;base64,' + (r.thumbnail || r.value), alt:r.title || '剪贴板图片', loading:'lazy'}));
         } else {
           const body = r.kind === 'files' ? (r.files || []).map(x => x.split(/[\\/]/).pop()).join('\n') : r.text || r.value || r.title || '';
+          const shortText = !r.truncated && body.length <= 46 && !/[\r\n]/.test(body) && (body.length <= 24 || /[^!-~]/.test(body));
+          content.classList.toggle('short-text', format !== 'JSON' && shortText);
           const excerpt = markFirst(body.slice(0, 1800), pattern);
           if (format === 'JSON') content.append(h('pre', {}, excerpt));
           else content.append(...excerpt);
@@ -249,7 +254,7 @@
       if (item.favorite || item.pinned || item.tags?.length) { notify('固定卡片不能直接删除，请先取消固定'); return; }
       await action('delete', {ids:[id(item)]});
     }
-    function cardMenu(anchor){const r=filtered[current];if(!r)return;const text=r.text||r.value||'';const rows=[{label:'对内容操作…',action:()=>api.clipboardAction('selection',{ids:[id(r)]})},null,{label:'粘贴',action:paste},{label:'粘贴为纯文本',action:()=>action('paste',{plain:true})},{label:'复制',action:()=>action('copy')},{label:'预览全文',action:preview},null,{label:r.favorite?'取消收藏':'收藏',action:()=>action('favorite')},{label:'添加到标签',action:()=>menu((settings.clipboardPreferences?.pinboards||['收藏']).map(tag=>({label:tag,action:()=>action('tag',{tag})})),anchor)},{label:'两条卡片对比',disabled:selected.size!==2,action:()=>action('compare')},{label:'合并为新文本卡片',disabled:selected.size<2||filtered.filter(x=>selected.has(id(x))).some(x=>['image','files'].includes(x.kind)),action:async()=>{await action('merge');await refresh();}},{label:'编辑后粘贴…',disabled:['image','files'].includes(r.kind),action:async()=>{const full=await api.clipboardAction('read',{ids:[id(r)]}),record=Array.isArray(full)?full[0]:full;const editor=h('textarea',{value:record.text||record.value,style:{width:'520px',height:'240px'},'aria-label':'编辑后粘贴'});const d=UI.dialog('编辑后粘贴',editor,[button('取消',()=>d.close()),button('粘贴',async()=>{await api.clipboardAction('editPaste',{ids:[id(r)],text:editor.value});d.close();},'primary')]);editor.focus();}},{label:'加入复制堆栈',action:()=>api.stack('add',{ids:[...selected]})},null,...[['json','JSON 工具'],['comparison','文本对比'],['markdown','Markdown'],['translate','翻译'],['snippets','保存为常用片段']].map(([tool,label])=>({label,disabled:r.kind==='image'&&tool!=='translate',action:async()=>{if(tool==='snippets'){await api.clipboardAction('snippet',{ids:[id(r)]});notify('已保存常用片段');}else await api.clipboardAction('openTool',{ids:[id(r)],page:tool});}}))];
+    function cardMenu(anchor){const r=filtered[current];if(!r)return;const text=r.text||r.value||'';const rows=[{label:'对内容操作…',action:()=>api.clipboardAction('selection',{ids:[id(r)]})},null,{label:'粘贴',action:paste},{label:'粘贴为纯文本',action:()=>action('paste',{plain:true})},{label:'复制',action:()=>action('copy')},{label:'预览全文',action:preview},null,{label:r.favorite?'取消收藏':'收藏',action:()=>action('favorite')},{label:'添加到标签',action:()=>menu((settings.clipboardPreferences?.pinboards||['收藏']).map(tag=>({label:tag,action:()=>action('tag',{tag})})),anchor)},{label:'两条卡片对比',disabled:selected.size!==2,action:()=>action('compare')},{label:'合并为新文本卡片',disabled:selected.size<2||filtered.filter(x=>selected.has(id(x))).some(x=>['image','files'].includes(x.kind)),action:async()=>{await action('merge');await refresh();}},{label:'编辑后粘贴…',disabled:['image','files'].includes(r.kind),action:async()=>{const full=await api.clipboardAction('read',{ids:[id(r)]}),record=Array.isArray(full)?full[0]:full;const editor=h('textarea',{value:record.text||record.value,'aria-label':'编辑后粘贴'});const d=UI.dialog('编辑后粘贴',editor,[button('取消',()=>d.close()),button('粘贴',async()=>{await api.clipboardAction('editPaste',{ids:[id(r)],text:editor.value});d.close();},'primary')]);d.classList.add('clip-edit-dialog');editor.focus();}},{label:'加入复制堆栈',action:()=>api.stack('add',{ids:[...selected]})},null,...[['json','JSON 工具'],['comparison','文本对比'],['markdown','Markdown'],['translate','翻译'],['snippets','保存为常用片段']].map(([tool,label])=>({label,disabled:r.kind==='image'&&tool!=='translate',action:async()=>{if(tool==='snippets'){await api.clipboardAction('snippet',{ids:[id(r)]});notify('已保存常用片段');}else await api.clipboardAction('openTool',{ids:[id(r)],page:tool});}}))];
       if(r.kind==='image')rows.push({label:'识别图片文字',action:async()=>{const v=await api.clipboardAction('ocr',{ids:[id(r)]});notify(v.text?'文字识别完成':'未识别到文字');await refresh();}},{label:'图片处理',action:async()=>{const full=await api.clipboardAction('read',{ids:[id(r)]}),record=Array.isArray(full)?full[0]:full;await openTool('image',{dataUrl:record.dataUrl||'data:image/png;base64,'+record.value});}});
       if(r.kind==='link'||/^https?:\/\/\S+$/.test(text))rows.push({label:'打开链接',action:()=>api.open({type:'url',value:text.trim()})});
       if(r.kind==='files')rows.push({label:'指定应用打开…',action:()=>api.fileAction('openWith',{path:r.files?.[0]})},{label:'在文件夹中显示',action:()=>api.fileAction('reveal',{path:r.files?.[0]})});rows.push(null,{label:'删除未固定记录',danger:true,disabled:[...selected].every(key=>all.find(x=>id(x)===key)?.favorite),action:remove});menu(rows,anchor);
@@ -296,7 +301,7 @@
         }
       } else {
         content.textContent = text;
-        if (['JSON', 'HTML', 'Markdown'].includes(format)) content.classList.add('is-code');
+        if (['JSON', 'HTML'].includes(format)) content.classList.add('is-code');
       }
       copy = () => api.copyText(text);
       const openIn = button('用工具打开 ▾', () => menu(['json','comparison','markdown','translate'].map(id =>

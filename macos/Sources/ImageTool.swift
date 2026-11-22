@@ -171,7 +171,15 @@ final class ImagePreviewCanvas: NSView {
     }
 }
 
-private final class ImageCropGuide: NSView {
+private final class ImageCropSheet: NSPanel {
+    @objc func applyCrop() { sheetParent?.endSheet(self, returnCode: .OK) }
+    override func cancelOperation(_ sender: Any?) { sheetParent?.endSheet(self, returnCode: .cancel) }
+}
+
+private final class ImageCropGuide: NSView, NSTextFieldDelegate {
+    var updateFromFields: (() -> Void)?
+    func controlTextDidChange(_ notification: Notification) { updateFromFields?() }
+
     let source: NSImage
     let pixels: NSSize
     var selection: NSRect { didSet { needsDisplay = true } }
@@ -201,6 +209,20 @@ private final class ImageCropGuide: NSView {
         didSelect?(rect)
     }
     override func mouseUp(with event: NSEvent) { mouseDragged(with: event); start = nil }
+    func verifyDragForDesign(region: NSRect) -> Bool {
+        guard DesignPreview.enabled, let window else { return false }
+        let scale = imageRect.width / pixels.width
+        func event(_ type: NSEvent.EventType, _ x: CGFloat, _ y: CGFloat) -> NSEvent? {
+            let location = convert(NSPoint(x: imageRect.minX + x * scale, y: imageRect.minY + y * scale), to: nil)
+            return NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: 0,
+                                      windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        guard let down = event(.leftMouseDown, region.minX, region.minY),
+              let moved = event(.leftMouseDragged, region.maxX, region.maxY),
+              let up = event(.leftMouseUp, region.maxX, region.maxY) else { return false }
+        mouseDown(with: down); mouseDragged(with: moved); mouseUp(with: up)
+        return true
+    }
 
     init(frame: NSRect, source: NSImage, pixels: NSSize) {
         self.source = source
@@ -239,6 +261,7 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
     private var previewHint: NSButton?
     private var previewCaption: NSTextField?
     private var previewScale: NSTextField?
+    private var verifyCrop: (() throws -> Void)?
     private var chooseButton: NSButton?
     private var width: NSTextField!
     private var height: NSTextField!
@@ -520,23 +543,51 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
     }
 
     @objc private func cropImage() {
-        guard let sourceImage else { return }
-        let alert = NSAlert()
-        alert.messageText = "裁剪图片"
-        alert.informativeText = "原图 \(Int(sourceSize.width)) × \(Int(sourceSize.height)) 像素。拖出选区，或从左上角输入坐标。"
-        alert.addButton(withTitle: "裁剪")
-        alert.addButton(withTitle: "取消")
-        let labels = ["起点 X", "起点 Y", "宽", "高"]
-        let defaults = ["0", "0", String(Int(sourceSize.width)), String(Int(sourceSize.height))]
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
-        let guide = ImageCropGuide(frame: NSRect(x: 0, y: 62, width: 400, height: 138), source: sourceImage, pixels: sourceSize)
+        guard let sourceImage, let parent = window, parent.attachedSheet == nil else { return }
+        let bounds = NSRect(x: 0, y: 0, width: 472, height: 374)
+        let panel = ImageCropSheet(contentRect: bounds, styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
+        panel.title = "裁剪图片"
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.appearance = OpenAllTheme.appearance
+        let container = NSView(frame: bounds)
+        container.wantsLayer = true
+        container.layer?.backgroundColor = OpenAllTheme.sidebar.cgColor
+        panel.contentView = container
+        let title = NSTextField(labelWithString: "裁剪图片")
+        title.font = .systemFont(ofSize: 18, weight: .semibold)
+        title.textColor = OpenAllTheme.ink
+        title.frame = NSRect(x: 20, y: 332, width: 420, height: 25)
+        container.addSubview(title)
+        let help = NSTextField(labelWithString: "原图 \(Int(sourceSize.width)) × \(Int(sourceSize.height)) 像素。拖出选区，或从左上角输入坐标。")
+        help.font = .systemFont(ofSize: 12)
+        help.textColor = OpenAllTheme.muted
+        help.frame = NSRect(x: 20, y: 310, width: 432, height: 19)
+        container.addSubview(help)
+        let guide = ImageCropGuide(frame: NSRect(x: 20, y: 123, width: 432, height: 178), source: sourceImage, pixels: sourceSize)
         container.addSubview(guide)
+        let cancel = NSButton(title: "取消", target: panel, action: #selector(NSResponder.cancelOperation(_:)))
+        cancel.frame = NSRect(x: 284, y: 14, width: 76, height: 30)
+        cancel.keyEquivalent = "\u{1b}"
+        WindowChrome.styleAction(cancel)
+        container.addSubview(cancel)
+        let submit = NSButton(title: "裁剪", target: panel, action: #selector(ImageCropSheet.applyCrop))
+        submit.frame = NSRect(x: 370, y: 14, width: 82, height: 30)
+        submit.keyEquivalent = "\r"
+        WindowChrome.styleAction(submit, primary: true)
+        container.addSubview(submit)
+        let labels = ["起点 X", "起点 Y", "宽", "高"]
+        let maxSize = sourceSize
+        let defaults = ["0", "0", String(Int(maxSize.width)), String(Int(maxSize.height))]
         var fields: [NSTextField] = []
         for index in 0..<4 {
             let label = NSTextField(labelWithString: labels[index])
-            label.frame = NSRect(x: CGFloat(index * 100), y: 32, width: 90, height: 20)
+            label.frame = NSRect(x: CGFloat(20 + index * 110), y: 94, width: 100, height: 18)
+            label.textColor = OpenAllTheme.muted
+            label.font = .systemFont(ofSize: 12, weight: .medium)
             container.addSubview(label)
-            let field = NSTextField(frame: NSRect(x: CGFloat(index * 100), y: 0, width: 90, height: 28))
+            let field = NSTextField(frame: NSRect(x: CGFloat(20 + index * 110), y: 61, width: 100, height: 29))
+            field.delegate = guide
             field.stringValue = defaults[index]
             field.setAccessibilityLabel(labels[index])
             WindowChrome.styleInput(field)
@@ -544,39 +595,53 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
             fields.append(field)
         }
         guide.didSelect = { rect in
+            submit.isEnabled = true
             for (field,value) in zip(fields, [rect.minX, rect.minY, rect.width, rect.height]) { field.integerValue = Int(value) }
         }
-        let observers = fields.map { field in
-            NotificationCenter.default.addObserver(forName: NSControl.textDidChangeNotification, object: field, queue: .main) { _ in
-                let numbers = fields.compactMap { Int($0.stringValue) }
-                guard numbers.count == 4, numbers[2] > 0, numbers[3] > 0 else {
-                    guide.selection = .zero
-                    return
-                }
-                guide.selection = NSRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3])
+        let updateGuide = { [weak guide] in
+            guard let guide else { return }
+            let numbers = fields.compactMap { Int($0.stringValue) }
+            guard numbers.count == 4, numbers[0] >= 0, numbers[1] >= 0, numbers[2] > 0, numbers[3] > 0,
+                  numbers[0] <= Int(maxSize.width) - numbers[2], numbers[1] <= Int(maxSize.height) - numbers[3] else {
+                guide.selection = .zero
+                submit.isEnabled = false
+                return
             }
+            guide.selection = NSRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3])
+            submit.isEnabled = true
         }
-        defer { observers.forEach { NotificationCenter.default.removeObserver($0) } }
-        alert.accessoryView = container
+        guide.updateFromFields = updateGuide
+        panel.initialFirstResponder = fields.first
         if DesignPreview.enabled {
-            alert.layout()
-            alert.window.contentView?.wantsLayer = true
-            alert.window.contentView?.layer?.backgroundColor = OpenAllTheme.canvas.cgColor
-            DesignPreview.lastWindow = alert.window
+            DesignPreview.lastWindow = panel
+            verifyCrop = {
+                let region = NSRect(x: 64, y: 45, width: 300, height: 210)
+                let selected = guide.verifyDragForDesign(region: region)
+                guard selected, zip(fields,[64,45,300,210]).allSatisfy({ abs($0.0.integerValue - $0.1) <= 2 }) else {
+                    throw NSError(domain: "CropDragCoordinates", code: 1)
+                }
+                fields[2].integerValue = 284
+                updateGuide()
+                guard guide.selection.width == 284, submit.isEnabled else { throw NSError(domain: "CropInputGuide", code: 1) }
+            }
             return
         }
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let values = fields.compactMap { Int($0.stringValue) }
-        guard values.count == 4, values[0] >= 0, values[1] >= 0, values[2] > 0, values[3] > 0,
-              values[0] <= Int(sourceSize.width), values[1] <= Int(sourceSize.height),
-              values[2] <= Int(sourceSize.width) - values[0], values[3] <= Int(sourceSize.height) - values[1],
-              let changed = ImageProcessor.transformed(sourceImage, pixelSize: sourceSize,
-                  crop: CGRect(x: values[0], y: values[1], width: values[2], height: values[3])) else {
-            setStatus("裁剪区域超出图片范围")
-            return
+        parent.beginSheet(panel) { [weak self] response in
+            guard let self, response == .OK, self.sourceImage === sourceImage else { return }
+            updateGuide()
+            guard submit.isEnabled, let changed = ImageProcessor.transformed(sourceImage, pixelSize: maxSize, crop: guide.selection) else {
+                self.setStatus("裁剪区域超出图片范围")
+                return
+            }
+            self.load(image: changed, data: nil, url: nil, preserveMetadata: true)
+            self.setStatus("已裁剪为 \(Int(guide.selection.width)) × \(Int(guide.selection.height))")
         }
-        load(image: changed, data: nil, url: nil, preserveMetadata: true)
-        setStatus("已裁剪为 \(values[2]) × \(values[3])")
+    }
+
+    func verifyCropForDesign() throws {
+        guard DesignPreview.enabled, let verifyCrop else { throw NSError(domain: "MissingCropGuide", code: 1) }
+        defer { self.verifyCrop = nil }
+        try verifyCrop()
     }
 
     func controlTextDidChange(_ obj: Notification) {

@@ -320,7 +320,7 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         WindowChrome.styleAction(generate, primary: true)
         generate.keyEquivalent = "\r"
         root.addSubview(generate)
-        let birthdayHint = NSTextField(labelWithString: "按周岁沿用今天的月日；生日留空则随机。")
+        let birthdayHint = NSTextField(labelWithString: "按周岁沿用今天的月日，生日留空则随机。")
         birthdayHint.font = .systemFont(ofSize: 12)
         birthdayHint.textColor = OpenAllTheme.muted
         birthdayHint.frame = NSRect(x: 172, y: 264, width: 442, height: 18)

@@ -1834,7 +1834,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         }
         let oldHeight = editor.enclosingScrollView!.frame.height
         closeSearch()
-        guard editor.enclosingScrollView!.frame.height == oldHeight + 36, result.source == sample,
+        guard editor.enclosingScrollView!.frame.height == oldHeight, result.source == sample,
               !searchVisible, searchMatches.isEmpty else { return false }
         show(String(repeating: "x", count: 10005))
         openSearch()

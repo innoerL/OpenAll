@@ -156,8 +156,13 @@ html:has(#outlook:not([hidden])) {
 #chart-basis { margin:1px 0 4px; }
 #range-chart-toggle { display:none; }
 @media (max-width:440px) {
-  #range-chart-toggle { display:inline-block; float:right; font:inherit; color:var(--secondary); background:transparent; border:1px solid var(--border); padding:1px 5px; border-radius:4px; }
+  .range-column-title { display:none; }
+  #range-chart-toggle { display:flex; justify-content:flex-end; align-items:center; gap:5px; width:100%; min-height:20px; font:inherit; color:var(--secondary); background:transparent; border:0; padding:0; }
+  #range-chart-toggle svg { color:var(--accent-ink); }
   #range-chart-toggle[aria-pressed=true] { color:var(--accent-ink); }
   #outlook:not(.show-range-chart) :is(#range-key,#range-scale,.range-guide,.range-track) { display:none; }
   #outlook:not(.show-range-chart) .forecast-range { vertical-align:middle; }
 }
+
+.summary .week-confidence { display:none; }
+.summary .week-summary { column-gap:5px; }
