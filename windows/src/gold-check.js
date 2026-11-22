@@ -25,11 +25,11 @@ module.exports = async function verifyGold(searchWindow, output) {
   }
   const read = () => execute(gold, () => openallGold.read());
   const click = id => execute(gold, value => document.getElementById(value).click(), id);
-  async function capture(name) {
+  async function capture(name, target = gold) {
     fs.mkdirSync(output, { recursive: true });
-    await execute(gold, async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+    await execute(target, async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
     const filename = 'gold-' + name + '.png';
-    fs.writeFileSync(path.join(output, filename), (await gold.webContents.capturePage()).toPNG()); screenshots.push(filename);
+    fs.writeFileSync(path.join(output, filename), (await target.webContents.capturePage()).toPNG()); screenshots.push(filename);
   }
   try {
     const result = await execute(searchWindow, async () => (await openall.search('金价')).find(item => item.value === 'gold'));
@@ -288,6 +288,7 @@ module.exports = async function verifyGold(searchWindow, output) {
     await until(() => execute(gold, () => document.body.dataset.edgeSide === 'left' && document.body.dataset.edgeCollapsing === 'true'), '贴边收起');
     const rail = BrowserWindow.getAllWindows().find(win => /gold-edge-rail\.html/.test(win.webContents.getURL()));
     check(!!rail, '贴边浮条创建并保留展开入口');
+    await capture('edge-rail', rail);
     await execute(searchWindow, () => openall.openTool('gold'));
     await until(() => execute(gold, () => document.body.dataset.edgeCollapsing === 'false'), '搜索重新展开贴边窗口');
     await click('edge-setting'); await until(async () => !(await read()).edgeEnabled, '退出贴边模式');
