@@ -219,8 +219,11 @@ final class PermissionsView: NSView {
         let accessibility = label("辅助功能", x: 28, y: 339, width: 180, size: 13)
         accessibility.font = .systemFont(ofSize: 13, weight: .medium)
         addSubview(accessibility)
-        accessibilityStatus = label("", x: 28, y: 312, width: 160)
+        accessibilityStatus = label("", x: 209, y: 339, width: 151)
         addSubview(accessibilityStatus)
+        let accessDetail = label("用于读取选中内容和自动粘贴。", x: 28, y: 312, width: 335)
+        accessDetail.textColor = OpenAllTheme.muted
+        addSubview(accessDetail)
         let accessibilityHelp = NSButton(title: "图标显示异常？查看处理方法 →", target: self, action: #selector(showIconHelp))
         accessibilityHelp.isBordered = false
         accessibilityHelp.alignment = .left
@@ -236,10 +239,10 @@ final class PermissionsView: NSView {
         let files = label("文件与文件夹", x: 28, y: 239, width: 180, size: 13)
         files.font = .systemFont(ofSize: 13, weight: .medium)
         addSubview(files)
-        fileStatus = label("", x: 28, y: 212, width: 152)
+        fileStatus = label("", x: 209, y: 239, width: 151)
         fileStatus.textColor = OpenAllTheme.muted
         addSubview(fileStatus)
-        fileHelp = label("文件搜索使用 Spotlight 与本地扫描；受保护目录按提示授权。", x: 28, y: 178, width: 335)
+        fileHelp = label("文件搜索使用 Spotlight 与本地扫描；受保护目录按提示授权。", x: 28, y: 198, width: 335)
         fileHelp.textColor = OpenAllTheme.muted
         fileHelp.cell?.wraps = true
         fileHelp.cell?.usesSingleLineMode = false
@@ -259,14 +262,14 @@ final class PermissionsView: NSView {
         let browser = label("Chrome 书签与历史", x: 28, y: 124, width: 220, size: 13)
         browser.font = .systemFont(ofSize: 13, weight: .medium)
         addSubview(browser)
-        let browserStatus = label("无需额外授权", x: 28, y: 96, width: 160)
+        let browserStatus = label("无需额外授权", x: 209, y: 124, width: 151)
         browserStatus.textColor = OpenAllTheme.muted
         addSubview(browserStatus)
         let browserButton = NSButton(title: "打开搜索设置 →", target: self, action: #selector(openSearchSettings))
         browserButton.frame = NSRect(x: 385, y: 119, width: 180, height: 30)
         WindowChrome.styleOutputAction(browserButton)
         addSubview(browserButton)
-        let browserHelp = label("书签与历史的搜索范围可在搜索设置中调整。", x: 28, y: 68, width: 630)
+        let browserHelp = label("书签与历史的搜索范围可在搜索设置中调整。", x: 28, y: 97, width: 536)
         browserHelp.textColor = OpenAllTheme.muted
         addSubview(browserHelp)
         subviews.forEach { $0.frame.origin.y += 25 }
@@ -274,8 +277,9 @@ final class PermissionsView: NSView {
     }
 
     @objc private func refresh() {
-        accessibilityStatus.stringValue = AXIsProcessTrusted() ? "● 已授权" : "● 未授权"
-        accessibilityStatus.textColor = AXIsProcessTrusted() ? OpenAllTheme.muted : .systemOrange
+        let trusted = AXIsProcessTrusted()
+        accessibilityStatus.stringValue = trusted ? "已授权" : "待授权"
+        accessibilityStatus.textColor = trusted ? OpenAllTheme.muted : .systemOrange
         refreshFileStatus()
     }
 
@@ -283,6 +287,7 @@ final class PermissionsView: NSView {
         filesPermissionButton.isHidden = !fileSearchEnabled
         guard fileSearchEnabled else {
             fileStatus.stringValue = "搜索已关闭"
+            fileStatus.textColor = OpenAllTheme.muted
             fileHelp.stringValue = "开启后检查桌面、文稿与下载文件夹的权限。"
             downloadsButton.title = "开启文件搜索"
             downloadsButton.target = self

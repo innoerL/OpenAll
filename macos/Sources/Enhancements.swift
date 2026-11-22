@@ -335,7 +335,8 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
             label(title, x: CGFloat(x), y: 352, width: 48, size: 13, color: OpenAllTheme.ink).font = .systemFont(ofSize: 13, weight: .semibold)
         }
         inputSummary = label("", x: 70, y: 352, width: 245)
-        outputSummary = label("", x: 550, y: 352, width: 269)
+        outputSummary = label("", x: 550, y: 352, width: 282)
+        outputSummary.alignment = .right
         for summary in [inputSummary, outputSummary] {
             summary?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             summary?.lineBreakMode = .byTruncatingTail
@@ -403,7 +404,7 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         status.cell?.wraps = true
         status.cell?.isScrollable = false
         status.maximumNumberOfLines = 2
-        changeLegend = NSView(frame: NSRect(x: 140, y: 24, width: 2, height: 11))
+        changeLegend = NSView(frame: NSRect(x: 498, y: 358, width: 2, height: 11))
         changeLegend.wantsLayer = true
         changeLegend.layer?.backgroundColor = OpenAllTheme.accent.cgColor
         changeLegend.isHidden = true
@@ -449,21 +450,14 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         case .configuration:
             if let result = LocalTextTools.formatConfiguration(input.string) {
                 output.string = result.0
-                let before = input.string.components(separatedBy: "\n")
-                let after = result.0.components(separatedBy: "\n")
-                let changed = max(before.count, after.count) - zip(before, after).filter { $0.0 == $0.1 }.count
-                let changedLines = Set(after.indices.filter { $0 >= before.count || before[$0] != after[$0] }.map { $0 + 1 })
-                (output as? OpenAllTextView)?.changedLineNumbers = changedLines
-                outputSummary.stringValue = result.1.hasPrefix("YAML") ? "YAML · 2 空格缩进" : "Properties"
-                status.stringValue = changed == 0 ? "格式已规范" : "行侧标记：格式调整"
-                outputSummary.stringValue += changed > 0 ? " · \(changed) 行已调整" : " · 无改动"
-                changeLegend.isHidden = changed == 0
+                summarizeFormatting(result.1.hasPrefix("YAML") ? "YAML" : "Properties")
+                status.stringValue = ""
             }
             else { output.string = ""; status.stringValue = "配置格式无法识别；请检查 YAML 或 Properties 语法" }
         case .sql:
             if let formatted = LocalTextTools.formatSQL(input.string) {
                 output.string = formatted
-                outputSummary.stringValue = "通用 SQL · \(formatted.components(separatedBy: "\n").count) 行"
+                summarizeFormatting("SQL")
                 status.stringValue = "分句换行 · 关键字大写"
             } else {
                 output.string = ""
@@ -473,6 +467,16 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         copyButton.isEnabled = !output.string.isEmpty
         input.enclosingScrollView?.verticalRulerView?.needsDisplay = true
         output.enclosingScrollView?.verticalRulerView?.needsDisplay = true
+    }
+
+    private func summarizeFormatting(_ kind: String) {
+        let before = input.string.components(separatedBy: "\n")
+        let after = output.string.components(separatedBy: "\n")
+        let marked = Set(after.indices.lazy.filter { $0 >= before.count || before[$0] != after[$0] }.map { $0 + 1 })
+        let changed = marked.count + max(0, before.count - after.count)
+        (output as? OpenAllTextView)?.changedLineNumbers = marked
+        outputSummary.stringValue = "\(kind) · \(after.count) 行 · " + (changed == 0 ? "无改动" : "调整 \(changed) 行")
+        changeLegend.isHidden = changed == 0
     }
 
     @objc private func copyResult() {

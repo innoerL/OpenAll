@@ -17,6 +17,15 @@ const searchField = StateField.define({
   update(value, transaction) { for (const effect of transaction.effects) if (effect.is(searchEffect)) return effect.value; return value.map(transaction.changes); },
   provide: field => EditorView.decorations.from(field)
 });
+const parameterEffect = StateEffect.define();
+const parameterField = StateField.define({
+  create: () => Decoration.none,
+  update(value, transaction) {
+    for (const effect of transaction.effects) if (effect.is(parameterEffect)) return effect.value;
+    return transaction.docChanged ? Decoration.none : value;
+  },
+  provide: field => EditorView.decorations.from(field)
+});
 const syntaxFor = (mode = 'json') => ViewPlugin.fromClass(class {
   constructor(view) { this.decorations = this.paint(view); }
   update(update) { if (update.docChanged || update.viewportChanged) this.decorations = this.paint(update.view); }
@@ -49,7 +58,7 @@ function create(options) {
   const state = EditorState.create({
     doc: '', extensions: [
       EditorState.tabSize.of(2), EditorState.readOnly.of(!!options.readOnly), EditorView.editable.of(!options.readOnly), historyConfig.of(history({ minDepth: 60 })), wrapConfig.of(EditorView.lineWrapping),
-      drawSelection(), lineNumbers(), regionsField, searchField, options.syntax === false ? [] : syntaxFor(options.syntax),
+      drawSelection(), lineNumbers(), regionsField, searchField, options.parameterMarks ? parameterField : [], options.syntax === false ? [] : syntaxFor(options.syntax),
       placeholder(options.placeholder || '在这里粘贴或输入 JSON，格式化后继续编辑'),
       EditorView.contentAttributes.of({ 'aria-label': options.label || 'JSON 编辑区', spellcheck: 'false', autocorrect: 'off', autocapitalize: 'off' }),
       codeFolding({
@@ -130,6 +139,12 @@ function create(options) {
     setRegions(regions) { view.dispatch({ effects: regionsEffect.of(regions), annotations: Transaction.addToHistory.of(false) }); },
     foldLine(line) { const region = view.state.field(regionsField).find(item => view.state.doc.lineAt(item.from).number === line); if (!region) return false; view.dispatch({ effects: foldEffect.of(region), annotations: Transaction.addToHistory.of(false) }); return true; },
     foldAll() { return foldAll(view); }, unfoldAll() { return unfoldAll(view); },
+    setParameterMarks(spans) {
+      if (!options.parameterMarks) return;
+      const mark = Decoration.mark({ class: 'editor-bound-parameter' });
+      const ranges = spans.filter(({from, to}) => from >= 0 && from < to && to <= view.state.doc.length).map(({from, to}) => mark.range(from, to));
+      view.dispatch({ effects: parameterEffect.of(Decoration.set(ranges)), annotations: Transaction.addToHistory.of(false) });
+    },
     setSearch(matches, active = -1) {
       const ranges = []; const { from, to } = view.viewport;
       for (let i = 0; i < matches.length; i++) { const match = matches[i]; if (match.from > to) break; if (match.to < from || match.to > view.state.doc.length) continue; ranges.push(Decoration.mark({ class: 'editor-content-match' + (i === active ? ' active' : '') }).range(match.from, match.to)); }

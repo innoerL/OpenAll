@@ -25,7 +25,7 @@
     const {api,h,button,icon,notify}=ctx;
     let content=normalize(ctx.initialValue||await api.selection('get')),actions=[],selected=0,dead=false,busy=false,revision=0;
     const host=h('section',{class:'context-selection'}),heading=h('h1',{},'对选中内容执行操作'),summary=h('div',{class:'selection-summary'}),preview=h('div',{class:'selection-preview',tabIndex:0}),position=h('span',{class:'selection-position'}),actionHeading=h('h2',{},'可用操作',position),list=h('div',{class:'selection-action-list',role:'listbox',tabIndex:0,'aria-label':'可用操作'}),status=h('div',{class:'selection-key-hint',role:'status'}),loading=h('div',{class:'selection-loading',hidden:true},h('span',{class:'selection-spinner'}),h('span',{},'正在从图片中提取文字…')),cancel=button('取消识别',()=>{revision++;api.windowAction('close');});
-    root.append(host);host.append(h('header', {class:'selection-heading'}, heading, summary),preview,actionHeading,list,loading,cancel,status);cancel.hidden=true;
+    root.append(host);loading.append(cancel);host.append(h('header', {class:'selection-heading'}, heading, summary),preview,actionHeading,list,loading,status);cancel.hidden=true;
     const close=()=>api.windowAction('close');
     function actionIcon(action){const shapes={unicode:'M9 2 6 22M18 2 15 22M3 8h18M2 16h18',translate:'M5 3h14v17H5zM5 20l-2 2M19 20l2 2M8 15l4-9 4 9M10 12h4',recognizeText:'M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M6 9h12M6 13h9M6 17h6'};if(!shapes[action.id])return icon(action.icon,18);const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [key,value]of Object.entries({viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'}))svg.setAttribute(key,value);const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',shapes[action.id]);svg.append(path);return svg;}
 
@@ -51,7 +51,7 @@
         row.setAttribute('role', 'option');
         row.tabIndex = -1;
         row.append(actionIcon(action), h('span', {class:'selection-action-title'}, action.title),
-          h('span', {class:'selection-action-detail'}, action.detail), h('kbd', {'aria-hidden':'true'}, '↵'));
+          h('span', {class:'selection-action-detail'}, action.detail), h('kbd', {'aria-hidden':'true'}, '↵ 执行'));
         row.ondblclick = () => perform(action);
         row.oncontextmenu = event => {
           event.preventDefault(); select(index);
@@ -65,7 +65,7 @@
       syncSelection();
     }
     function syncSelection() {
-      position.textContent = actions.length ? (selected + 1) + " / " + actions.length : "";
+      position.textContent = actions.length ? '已选第 ' + (selected + 1) + ' 项，共 ' + actions.length + ' 项' : "";
       for (const [index, row] of Array.from(list.children).entries()) {
         row.classList.toggle('selected', index === selected);
         row.setAttribute('aria-selected', String(index === selected));
@@ -95,7 +95,7 @@
           list.hidden = actionHeading.hidden = true;
           loading.hidden = cancel.hidden = false;
           status.textContent = 'Esc 取消 · 识别完成后自动显示文字与可用操作';
-          await api.windowAction('resize', {width:640, height:360});
+          await api.windowAction('resize', {width:640, height:292});
           const result=await api.ocr({dataUrl:data.dataUrl});if(dead||token!==revision)return;if(!result.text?.trim())throw Error('未识别到文字');content={kind:'text',text:result.text};await render();list.focus();return;
         }
         if(action.id==='copy'){if(content.kind==='image')await api.fileAction('copyImage',{dataUrl:content.dataUrl});else await api.copyText(text);}

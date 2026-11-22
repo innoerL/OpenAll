@@ -132,6 +132,15 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       return samples.every(color => color && color !== 'rgba(0, 0, 0, 0)') && new Set(samples).size === 3;
     }), '普通文本、JSON 与 Markdown 实际绘制为三种类型色');
     await capture('05-clipboard');
+    await evaluate(() => document.querySelector('[aria-label="新建标签"]').click());
+    await until(() => evaluate(() => !!document.querySelector('dialog[open] input')), '剪贴板标签命名');
+    await capture('tool-clipboard-new-tag');
+    await evaluate(() => document.querySelector('dialog[open] button').click());
+    await evaluate(() => document.querySelector('.clip-card').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:80,clientY:80})));
+    await evaluate(() => [...document.querySelectorAll('.context-menu button')].find(item=>item.textContent === '编辑后粘贴…').click());
+    await until(() => evaluate(() => !!document.querySelector('dialog[open] textarea')), '剪贴板编辑后粘贴');
+    await capture('tool-clipboard-edit-before-paste');
+    await evaluate(() => document.querySelector('dialog[open] button').click());
     const before = await evaluate(() => openall.history());
     const previewText = await evaluate(() => {
       const current = OpenAllApp.controller;
@@ -140,7 +149,10 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     await click('预览卡片');
     await focusPage('clipboardPreview');
     check(await evaluate(expected => document.querySelector('.clip-preview .preview-content')?.textContent === expected
-      && [...document.querySelectorAll('.clip-preview-tools button')].filter(button => !button.disabled).length === 4, previewText), '从剪贴板打开独立预览并显示所选全文与可用工具');
+      && !!document.querySelector('.clip-preview-action button.primary:not(:disabled)'), previewText), '剪贴板预览显示全文和直接粘贴操作');
+    await click('用工具打开 ▾');
+    check(await evaluate(() => document.querySelectorAll('.context-menu [role=menuitem]:not(:disabled)').length === 4), '预览提供四个可用工具入口');
+    await evaluate(() => document.querySelector('.context-menu button').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
     await click('复制全文');
     await until(() => evaluate(() => document.querySelector('.clip-preview-status')?.textContent === '已复制'), '预览复制全文');
     await capture('tool-clipboard-preview');
@@ -157,7 +169,7 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     }), '剪贴板空筛选无可执行的卡片提示');
     await evaluate(() => { const input = document.querySelector('.clipboard-search'); input.value = 'choose'; input.dispatchEvent(new Event('input')); input.focus(); input.setSelectionRange(6, 6); });
     check(await evaluate(() => document.querySelector('.clip-count').textContent === '1 条匹配 · 1 项已选'
-      && document.querySelector('.clip-key-hints').textContent === '↓ 选择卡片'), '搜索聚焦显示匹配数和进入卡片提示');
+      && document.querySelector('.clip-key-hints').textContent === '↓ 选择卡片，再按空格预览'), '搜索聚焦显示匹配数和进入卡片提示');
     active.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
     active.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
     await pause(100);
@@ -234,11 +246,21 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       }
       if (id === 'markdown') await until(() => evaluate(() => !!document.querySelector('.aux-diagram svg')), 'Mermaid 渲染');
       await capture('tool-' + id);
+      if (id === 'markdown') {
+        await click('语法示例');
+        check(await evaluate(() => !document.querySelector('.aux-help-popover').hidden), '打开 Markdown 语法示例');
+        await capture('tool-markdown-help');
+        await click('关闭');
+      }
     }
     const image = await evaluate(() => { const c = document.createElement('canvas'); c.width = 640; c.height = 400; const g = c.getContext('2d'), gradient = g.createLinearGradient(0, 0, 640, 400); gradient.addColorStop(0, '#d8c19e'); gradient.addColorStop(1, '#49716b'); g.fillStyle = gradient; g.fillRect(0, 0, 640, 400); g.fillStyle = '#f8f7ef'; g.font = 'bold 42px sans-serif'; g.fillText('OpenAll Windows', 50, 100); return c.toDataURL(); });
     await open('image', image);
     await until(() => evaluate(() => document.querySelector('.aux-image-size')?.textContent.includes('PNG')), '图片加载');
     await capture('tool-image');
+    await click('⌗ 裁剪');
+    check(await evaluate(() => !!document.querySelector('[role="dialog"] .aux-crop-fields')), '显示图片裁剪编辑器');
+    await capture('tool-image-crop');
+    await click('取消');
     for (const format of ['png', 'jpeg', 'tiff', 'heic']) {
       const encoded = await evaluate((dataUrl, format) => openall.fileAction('encodeImage', { dataUrl, format, quality: 0.8 }), image, format);
       check(encoded.bytes > 50 && encoded.width === 640 && encoded.height === 400, '安装后真实图片编码：' + format);
@@ -246,6 +268,31 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     await evaluate(async () => openall.stack('add', { ids: (await openall.history()).slice(0,3).map(x=>x.id) }));
     await open('stack'); await capture('tool-stack');
     await open('selection', { text: 'OpenAll 支持对选中内容执行工具操作。' }); await capture('tool-selection');
+    if (process.platform === 'win32') {
+      const sample = await evaluate(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 800;
+        canvas.height = 210;
+        const context = canvas.getContext('2d');
+        context.fillStyle = 'white';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = 'black';
+        context.font = 'bold 48px Arial';
+        context.fillText('OPENALL NOTES', 30, 85);
+        context.font = '36px Arial';
+        context.fillText('Meeting room 12345', 30, 155);
+        return canvas.toDataURL('image/png');
+      });
+      await open('selection', {kind:'image', dataUrl:sample});
+      await until(() => evaluate(() => OpenAllApp.controller.getContent().kind === 'image'), '选中 OCR 样本图片');
+      await evaluate(() => { void OpenAllApp.controller.activate({id:'recognizeText'}); });
+      await until(() => evaluate(() => !document.querySelector('.selection-loading').hidden), '进入 OCR 识别中状态');
+      await capture('tool-selection-ocr-loading');
+      await until(() => evaluate(() => /12345/.test(document.querySelector('.selection-preview')?.innerText || '')), '系统 OCR 识别结果');
+      check(await evaluate(() => /OPENALL/i.test(OpenAllApp.controller.getContent().text)
+        && !!document.querySelector('[data-action="translate"]')), 'Windows OCR 结果显示在可继续操作的文本窗口');
+      await capture('tool-selection-ocr-result');
+    }
     await open('translate', 'OpenAll'); await capture('tool-translate');
     await open('settings');
     for (const tab of ['general', 'search', 'clipboard', 'linkAliases', 'commandAliases', 'snippets', 'permissions', 'diagnostics', 'appearance']) {
@@ -260,6 +307,22 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
         check(true, '网址别名编辑与持久化');
       }
       await capture('settings-' + tab);
+      if (tab === 'search') {
+        await click('管理置顶与隐藏结果 →');
+        await until(() => evaluate(() => !!document.querySelector('.rules-empty, .settings-content .data-table')), '搜索排序管理内容');
+        await capture('settings-search-manager');
+      } else if (tab === 'snippets') {
+        await evaluate(() => { document.querySelector('.editor-form textarea').value = '会议日期 {{date:yyyy-MM-dd}}'; });
+        await click('预览展开');
+        await until(() => evaluate(() => !!document.querySelector('dialog[open] pre')), '查看片段展开结果');
+        await capture('settings-snippet-expansion');
+        await evaluate(() => document.querySelector('dialog[open] button').click());
+      } else if (tab === 'clipboard') {
+        await evaluate(() => [...document.querySelectorAll('.settings-content button')].find(item=>item.textContent.includes('排除')).click());
+        await until(() => evaluate(() => !!document.querySelector('dialog[open] input')), '剪贴板排除应用');
+        await capture('settings-clipboard-exclusions');
+        await evaluate(() => document.querySelector('dialog[open] button').click());
+      }
     }
     await evaluate(() => OpenAllApp.controller.selectTab('general'));
     await evaluate(() => document.querySelector('.shortcut-button').click());

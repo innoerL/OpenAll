@@ -78,7 +78,10 @@
           <div class="source-line"><button data-source="ctf" class="quote-source">报价 周大福官方商城</button></div>
         </article>
       </div>
-      <div class="history-head"><strong>近一年走势</strong><span class="history-caption"></span></div>
+      <div class="history-head combined-chart-head"><strong>近一年走势</strong>
+        <nav class="view-switch" aria-label="走势坐标"><button id="chart-amount" aria-pressed="true">价格</button><button id="chart-change" aria-pressed="false">涨跌幅</button></nav>
+      </div>
+      <div class="history-caption" id="chart-basis"></div>
       <div class="chart-legend"><span id="legend-gold">国际现货 · 美元/克</span><span id="legend-ctf">周大福 · 元/克</span></div>
       <div class="plot">
         <canvas tabindex="0" aria-label="两种金价近一年走势图，使用方向键查看数据"></canvas>
@@ -107,7 +110,7 @@
       <colgroup><col class="date-col"><col class="price-col"><col class="range-col"></colgroup>
       <thead><tr>
         <th scope="col">日期</th><th scope="col" id="forecast-price-heading">参考估计</th>
-        <th scope="col" class="range-heading">情景区间
+        <th scope="col" class="range-heading">情景区间 <button type="button" id="range-chart-toggle" aria-pressed="false">区间图</button>
           <span id="range-scale" hidden><span></span><span></span></span></th>
       </tr></thead>
       <tbody id="forecast-rows"></tbody>

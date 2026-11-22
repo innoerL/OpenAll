@@ -12,7 +12,10 @@ app.whenReady().then(async () => {
   const errors = [];
   window.webContents.on('console-message', (_event, level, message) => { if (level >= 3) errors.push(message); });
   const run = (fn, ...args) => window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
-  const screenshot = async name => fs.writeFileSync(path.join(output, name + '.png'), (await window.webContents.capturePage()).toPNG());
+  const screenshot = async name => {
+    await run(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    fs.writeFileSync(path.join(output, name + '.png'), (await window.webContents.capturePage()).toPNG());
+  };
   const report = { passed: false, platform: process.platform, checks: [] };
   const check = (condition, name) => { assert.ok(condition, name); report.checks.push(name); };
   try {
@@ -130,7 +133,7 @@ app.whenReady().then(async () => {
     check(await run(async () => {
       const copy = document.querySelector('.editor-formatter-pane.output button');
       const counts = document.querySelectorAll('.formatter-count');
-      if (copy.disabled || counts[1].textContent !== '2 行') return false;
+      if (copy.disabled || counts[1].textContent !== 'YAML · 2 行 · 调整 1 行') return false;
       controller.setText('');
       if (!copy.disabled || counts[0].textContent !== '0 行' || counts[1].textContent !== '等待重新处理') return false;
       controller.setText('name = first');

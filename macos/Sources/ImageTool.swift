@@ -171,6 +171,67 @@ final class ImagePreviewCanvas: NSView {
     }
 }
 
+private final class ImageCropGuide: NSView {
+    let source: NSImage
+    let pixels: NSSize
+    var selection: NSRect { didSet { needsDisplay = true } }
+    var didSelect: ((NSRect) -> Void)?
+    private var start: NSPoint?
+    private var imageRect: NSRect {
+        let space = bounds.insetBy(dx: 7, dy: 7)
+        let scale = min(space.width / pixels.width, space.height / pixels.height)
+        let size = NSSize(width: pixels.width * scale, height: pixels.height * scale)
+        return NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height)
+    }
+    private func pixel(_ point: NSPoint) -> NSPoint {
+        NSPoint(x: min(pixels.width, max(0, ((point.x - imageRect.minX) / imageRect.width * pixels.width).rounded())),
+                y: min(pixels.height, max(0, ((point.y - imageRect.minY) / imageRect.height * pixels.height).rounded())))
+    }
+    override func resetCursorRects() { addCursorRect(imageRect, cursor: .crosshair) }
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        start = imageRect.contains(point) ? pixel(point) : nil
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let start else { return }
+        let end = pixel(convert(event.locationInWindow, from: nil))
+        let rect = NSRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
+        guard !rect.isEmpty else { return }
+        selection = rect
+        didSelect?(rect)
+    }
+    override func mouseUp(with event: NSEvent) { mouseDragged(with: event); start = nil }
+
+    init(frame: NSRect, source: NSImage, pixels: NSSize) {
+        self.source = source
+        self.pixels = pixels
+        self.selection = NSRect(origin: .zero, size: pixels)
+        super.init(frame: frame)
+    }
+    required init?(coder: NSCoder) { nil }
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        OpenAllTheme.canvas.setFill()
+        bounds.fill()
+        let scale = imageRect.width / pixels.width
+        source.draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        guard !selection.isEmpty else { return }
+        let region = NSRect(x: imageRect.minX + selection.minX * scale, y: imageRect.minY + selection.minY * scale,
+                            width: selection.width * scale, height: selection.height * scale).intersection(imageRect)
+        guard !region.isEmpty else { return }
+        let shade = NSBezierPath(rect: imageRect)
+        shade.appendRect(region)
+        shade.windingRule = .evenOdd
+        NSColor.black.withAlphaComponent(0.52).setFill()
+        shade.fill()
+        let stroke = NSBezierPath(rect: region)
+        stroke.lineWidth = 2
+        OpenAllTheme.accent.setStroke()
+        stroke.stroke()
+    }
+}
+
 final class ImageToolWindow: NSObject, NSTextFieldDelegate {
     private var window: NSWindow?
     private var preview: NSImageView!
@@ -259,9 +320,9 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         choose.isHidden = true
         chooseButton = choose
         for (title, symbol, x, buttonWidth, action) in [
-            ("裁剪", "crop", 150.0, 68.0, #selector(cropImage)),
-            ("左转", "rotate.left", 230.0, 62.0, #selector(rotateLeft)),
-            ("右转", "rotate.right", 306.0, 62.0, #selector(rotateRight))
+            ("裁剪", "crop", 366.0, 68.0, #selector(cropImage)),
+            ("左转", "rotate.left", 438.0, 62.0, #selector(rotateLeft)),
+            ("右转", "rotate.right", 506.0, 62.0, #selector(rotateRight))
         ] {
             let button = NSButton(title: title, target: self, action: action)
             button.frame = NSRect(x: x, y: 462, width: buttonWidth, height: 28)
@@ -279,14 +340,14 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         hint.textColor = OpenAllTheme.muted
         hint.font = .systemFont(ofSize: 12)
         hint.lineBreakMode = .byTruncatingMiddle
-        hint.frame = NSRect(x: 24, y: 54, width: 350, height: 18)
+        hint.frame = NSRect(x: 24, y: 65, width: 350, height: 18)
         root.addSubview(hint)
         previewCaption = hint
         let scale = NSTextField(labelWithString: "")
         scale.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         scale.textColor = OpenAllTheme.muted
         scale.alignment = .right
-        scale.frame = NSRect(x: 384, y: 54, width: 192, height: 18)
+        scale.frame = NSRect(x: 384, y: 65, width: 192, height: 18)
         root.addSubview(scale)
         previewScale = scale
 
@@ -461,13 +522,15 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
     @objc private func cropImage() {
         guard let sourceImage else { return }
         let alert = NSAlert()
-        alert.messageText = "按像素裁剪图片"
-        alert.informativeText = "坐标从图片左上角开始；保存时不会覆盖原图。"
+        alert.messageText = "裁剪图片"
+        alert.informativeText = "原图 \(Int(sourceSize.width)) × \(Int(sourceSize.height)) 像素。拖出选区，或从左上角输入坐标。"
         alert.addButton(withTitle: "裁剪")
         alert.addButton(withTitle: "取消")
-        let labels = ["X", "Y", "宽", "高"]
+        let labels = ["起点 X", "起点 Y", "宽", "高"]
         let defaults = ["0", "0", String(Int(sourceSize.width)), String(Int(sourceSize.height))]
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 58))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        let guide = ImageCropGuide(frame: NSRect(x: 0, y: 62, width: 400, height: 138), source: sourceImage, pixels: sourceSize)
+        container.addSubview(guide)
         var fields: [NSTextField] = []
         for index in 0..<4 {
             let label = NSTextField(labelWithString: labels[index])
@@ -475,10 +538,33 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
             container.addSubview(label)
             let field = NSTextField(frame: NSRect(x: CGFloat(index * 100), y: 0, width: 90, height: 28))
             field.stringValue = defaults[index]
+            field.setAccessibilityLabel(labels[index])
+            WindowChrome.styleInput(field)
             container.addSubview(field)
             fields.append(field)
         }
+        guide.didSelect = { rect in
+            for (field,value) in zip(fields, [rect.minX, rect.minY, rect.width, rect.height]) { field.integerValue = Int(value) }
+        }
+        let observers = fields.map { field in
+            NotificationCenter.default.addObserver(forName: NSControl.textDidChangeNotification, object: field, queue: .main) { _ in
+                let numbers = fields.compactMap { Int($0.stringValue) }
+                guard numbers.count == 4, numbers[2] > 0, numbers[3] > 0 else {
+                    guide.selection = .zero
+                    return
+                }
+                guide.selection = NSRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3])
+            }
+        }
+        defer { observers.forEach { NotificationCenter.default.removeObserver($0) } }
         alert.accessoryView = container
+        if DesignPreview.enabled {
+            alert.layout()
+            alert.window.contentView?.wantsLayer = true
+            alert.window.contentView?.layer?.backgroundColor = OpenAllTheme.canvas.cgColor
+            DesignPreview.lastWindow = alert.window
+            return
+        }
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let values = fields.compactMap { Int($0.stringValue) }
         guard values.count == 4, values[0] >= 0, values[1] >= 0, values[2] > 0, values[3] > 0,

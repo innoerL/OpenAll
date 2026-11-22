@@ -38,7 +38,7 @@
     const compact = button('压缩', () => format('compact')); compact.dataset.action = 'compact';
     const more = h('select', { 'aria-label': '更多操作', class: 'editor-more' });
     for (const [value, title] of [['', '更多操作'], ['sort', '自然排序'], ['escape', '添加转义'], ['unescape', '去除转义'], ['validate', '校验']]) more.append(h('option', { value }, title));
-    more.onchange = () => { const mode = more.value; more.value = ''; if (mode) format(mode); };
+    more.onchange = () => { const mode = more.value; more.value = ''; if (mode === 'fold') foldButton.click(); else if (mode === 'copy') copyButton.click(); else if (mode) format(mode); };
     const foldButton = button('全部折叠', () => { editor.folded ? editor.unfoldAll() : editor.foldAll(); updateFold(); }); foldButton.dataset.action = 'fold';
     const copyButton = button('复制全文', async () => { await api.copyText(editor.value); status.textContent = '已复制全文'; }); copyButton.dataset.action = 'copy';
     const searchButton = button('搜索', () => showSearch(), 'editor-search-button');
@@ -51,7 +51,7 @@
     searchButton.setAttribute('aria-expanded', 'false');
     const query = h('input', { type: 'search', placeholder: '搜索内容', 'aria-label': '搜索 JSON 内容', spellcheck: false });
     const searchCount = h('span', { class: 'editor-find-count', role: 'status' }, '');
-    const caseBox = h('input', { type: 'checkbox' }), caseLabel = h('label', {}, caseBox, '区分大小写');
+    const caseBox = h('input', {type:'checkbox','aria-label':'区分大小写'}), caseLabel = h('label', {title:'区分大小写'}, caseBox, 'Aa');
     const previous = button('↑', () => moveSearch(-1)), next = button('↓', () => moveSearch(1)), close = button('×', () => hideSearch());
     previous.setAttribute('aria-label', '上一个搜索结果'); next.setAttribute('aria-label', '下一个搜索结果'); close.setAttribute('aria-label', '关闭搜索');
     const findNav = h('div', { class: 'editor-find-nav', role: 'group', 'aria-label': '匹配导航' }, previous, next);
@@ -59,15 +59,29 @@
     searchBar.append(query, searchCount, caseLabel, findNav, close);
     const container = h('div', { class: 'editor-codemirror', 'data-editor': 'json' });
     const status = h('span', { role: 'status' }, '就绪'), count = h('span', { class: 'editor-document-count' }, '0 行');
-    const footer = h('footer', { class: 'editor-footer' }, status, count); host.append(toolbar, searchBar, container, footer);
+    const footer = h('footer', { class: 'editor-footer' }, status, count); toolbar.append(searchBar); host.append(toolbar, container, footer);
     let editor, revision = 0, disposed = false, metadataJob, operationJob, searchJob, metadataTimer, searchTimer;
     let valid = false, regions = [], matches = [], activeMatch = -1, limited = false, busy = false;
     let pendingMetadata = false, queryComposing = false;
     function notice(message, error = false) { status.textContent = message; status.classList.toggle('error', error); }
+    const overflowFold = h('option',{value:'fold'},'全部折叠');
+    const overflowCopy = h('option',{value:'copy'},'复制全文');
+    const narrowFind = window.matchMedia('(max-width:850px)');
+    function placeDocumentActions() {
+      const overflow = narrowFind.matches && !searchBar.hidden;
+      views.hidden = overflow;
+      if (overflow) more.append(overflowFold,overflowCopy);
+      else { overflowFold.remove(); overflowCopy.remove(); }
+      overflowFold.textContent = foldButton.textContent;
+      overflowFold.disabled = foldButton.disabled;
+      overflowCopy.disabled = copyButton.disabled;
+    }
+    narrowFind.addEventListener('change',placeDocumentActions);
     function updateFold() {
       const folds = editor.foldCount;
       foldButton.textContent = folds ? '全部展开' : '全部折叠';
       foldButton.disabled = !valid || !regions.length;
+      overflowFold.textContent = foldButton.textContent; overflowFold.disabled=foldButton.disabled; overflowCopy.disabled=copyButton.disabled;
       count.textContent = editor.lineCount + ' 行' + (folds ? ' · 折叠 ' + folds + ' 处' : '');
     }
     function changed() {
@@ -116,6 +130,7 @@
     function setSearchVisible(visible) {
       searchBar.hidden = !visible;
       searchButton.hidden = visible;
+      placeDocumentActions();
       searchButton.setAttribute('aria-expanded', String(visible));
     }
     function showSearch() { setSearchVisible(true); if (!query.value && editor.selectedText.length < 256) query.value = editor.selectedText; query.focus(); query.select(); if (query.value) refreshSearch(true); else showCount(); }
@@ -155,7 +170,7 @@
       search: async (text, sensitive = false) => { setSearchVisible(true); query.value = text; caseBox.checked = sensitive; await refreshSearch(true); return matches.length; },
       getState: () => ({ revision, valid, regions: regions.length, folded: editor.folded, matches: matches.length, limited, busy, pendingMetadata, renderedLines: container.querySelectorAll('.cm-line').length }),
       waitIdle: () => waitUntil(() => !pendingMetadata && !busy),
-      dispose() { disposed = true; clearTimeout(metadataTimer); clearTimeout(searchTimer); metadataJob?.cancel(); operationJob?.cancel(); searchJob?.cancel(); editor.destroy(); host.remove(); }
+      dispose() { disposed = true; narrowFind.removeEventListener('change',placeDocumentActions); clearTimeout(metadataTimer); clearTimeout(searchTimer); metadataJob?.cancel(); operationJob?.cancel(); searchJob?.cancel(); editor.destroy(); host.remove(); }
     };
   };
 
@@ -227,7 +242,7 @@
     output = window.OpenAllJSONEditor.create({ parent: outputBox, syntax: mode === 'sqlFormat' ? 'sql' : 'config', placeholder: '格式化结果显示在这里', label: '格式化结果', readOnly: true });
     async function run() {
       work?.cancel(); const version = revision, current = work = task(mode, input.value); busy = true; action.disabled = copy.disabled = true; status.textContent = '正在后台整理…';
-      try { const result = await current.promise; if (disposed || version !== revision) return false; output.setText(result.text, true); copy.disabled = !output.length; outputCount.textContent = (output.length ? output.lineCount : 0) + ' 行'; status.textContent = result.kind || 'SQL 格式化完成'; status.classList.remove('error'); return true; }
+      try { const result = await current.promise; if (disposed || version !== revision) return false; output.setText(result.text, true); copy.disabled = !output.length; const kind = result.kind?.split(' · ')[0] || 'SQL'; outputCount.textContent = kind+' · '+output.lineCount+' 行 · '+(result.changedLines ? '调整 '+result.changedLines+' 行' : '无改动'); status.textContent = ''; status.classList.remove('error'); return true; }
       catch (error) { if (!error.cancelled && !disposed && version === revision) { status.textContent = error.message; status.classList.add('error'); } return false; }
       finally { if (work === current) { busy = false; action.disabled = false; } }
     }

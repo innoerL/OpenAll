@@ -43,7 +43,8 @@ function changedClipboard(){broadcast('clipboard-changed',clips.list());broadcas
 function windowFor(event){return BrowserWindow.fromWebContents(event.sender);}
 function currentContext(win){return windowContexts.get(win?.id)||{};}
 function windowState(win){return {maximized:win.isMaximized(),resizable:win.isResizable()};}
-function rememberTarget(){const focused=BrowserWindow.getFocusedWindow();const ctx=currentContext(focused);if(focused&&!transient.has(ctx.page)){pasteTarget={windowId:focused.id};return;}if(native.foreground.pid&&native.foreground.pid!==process.pid){lastExternal=native.foreground;pasteTarget={...lastExternal};}}
+function canReceivePaste(page){return page !== 'clipboardPreview' && !transient.has(page);}
+function rememberTarget(){const focused=BrowserWindow.getFocusedWindow();const ctx=currentContext(focused);if(focused&&canReceivePaste(ctx.page)){pasteTarget={windowId:focused.id};return;}if(native.foreground.pid&&native.foreground.pid!==process.pid){lastExternal=native.foreground;pasteTarget={...lastExternal};}}
 function dimensions(page){const sizes={search:[720,76],clipboard:[screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea.width,330],stack:[340,174],translate:[580,320],selection:[640,510],json:[960,600],comparison:[1040,600],configFormat:[960,420],sqlFormat:[960,420],markdown:[980,540],manual:[980,540],unicode:[800,380],id:[660,520],image:[900,540],converter:[980,610],settings:[930,560],configDiff:[1000,680],sqlRestore:[1000,680],logTimeline:[1000,680],explain:[1000,680]};return sizes[page]||[980,540];}
 function position(win,page){const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;const [width,height]=win.getSize();if(page==='clipboard')win.setBounds({x:area.x,y:area.y+area.height-height,width:area.width,height});else if(page==='stack')win.setPosition(area.x+area.width-width-24,area.y+24);else if(page==='search')win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+Math.max(80,area.height*.22)));else win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+(area.height-height)/2));}
 async function getGoldService(){
@@ -78,7 +79,7 @@ async function createWindow(rawPage,initialValue,options={}){
  windows.set(page,win);windowContexts.set(win.id,{page,initialValue:initialValue??''});
  win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
  win.webContents.on('will-navigate',(event,url)=>{if(gold||!url.startsWith('file://'))event.preventDefault();});
- win.on('focus',()=>{if(!isTransient)pasteTarget={windowId:win.id};});
+ win.on('focus',()=>{if(canReceivePaste(page))pasteTarget={windowId:win.id};});
  const updateWindowState=()=>{if(!win.webContents.isDestroyed())win.webContents.send('window-state',windowState(win));};
  win.on('maximize',updateWindowState);win.on('unmaximize',updateWindowState);
  win.on('blur',()=>{if(page==='search'&&!win._pinned&&!smokeMode)win.hide();});
@@ -190,7 +191,10 @@ async function windowAction(event,action,payload={}){
  case 'resize':{const width=Math.min(1800,Math.max(ctx.page==='stack'?340:480,Number(payload.width)||960)),height=Math.min(1200,Math.max(ctx.page==='search'?76:ctx.page==='stack'?174:300,Number(payload.height)||640));win.setSize(width,height);if(ctx.page==='stack')position(win,'stack');return true;}
  case 'showClipboard':rememberTarget();await createWindow('clipboard');return true;case 'showSearch':return !!await showPage('search');case 'openSettings':await createWindow('settings',payload);return true;
  case 'checkUpdates':return updater.check(settings.updateFeedURL);case 'installUpdate':return updater.install();case 'rollbackUpdate':return updater.rollback();case 'updateStatus':return updater.status();
- case 'searchRules':return Object.entries(ranking.rules).map(([key,rule])=>({key,...rule}));
+ case 'searchRules':{
+   const rules=Object.entries(ranking.rules).map(([key,rule])=>({key,...rule}));
+   return payload.includeUsage ? {rules,hasUsage:Object.keys(ranking.usage||{}).length>0} : rules;
+ }
  case 'searchRule':{const item=payload.item;if(payload.action==='clearUsage')ranking.usage={};else if(item){const key=identity(item);if(payload.action==='reset')delete ranking.rules[key];else {const previous=ranking.rules[key]||{};const active=payload.action==='pin'?'pinned':'hidden';if(previous[active])delete ranking.rules[key];else ranking.rules[key]={...item,pinned:active==='pinned',hidden:active==='hidden'};}}saveRanking();return true;}
  case 'rescan':case 'refreshIndex':searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError);return true;
  case 'testShortcuts':if(!testMode)throw Error('仅测试模式可用');return {failed:applyShortcuts(settings,{force:true}),registered:{...shortcutsStatus}};
@@ -210,6 +214,11 @@ async function clipboardAction(event,action,payload={}){
  case 'selection':{const record=await clips.full(ids[0]);if(!record)return false;await createWindow('selection',record.kind==='image'?{kind:'image',dataUrl:'data:image/png;base64,'+record.value}:record.kind==='files'?{kind:'files',files:record.files}:{kind:'text',text:record.text??record.value});return true;}
  case 'drag':case 'startDrag':{const records=await Promise.all(selected.map(x=>clips.full(x.id)));const files=[];for(const record of records){if(record.kind==='files')files.push(...record.files);else if(record.kind==='image'){const file=path.join(clips.directory,record.hash+'.png');if(!fs.existsSync(file))await fsp.writeFile(file,Buffer.from(record.value,'base64'));files.push(file);}}if(!files.length)return false;const icon=nativeImage.createFromPath(path.join(__dirname,'../assets/icon.png')).resize({width:32,height:32});event.sender.startDrag({files:[...new Set(files)],icon});return true;}
  case 'preview':{const record=await clips.full(ids[0]);if(record)await createWindow('clipboardPreview',record);return !!record;}
+ case 'pastePreview':{
+  const context=currentContext(windowFor(event));
+  if(context.page!=='clipboardPreview'||!context.initialValue?.kind)return false;
+  return pasteRecord(context.initialValue);
+ }
  case 'compare':{if(selected.length!==2)throw Error('请选择两条文本卡片');const values=await Promise.all(selected.map(x=>clips.full(x.id)));if(values.some(x=>x.kind==='image'||x.kind==='files'))throw Error('请选择两条文本卡片');await createWindow('comparison',{left:values[0].text||values[0].value,right:values[1].text||values[1].value});return true;}
  case 'snippet':{const record=await clips.full(ids[0]);if(!record||!record.text)throw Error('此卡片没有文本');const item=snippetStore.save({keyword:'clip'+Date.now().toString(36),name:record.title.slice(0,32),body:record.text});updateSearch();return item;}
  case 'ocr':{const record=await clips.full(ids[0]);if(record?.kind!=='image')throw Error('请选择图片');const result=await recognizeImage(Buffer.from(record.value,'base64'));clips.change(ids,x=>{x.ocrText=result.text;x.recognizedText=result.text;});changedClipboard();return result;}

@@ -68,7 +68,9 @@ final class DiagnosticsView: NSView {
 
     @objc func reload() {
         guard let value = snapshot?() else { return }
-        let checkedTime = DateFormatter.localizedString(from: value.exportedAt, dateStyle: .none, timeStyle: .medium)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        let checkedTime = formatter.string(from: value.exportedAt)
         metrics.subviews.forEach { $0.removeFromSuperview() }
         let activeHotkeys = [value.searchHotkeyActive, value.clipboardHotkeyActive,
                              value.stackHotkeyActive, value.selectionHotkeyActive].filter { $0 }.count
@@ -88,7 +90,11 @@ final class DiagnosticsView: NSView {
         updated.stringValue = "\(issues == 0 ? "各项状态正常" : "\(issues) 类问题需要处理") · 最近检查 \(checkedTime)"
         updated.textColor = issues == 0 ? OpenAllTheme.muted : OpenAllTheme.accentText
         var y: CGFloat = 300
-        let ordered = rows.enumerated().sorted { ($0.element.2 == false ? 0 : 1) < ($1.element.2 == false ? 0 : 1) }
+        let ordered = rows.enumerated().sorted { lhs, rhs in
+            let left = lhs.element.2 == false ? 0 : lhs.offset == 0 ? 2 : 1
+            let right = rhs.element.2 == false ? 0 : rhs.offset == 0 ? 2 : 1
+            return left == right ? lhs.offset < rhs.offset : left < right
+        }
         for (position, entry) in ordered.enumerated() {
             let (index, row) = entry
             if row.2 == false {

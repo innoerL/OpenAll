@@ -102,25 +102,25 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         commandTitle = label("", x: 20, y: 324, width: 350, size: 16)
         commandTitle.font = .systemFont(ofSize: 16, weight: .medium)
         detail.addSubview(commandTitle)
-        let builtInLabel = label("已有匹配词", x: 20, y: 280, width: 340, size: 11)
+        let builtInLabel = label("系统匹配词", x: 20, y: 276, width: 88, size: 12)
         builtInLabel.textColor = OpenAllTheme.ink
         detail.addSubview(builtInLabel)
         builtInNames = NSTextField(wrappingLabelWithString: "")
         builtInNames.font = .systemFont(ofSize: 12)
         builtInNames.textColor = OpenAllTheme.ink
-        builtInNames.frame = NSRect(x: 20, y: 239, width: 348, height: 40)
+        builtInNames.frame = NSRect(x: 110, y: 251, width: 261, height: 48)
         detail.addSubview(builtInNames)
-        let customLabel = label("自定义别名", x: 20, y: 219, width: 340, size: 11)
+        let customLabel = label("自定义别名", x: 20, y: 213, width: 88, size: 12)
         customLabel.textColor = OpenAllTheme.ink
         detail.addSubview(customLabel)
-        aliasField = NSTextField(frame: NSRect(x: 20, y: 184, width: 348, height: 32))
+        aliasField = NSTextField(frame: NSRect(x: 110, y: 210, width: 261, height: 32))
         aliasField.placeholderString = "输入此功能的其他叫法"
         aliasField.delegate = self
         aliasField.target = self
         aliasField.action = #selector(saveAliases)
         WindowChrome.styleInput(aliasField)
         detail.addSubview(aliasField)
-        let format = label("多个别名用逗号分隔，不可与已有功能重名。", x: 20, y: 154, width: 355, size: 10)
+        let format = label("多个别名用逗号分隔。", x: 110, y: 183, width: 260, size: 11)
         format.textColor = OpenAllTheme.muted
         detail.addSubview(format)
         let save = NSButton(title: "保存别名", target: self, action: #selector(saveAliases))
@@ -130,9 +130,6 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         notice = label("", x: 148, y: 113, width: 220, size: 11)
         notice.textColor = OpenAllTheme.muted
         detail.addSubview(notice)
-        let footer = label("别名保存在本机，保存后即可通过搜索调用。", x: 28, y: 22, width: 620, size: 11)
-        footer.textColor = OpenAllTheme.muted
-        addSubview(footer)
         refreshSelection()
         filterCommands()
     }

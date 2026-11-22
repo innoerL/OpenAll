@@ -129,7 +129,8 @@ enum LogTimeline {
 
 struct SQLRestoreResult {
     let sql: String
-    let replaced: Int
+    let replacementRanges: [NSRange]
+    var replaced: Int { replacementRanges.count }
     let unresolved: Int
     let unused: Int
 }
@@ -144,34 +145,62 @@ enum SQLParameterRestorer {
         var output = ""
         var index = 0
         var parameterIndex = 0
-        var replaced = 0
+        var replacementRanges: [NSRange] = []
+        var unchangedStart = 0, outputOffset = 0
+        func appendReplacement(_ literal: String, consuming end: Int) {
+            // 只扫描相邻替换之间的原文，按 NSTextView 使用的 UTF-16 坐标记下实参。
+            for character in chars[unchangedStart..<index] { outputOffset += character.utf16.count }
+            let length = literal.utf16.count
+            replacementRanges.append(NSRange(location: outputOffset, length: length))
+            output += literal
+            outputOffset += length
+            unchangedStart = end
+        }
         var usedPositions = Set<Int>(), usedNames = Set<String>()
         var unresolved = 0
-        var state = 0
+        var state = 0, blockDepth = 0
+        var dollarQuote: [Character] = []
         while index < chars.count {
             let char = chars[index], next = index + 1 < chars.count ? chars[index + 1] : "\0"
             if state == 1 {
                 output.append(char)
-                if char == "\n" { state = 0 }
+                if char.isNewline { state = 0 }
             } else if state == 2 {
                 output.append(char)
-                if char == "*" && next == "/" { output.append(next); index += 1; state = 0 }
+                if char == "/" && next == "*" { output.append(next); index += 1; blockDepth += 1 }
+                else if char == "*" && next == "/" {
+                    output.append(next); index += 1; blockDepth -= 1
+                    if blockDepth == 0 { state = 0 }
+                }
+            } else if state == 6 {
+                if char == "$", chars[index...].starts(with: dollarQuote) {
+                    output.append(contentsOf: dollarQuote); index += dollarQuote.count - 1; state = 0
+                } else { output.append(char) }
             } else if state >= 3 {
                 output.append(char)
                 let closing: Character = state == 3 ? "'" : state == 4 ? "\"" : Character(UnicodeScalar(96)!)
-                if char == closing {
+                if char == "\\", index + 1 < chars.count { output.append(next); index += 1 }
+                else if char == closing {
                     if next == closing { output.append(next); index += 1 }
                     else { state = 0 }
                 }
             } else if char == "-" && next == "-" {
                 output += "--"; index += 1; state = 1
+            } else if char == "#" {
+                output.append(char); state = 1
             } else if char == "/" && next == "*" {
-                output += "/*"; index += 1; state = 2
+                output += "/*"; index += 1; state = 2; blockDepth = 1
+            } else if char == "$", next == "$" || next.isLetter || next == "_" {
+                var end = index + 1
+                while end < chars.count && (chars[end].isLetter || chars[end].isNumber || chars[end] == "_") { end += 1 }
+                if end < chars.count, chars[end] == "$" {
+                    dollarQuote = Array(chars[index...end]); output.append(contentsOf: dollarQuote); index = end; state = 6
+                } else { output.append(char) }
             } else if char == "'" || char == "\"" || char.unicodeScalars.first?.value == 96 {
                 output.append(char); state = char == "'" ? 3 : char == "\"" ? 4 : 5
             } else if char == "?" {
                 if positional.indices.contains(parameterIndex) {
-                    output += positional[parameterIndex]; usedPositions.insert(parameterIndex); replaced += 1
+                    appendReplacement(positional[parameterIndex], consuming: index + 1); usedPositions.insert(parameterIndex)
                 } else { output.append(char); unresolved += 1 }
                 parameterIndex += 1
             } else if char == ":" && (index == 0 || chars[index - 1] != ":") &&
@@ -179,7 +208,7 @@ enum SQLParameterRestorer {
                 var end = index + 1
                 while end < chars.count && (chars[end].isLetter || chars[end].isNumber || chars[end] == "_") { end += 1 }
                 let key = String(chars[(index + 1)..<end])
-                if let value = named[key] { output += value; usedNames.insert(key); replaced += 1 }
+                if let value = named[key] { appendReplacement(value, consuming: end); usedNames.insert(key) }
                 else { output += ":\(key)"; unresolved += 1 }
                 index = end - 1
             } else if char == "$" && next.isNumber {
@@ -187,13 +216,13 @@ enum SQLParameterRestorer {
                 while end < chars.count && chars[end].isNumber { end += 1 }
                 let number = Int(String(chars[(index + 1)..<end])) ?? 0
                 if positional.indices.contains(number - 1) {
-                    output += positional[number - 1]; usedPositions.insert(number - 1); replaced += 1
+                    appendReplacement(positional[number - 1], consuming: end); usedPositions.insert(number - 1)
                 } else { output += String(chars[index..<end]); unresolved += 1 }
                 index = end - 1
             } else { output.append(char) }
             index += 1
         }
-        return SQLRestoreResult(sql: output, replaced: replaced, unresolved: unresolved,
+        return SQLRestoreResult(sql: output, replacementRanges: replacementRanges, unresolved: unresolved,
                                 unused: positional.count - usedPositions.count + named.count - usedNames.count)
     }
 

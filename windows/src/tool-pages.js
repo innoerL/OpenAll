@@ -17,8 +17,8 @@
     function closeFind(){findbar.hidden=true;serial++;matches=[];active=-1;highlight();instance.focus();}
     function openFind(){findbar.hidden=false;query.focus();query.select();find();}
     query.oninput=()=>{clearTimeout(timer);timer=setTimeout(find,100);};query.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();next(event.shiftKey?-1:1);}if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeFind();}};findbar.append(query,counter,button('↑',()=>next(-1),'quiet'),button('↓',()=>next(1),'quiet'),button('×',closeFind,'quiet'));
-    instance=window.OpenAllJSONEditor.create({parent:node,syntax,placeholder,label:placeholder,readOnly,onNotice:notice,onFind:openFind,onFindNext:next,onFormat:()=>node.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true})),onViewport:()=>queueMicrotask(()=>{if(!dead)highlight();}),onChange:()=>{node.dispatchEvent(new Event('input',{bubbles:true}));if(!findbar.hidden){clearTimeout(timer);timer=setTimeout(find,150);}}});node.prepend(findbar);
-    Object.defineProperties(node,{value:{get:()=>instance.value,set:value=>instance.setText(String(value))},selectionStart:{get:()=>instance.view.state.selection.main.from},selectionEnd:{get:()=>instance.view.state.selection.main.to}});node.focus=()=>instance.focus();node.setRangeText=(text,start,end)=>{instance.view.dispatch({changes:{from:start,to:end,insert:String(text)},selection:{anchor:start+String(text).length}});};node.disposeEditor=()=>{dead=true;clearTimeout(timer);job.dispose();instance.destroy();};node.value=value;return node;
+    instance=window.OpenAllJSONEditor.create({parent:node,syntax,placeholder,label:placeholder,readOnly,parameterMarks:readOnly && syntax==='sql',onNotice:notice,onFind:openFind,onFindNext:next,onFormat:()=>node.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true})),onViewport:()=>queueMicrotask(()=>{if(!dead)highlight();}),onChange:()=>{node.dispatchEvent(new Event('input',{bubbles:true}));if(!findbar.hidden){clearTimeout(timer);timer=setTimeout(find,150);}}});node.prepend(findbar);
+    Object.defineProperties(node,{value:{get:()=>instance.value,set:value=>instance.setText(String(value))},selectionStart:{get:()=>instance.view.state.selection.main.from},selectionEnd:{get:()=>instance.view.state.selection.main.to}});node.focus=()=>instance.focus();node.setRangeText=(text,start,end)=>{instance.view.dispatch({changes:{from:start,to:end,insert:String(text)},selection:{anchor:start+String(text).length}});};node.setParameterMarks=spans=>instance.setParameterMarks(spans);node.disposeEditor=()=>{dead=true;clearTimeout(timer);job.dispose();instance.destroy();};node.value=value;return node;
   }
   const pane=(title,body,actions=[])=>h('section',{class:'aux-pane'},h('div',{class:'aux-pane-bar'},h('strong',{},title),h('div',{class:'aux-inline'},actions)),body);
   const label=(title,control)=>h('label',{class:'aux-label'},h('span',{},title),control);
@@ -89,7 +89,7 @@
 
   pages.unicode=async(root,ctx)=>{
     const status=shell(root,'unicode'),job=worker(),source=editor('输入',ctx.initialValue||'你好，OpenAll 👋'),output=editor('结果','',true);let mode=source.value.includes('\\u')?'decode':'encode',timer,sequence=0,dead=false;
-    const modes=h('div',{class:'aux-tabs wide'}),encode=button('文本 → Unicode 转义',()=>{mode='encode';refresh();}),decode=button('Unicode 转义 → 文本',()=>{mode='decode';refresh();});modes.append(encode,decode);
+    const modes=h('div',{class:'aux-tabs wide'}),encode=button('编码',()=>{mode='encode';refresh();}),decode=button('解码',()=>{mode='decode';refresh();});modes.append(encode,decode);
     const fill=button('填回输入',()=>{if(!output.value)return;source.value=output.value;mode=mode==='encode'?'decode':'encode';refresh();}),copyResult=button('复制结果',()=>copy(ctx,output.value),'accent');
     const sourceHeading=h('span'), resultHeading=h('span');
     root.append(modes,h('div',{class:'aux-split'},pane(sourceHeading,source),pane(resultHeading,output,[fill,copyResult])),status);
@@ -149,7 +149,7 @@
       }));
       setStatus(status,birthday?'出生日期 '+birthdayText(birthday):'');
     }catch(error){setStatus(status,error.message,true);}},'primary');
-    root.append(h('div',{class:'aux-id-top'},label('省份',province),label('城市',city),label('区县',region)),h('div',{class:'aux-id-date'},label('年龄',age),label('出生日期 · 留空随机',h('div',{class:'aux-inline'},year,month,day)),label('性别',gender),label('生成数量 · 1–500',count)),h('div',{class:'aux-actions'},generate),h('div',{class:'aux-section-bar'},heading,button('复制全部',()=>copy(ctx,numbers.join('\n')),'accent')),result,status);const keydown=event=>{if(event.key==='Enter'&&event.target.matches('input')&&!event.isComposing){event.preventDefault();generate.click();}};root.addEventListener('keydown',keydown);generate.click();return {focus:()=>age.focus(),dispose(){root.removeEventListener('keydown',keydown);}};
+    root.append(h('div',{class:'aux-id-top'},label('省份',province),label('城市',city),label('区县',region)),h('div',{class:'aux-id-date'},label('按年龄推算',age),label('出生日期 · 可手填',h('div',{class:'aux-inline'},year,month,day)),label('性别',gender),label('生成数量 · 1–500',count)),h('div',{class:'aux-actions'},generate,h('span',{class:'muted'},'按周岁沿用今天的月日；生日留空则随机。')),h('div',{class:'aux-section-bar'},heading,button('复制全部',()=>copy(ctx,numbers.join('\n')),'accent')),result,status);const keydown=event=>{if(event.key==='Enter'&&event.target.matches('input')&&!event.isComposing){event.preventDefault();generate.click();}};root.addEventListener('keydown',keydown);generate.click();return {focus:()=>age.focus(),dispose(){root.removeEventListener('keydown',keydown);}};
   };
   pages.converter=async(root,ctx)=>{
     const status=shell(root,'converter'),job=worker(),modes=h('div',{class:'aux-tabs wide',role:'group','aria-label':'转换模式'}),content=h('div',{class:'aux-converter-body'});let mode='duration',timer,dead=false,cronSequence=0;const tabs=[['duration','时间单位'],['cron','Cron 表达式'],['ascii','ASCII 码表']];root.append(modes,content,status);
@@ -164,11 +164,11 @@
           const sign = Math.abs(shown-converted)<=rounding && (shown!==0 || Number(value.value)===0) ? '=' : '≈';
           summary.textContent = value.value.trim()+' '+core.durationUnits[source][0].split(' · ')[0]+' '+sign+' '+rows[target].value+' '+core.durationUnits[target][0];
         }
-        list.replaceChildren(...rows.map((row,index)=>h('div',{class:'aux-conversion-row'+(index===Number(unit.value)?' source':'')},h('span',{class:'muted'},row.title),h('code',{title:row.value},core.durationDisplay(row.value)),copyButtonIcon(()=>copy(ctx,row.value),'复制完整数值'))));if(!value.value.trim()||!rows.length)setStatus(status,'请输入有效数字',true);else setStatus(status,'点击行末图标可复制完整精度的数值');};value.oninput=unit.onchange=update;update();}
-      if(mode==='cron'){const field=input('分 时 日 月 周','*/15 9-18 * * 1-5'),description=h('p',{class:'aux-cron-summary'}),results=h('div',{class:'aux-cron-times'}),parts=h('div',{class:'aux-cron-fields'}),presets=h('div',{class:'aux-inline'});try{core.cronParse(ctx.initialValue||'');field.value=ctx.initialValue;}catch{}const update=async()=>{const serial=++cronSequence;try{const parsed=core.cronParse(field.value);description.textContent=core.cronSummary(parsed);const dates=await job.run('cronNext',field.value,new Date(),5);if(dead||mode!=='cron'||serial!==cronSequence)return;results.replaceChildren(h('h3',{},'未来执行时间 · 中国时间'),...dates.map((date,index)=>{const value=new Date(date).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+' '+new Date(date).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',weekday:'long'});return h('div',{class:'aux-cron-row'},h('span',{class:'muted'},index?'第 '+(index+1)+' 次':'下一次'),h('code',{},value),button('复制',()=>copy(ctx,value),'quiet'));}));if(!dates.length)results.append(h('p',{class:'muted'},'未来五年内没有匹配的时间'));parts.replaceChildren(h('h3',{},'字段解析'),...parsed.fields.map((part,index)=>h('div',{},h('span',{class:'muted'},['分钟','小时','日期','月份','星期'][index]),h('code',{},part==='*'?'任意':part))));setStatus(status,'结果仅在本机计算 · 日期与星期同时指定时为“或”关系');}catch(error){description.textContent='';results.replaceChildren();parts.replaceChildren();setStatus(status,error.message,true);}};for(const [name,sample] of [['工作日 · 每 15 分钟','*/15 9-18 * * 1-5'],['工作日 · 09:00','0 9 * * 1-5'],['每月 1 日 · 08:30','30 8 1 * *']]){
+        list.replaceChildren(...rows.map((row,index)=>h('div',{class:'aux-conversion-row'+(index===target?' target':'')},h('span',{class:'muted'},row.title),h('code',{title:row.value},core.durationDisplay(row.value)),copyButtonIcon(()=>copy(ctx,row.value),'复制完整数值'))));if(!value.value.trim()||!rows.length)setStatus(status,'请输入有效数字',true);else setStatus(status,'点击行末图标可复制完整精度的数值');};value.oninput=unit.onchange=update;update();}
+      if(mode==='cron'){const field=input('分 时 日 月 周','*/15 9-18 * * 1-5'),description=h('p',{class:'aux-cron-summary'}),results=h('div',{class:'aux-cron-times'}),parts=h('div',{class:'aux-cron-fields'}),presets=h('div',{class:'aux-inline'});try{core.cronParse(ctx.initialValue||'');field.value=ctx.initialValue;}catch{}const update=async()=>{const serial=++cronSequence;try{const parsed=core.cronParse(field.value);description.textContent=core.cronSummary(parsed);const dates=await job.run('cronNext',field.value,new Date(),5);if(dead||mode!=='cron'||serial!==cronSequence)return;results.replaceChildren(h('h3',{},'未来执行时间'),...dates.map((date,index)=>{const value=new Date(date).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+' '+new Date(date).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',weekday:'long'});return h('div',{class:'aux-cron-row'},h('span',{class:'muted'},index?'第 '+(index+1)+' 次':'下一次'),h('code',{},value),index===0?h('small',{class:'aux-cron-zone'},'北京时间 UTC+8'):null,copyButtonIcon(()=>copy(ctx,value),'复制第 '+(index+1)+' 次执行时间'));}));if(!dates.length)results.append(h('p',{class:'muted'},'未来五年内没有匹配的时间'));parts.replaceChildren(h('h3',{},'字段解析'),...parsed.fields.map((part,index)=>h('div',{},h('span',{class:'muted'},['分钟','小时','日期','月份','星期'][index]),h('code',{},part==='*'?'任意':part))));setStatus(status,'结果仅在本机计算 · 日期与星期同时指定时为“或”关系');}catch(error){description.textContent='';results.replaceChildren();parts.replaceChildren();setStatus(status,error.message,true);}};for(const [name,sample] of [['工作日 · 每 15 分钟','*/15 9-18 * * 1-5'],['工作日 · 09:00','0 9 * * 1-5'],['每月 1 日 · 08:30','30 8 1 * *']]){
           const preset=button(name,()=>{field.value=sample;update();},'quiet');preset.title=sample;presets.append(preset);
         }field.oninput=()=>{clearTimeout(timer);timer=setTimeout(update,120);};content.append(label('Cron 表达式',field),presets,description,h('div',{class:'aux-cron-grid'},results,parts));await update();}
-      if(mode==='ascii'){const field=input('搜索字符、十进制或十六进制'),category=select([['printable','可打印字符'],['control','控制字符'],['all','全部字符']]),matchLabel=h('strong',{class:'aux-ascii-match','aria-live':'polite'}),report=table([['十进制',110],['十六进制',140],['字符',160],['说明',370],['',90]],'没有匹配的字符，可试试 A、65 或 0x41');const update=()=>{const rows=core.asciiRows(field.value,field.value?'all':category.value);
+      if(mode==='ascii'){const field=input('搜索字符、十进制或十六进制'),category=select([['printable','可打印字符'],['control','控制字符'],['all','全部字符']]),matchLabel=h('strong',{class:'aux-ascii-match','aria-live':'polite'}),report=table([['十进制',110],['十六进制',140],['字符',106],['说明',374],['复制字符',90]],'没有匹配的字符，可试试 A、65 或 0x41');const update=()=>{const rows=core.asciiRows(field.value,field.value?'all':category.value);
         const term = field.value.trim();
         const match = rows.find(row => String(row.number) === term || row.hex.toLowerCase() === term.toLowerCase())
           || rows.find(row => row.character === term || (term.length > 1 && row.character.toLowerCase() === term.toLowerCase()));
@@ -286,7 +286,7 @@
       const sqlText = output.querySelector('.cm-content') || output;
       sqlText.tabIndex = 0;
       sqlText.setAttribute('aria-readonly','true');
-      actions.append(button('还原 SQL',async()=>{output.value='';if(!left.value.trim()){report.node.hidden=true;setHeadline(titles[id]);setStatus(status,'请输入带占位符的 SQL');return;}const result=await run('restoreSQL',left.value,right.value);if(!result)return;output.value=result.sql;
+      actions.append(button('还原 SQL',async()=>{output.value='';if(!left.value.trim()){report.node.hidden=true;setHeadline(titles[id]);setStatus(status,'请输入带占位符的 SQL');return;}const result=await run('restoreSQL',left.value,right.value);if(!result)return;output.value=result.sql;output.setParameterMarks?.(result.replacementRanges);
         body.classList.toggle('short-sql',result.sql.length <= 180 && result.sql.split('\n').length <= 2);
         report.set([[result.replaced,result.missing.join('、')||'无',result.unused.join('、')||'无']]);const pending = result.unresolved > 0 || result.unused.length > 0;
         const title = result.unresolved ? result.unresolved + ' 个占位符缺少参数' : result.unused.length ? result.unused.length + ' 个参数未使用' :
@@ -340,14 +340,24 @@
   const markdownExamples=[['流程图','```mermaid\nflowchart LR\nA[开始] --> B{检查}\nB -->|通过| C[完成]\nB -->|重试| A\n```'],['时序图','```mermaid\nsequenceDiagram\nparticipant U as 用户\nparticipant A as OpenAll\nU->>A: 输入 Markdown\nA-->>U: 显示预览\n```'],['甘特图','```mermaid\ngantt\n  title 工作计划\n  dateFormat YYYY-MM-DD\n  section 开发\n  实现功能 :a1, 2026-11-02, 2d\n  验证效果 :after a1, 1d\n```'],['状态图','```mermaid\nstateDiagram-v2\n[*] --> Draft\nDraft --> Done : 完成\nDone --> [*]\n```'],['一级标题','# 一级标题'],['二级标题','## 二级标题'],['加粗','**加粗文字**'],['斜体','*斜体文字*'],['删除线','~~已删除文字~~'],['链接','[链接](https://example.com)'],['图片','![图片](https://example.com/image.png)'],['无序列表','- 第一项\n- 第二项'],['有序列表','1. 第一项\n2. 第二项'],['任务清单','- [ ] 待办\n- [x] 完成'],['引用','> 引用内容'],['行内代码','`print(1)`'],['代码块','```java\nSystem.out.println(1);\n```'],['分隔线','---'],['表格','| 名称 | 值 |\n| --- | --- |\n| 示例 | 1 |']];
   pages.markdown=async(root,ctx)=>{
     await loadToolEditor();
-    const status=shell(root,'markdown'),job=worker(),source=editor('在这里输入 Markdown',ctx.initialValue||'',false,'markdown'),preview=h('div',{class:'aux-markdown-preview'}),examples=h('div',{class:'aux-help-popover',hidden:'true'});let timer,sequence=0,dead=false,renderChain=Promise.resolve();
-    function insert(text){source.setRangeText((source.value?'\n\n':'')+text,source.selectionStart,source.selectionEnd,'end');examples.hidden=true;source.focus();refresh();}
-    examples.append(h('div',{class:'aux-section-bar'},h('strong',{},'语法示例'),button('关闭',()=>examples.hidden=true,'quiet')),...markdownExamples.map(([name,text])=>{
+    const status=shell(root,'markdown'),job=worker(),source=editor('在这里输入 Markdown',ctx.initialValue||'',false,'markdown'),preview=h('div',{class:'aux-markdown-preview'}),examples=h('aside',{class:'aux-help-popover',hidden:'true','aria-label':'Markdown 语法速查'});let timer,sequence=0,dead=false,renderChain=Promise.resolve();
+    function insert(text) {
+      const start = source.selectionStart, end = source.selectionEnd;
+      const block = text.includes('\n');
+      const before = block && start && !source.value.slice(0,start).endsWith('\n') ? '\n\n' : '';
+      const after = block && end < source.value.length && !source.value.slice(end).startsWith('\n') ? '\n\n' : '';
+      source.setRangeText(before+text+after,start,end,'end');
+      examples.hidden=true;source.focus();refresh();
+    }
+    examples.append(h('div',{class:'aux-section-bar'},h('strong',{},'语法速查'),button('关闭',()=>{examples.hidden=true;source.focus();},'quiet')));
+    for (const [title,items] of [['基础语法', markdownExamples.slice(4)], ['Mermaid 图形', markdownExamples.slice(0,4)]]) {
+      examples.append(h('h4',{},title),...items.map(([name,text])=>{
       const row=button(name,()=>insert(text),'quiet'),line=text.split('\n');
       row.dataset.sample=line[0]==='```mermaid'?line[1]:line[0];
       row.title=text;
       return row;
-    }));
+      }));
+    }
     async function saveHTML(){try{await ctx.api.fileAction('save',{name:'OpenAll.html',text:'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>OpenAll Markdown</title><style>body{max-width:900px;margin:40px auto;font:16px/1.65 system-ui;padding:24px}pre{white-space:pre-wrap;background:#f4f4f4;padding:16px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:8px}img,svg{max-width:100%}</style><body>'+preview.innerHTML+'</body></html>'});}catch(error){setStatus(status,error.message,true);}}
     const leftActions=[button('打开文件…',async()=>{try{const file=await ctx.api.chooseFile();if(file){source.value=file.text;refresh();}}catch(error){setStatus(status,error.message,true);}}),button('语法示例',()=>examples.hidden=!examples.hidden,'quiet')],rightActions=[button('复制 Markdown',()=>copy(ctx,source.value),'accent'),button('导出 HTML…',saveHTML,'quiet')];
     root.append(h('div',{class:'aux-split markdown-split'},pane('Markdown 源文',source,leftActions),pane('实时预览',preview,rightActions)),status,examples);
@@ -376,13 +386,21 @@
       h('span',{class:'muted'},'导出大小'),bytesLabel,
       h('span',{class:'muted'},'原图大小'),originalSize,details);
     const controls=h('aside',{class:'aux-image-controls'},h('div',{class:'aux-section-bar'},h('strong',{},'尺寸'),h('span',{class:'muted'},'像素')),h('div',{class:'aux-image-dimensions'},label('宽',width),label('高',height)),ratio.node,label('格式',format),qualityBox,targetBox,metadata.node,summary,h('div',{class:'aux-image-buttons'},copyButton,save));
-    root.append(h('div',{class:'aux-image-main'},h('div',{class:'aux-image-toolbar'},choose,paste,crop,h('span',{class:'aux-spacer'}),rotateLeft,rotateRight),preview,status),controls);
+    const scaleLabel = h('span',{class:'image-preview-scale'});
+    function updatePreviewScale() {
+      if (!image?.isConnected) { scaleLabel.textContent = ''; return; }
+      const percent = Math.round(image.getBoundingClientRect().width / image.naturalWidth * 100);
+      scaleLabel.textContent = '预览 '+percent+'%';
+    }
+    const scaleObserver = new ResizeObserver(updatePreviewScale);
+    root.append(h('div',{class:'aux-image-main'},h('div',{class:'aux-image-toolbar'},choose,paste,h('span',{class:'aux-spacer'}),crop,rotateLeft,rotateRight),
+      preview,h('div',{class:'image-preview-caption'},status,scaleLabel)),controls);
     const dataURL=blob=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('图片读取失败'));reader.readAsDataURL(blob);});
     const byteCount=value=>Math.floor((value.split(',')[1]?.length||0)*3/4)-(value.endsWith('==')?2:value.endsWith('=')?1:0);
     const human=size=>size>=1000000?(size/1000000).toFixed(2)+' MB':Math.max(1,Math.round(size/1000))+' KB';
     const decoded=value=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('无法读取图片格式'));img.src=value;});
     function setEnabled(){choose.hidden=!image;for(const control of [width,height,ratio.box,format,quality,metadata.box,target,targetInput,crop,rotateLeft,rotateRight])control.disabled=!image||transforming;save.disabled=copyButton.disabled=!output||rendering||transforming;qualityBox.hidden=!['jpeg','heic'].includes(format.value);targetBox.hidden=format.value!=='png';}
-    async function load(value,keepOriginal=false){if(!value?.dataUrl)return;try{let decodedSource=value.dataUrl,loaded;try{loaded=await decoded(decodedSource);}catch{const converted=await ctx.api.fileAction('encodeImage',{dataUrl:value.dataUrl,format:'png',removeMetadata:true});decodedSource=converted.dataUrl;loaded=await decoded(decodedSource);}if(dead)return;if(loaded.naturalWidth>12000||loaded.naturalHeight>12000||loaded.naturalWidth*loaded.naturalHeight>80000000)throw Error('图片尺寸需在 12000 像素和 8000 万像素以内');image=loaded;source=decodedSource;if(!keepOriginal){original=value.dataUrl;originalBytes=byteCount(value.dataUrl);fileName=(value.name||'OpenAll').replace(/\.[^.]+$/,'');}width.value=String(image.naturalWidth);height.value=String(image.naturalHeight);preview.replaceChildren(image);image.alt='处理后图片预览';target.value='';targetInput.value='';targetInput.hidden=true;setEnabled();await refresh();}catch(error){setStatus(status,error.message,true);}}
+    async function load(value,keepOriginal=false){if(!value?.dataUrl)return;try{let decodedSource=value.dataUrl,loaded;try{loaded=await decoded(decodedSource);}catch{const converted=await ctx.api.fileAction('encodeImage',{dataUrl:value.dataUrl,format:'png',removeMetadata:true});decodedSource=converted.dataUrl;loaded=await decoded(decodedSource);}if(dead)return;if(loaded.naturalWidth>12000||loaded.naturalHeight>12000||loaded.naturalWidth*loaded.naturalHeight>80000000)throw Error('图片尺寸需在 12000 像素和 8000 万像素以内');image=loaded;source=decodedSource;if(!keepOriginal){original=value.dataUrl;originalBytes=byteCount(value.dataUrl);fileName=(value.name||'OpenAll').replace(/\.[^.]+$/,'');}width.value=String(image.naturalWidth);height.value=String(image.naturalHeight);preview.replaceChildren(image);image.alt='处理后图片预览';scaleObserver.disconnect();scaleObserver.observe(image);updatePreviewScale();target.value='';targetInput.value='';targetInput.hidden=true;setEnabled();await refresh();}catch(error){setStatus(status,error.message,true);}}
     async function chooseImage(){try{const value=await ctx.api.fileAction('openImage');if(value&&!value.canceled)await load(value);}catch(error){setStatus(status,error.message,true);}}
     async function readImage(){try{const value=await ctx.api.fileAction('readImage');if(!value?.dataUrl){setStatus(status,'剪贴板中没有图片');return;}await load(value);}catch(error){setStatus(status,error.message,true);}}
     function dimensions(changed){if(ratio.box.checked&&image){const value=Number(changed==='width'?width.value:height.value);if(Number.isFinite(value)){const scaled=Math.max(1,Math.round(value*(changed==='width'?image.naturalHeight/image.naturalWidth:image.naturalWidth/image.naturalHeight)));(changed==='width'?height:width).value=String(scaled);}}schedule();}
@@ -401,9 +419,90 @@
       }catch(error){if(!dead&&serial===generation){output='';bytesLabel.textContent='生成失败';setStatus(status,error.message,true);}}finally{rendering=false;setEnabled();if(pending||serial!==generation){pending=false;refresh();}}}
     async function transform(draw,w,hgt){if(!image||transforming)return;transforming=true;generation++;setEnabled();try{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=hgt;draw(canvas.getContext('2d'));const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));canvas.width=canvas.height=1;if(!blob)throw Error('图片处理失败');await load({dataUrl:await dataURL(blob)},true);}catch(error){setStatus(status,error.message,true);}finally{transforming=false;setEnabled();}}
     async function rotate(right){const current=image;if(!current)return;await transform(context=>{context.translate(current.naturalHeight/2,current.naturalWidth/2);context.rotate((right?1:-1)*Math.PI/2);context.drawImage(current,-current.naturalWidth/2,-current.naturalHeight/2);},current.naturalHeight,current.naturalWidth);}
-    function cropDialog(){if(!image)return;const x=input('X','0'),y=input('Y','0'),w=input('宽',String(image.naturalWidth)),hg=input('高',String(image.naturalHeight)),error=h('div',{class:'aux-inline-error'}),shade=h('div',{class:'aux-dialog-shade'}),dialog=h('div',{class:'aux-dialog',role:'dialog','aria-label':'裁剪图片'}),close=()=>shade.remove();dialog.append(h('h3',{},'裁剪图片'),h('p',{class:'muted'},'坐标以图片左上角为原点，单位为像素。'),h('div',{class:'aux-crop-fields'},label('X',x),label('Y',y),label('宽',w),label('高',hg)),error,h('div',{class:'aux-actions'},button('取消',close),button('裁剪',async()=>{const values=[x,y,w,hg].map(v=>Number(v.value));if(values.some(v=>!Number.isInteger(v))||values[0]<0||values[1]<0||values[2]<1||values[3]<1||values[0]+values[2]>image.naturalWidth||values[1]+values[3]>image.naturalHeight){error.textContent='裁剪区域须完整位于图片内';return;}const original=image;close();await transform(context=>context.drawImage(original,...values,0,0,values[2],values[3]),values[2],values[3]);},'primary')));shade.append(dialog);shade.addEventListener('keydown',event=>{if(event.key==='Escape')close();});root.append(shade);x.focus();}
+    function cropDialog() {
+      if (!image) return;
+      const original = image;
+      const fields = [input('X','0'), input('Y','0'), input('宽',String(original.naturalWidth)), input('高',String(original.naturalHeight))];
+      const names = ['起点 X','起点 Y','宽','高'];
+      const error = h('div',{class:'aux-inline-error',role:'status'});
+      const shade = h('div',{class:'aux-dialog-shade'});
+      const dialog = h('div',{class:'aux-dialog',role:'dialog','aria-modal':'true','aria-label':'裁剪图片'});
+      const close = () => { shade.remove(); crop.focus(); };
+      const guide = document.createElementNS('http://www.w3.org/2000/svg','svg');
+      guide.classList.add('image-crop-guide');
+      guide.setAttribute('aria-hidden','true');
+      guide.setAttribute('viewBox', '0 0 '+original.naturalWidth+' '+original.naturalHeight);
+      const picture = document.createElementNS(guide.namespaceURI,'image');
+      picture.setAttribute('href',original.src);
+      picture.setAttribute('width',String(original.naturalWidth));
+      picture.setAttribute('height',String(original.naturalHeight));
+      const mask = document.createElementNS(guide.namespaceURI,'path');
+      mask.setAttribute('fill-rule','evenodd');
+      mask.setAttribute('fill','rgba(0,0,0,.52)');
+      const selection = document.createElementNS(guide.namespaceURI,'rect');
+      selection.setAttribute('fill','none');
+      selection.setAttribute('stroke','var(--accent)');
+      selection.setAttribute('stroke-width','2');
+      selection.setAttribute('vector-effect','non-scaling-stroke');
+      guide.append(picture,mask,selection);
+      const submit = button('裁剪', async () => {
+        const [x,y,w,hgt] = read();
+        close();
+        await transform(context=>context.drawImage(original,x,y,w,hgt,0,0,w,hgt),w,hgt);
+      },'primary');
+      const read = () => fields.map(field => field.value.trim() ? Number(field.value) : NaN);
+      function redraw() {
+        const [x,y,w,hgt] = read(), W = original.naturalWidth, H = original.naturalHeight;
+        const valid = [x,y,w,hgt].every(Number.isInteger) && x >= 0 && y >= 0 && w > 0 && hgt > 0 && x+w <= W && y+hgt <= H;
+        submit.disabled = !valid;
+        error.textContent = valid ? '' : '裁剪区域须完整位于图片内';
+        mask.setAttribute('d', valid ? 'M0 0H'+W+'V'+H+'H0Z M'+x+' '+y+'h'+w+'v'+hgt+'h'+(-w)+'Z' : '');
+        selection.setAttribute('visibility',valid ? 'visible' : 'hidden');
+        if (valid) for (const [key,val] of Object.entries({x,y,width:w,height:hgt})) selection.setAttribute(key,String(val));
+      }
+      let startPoint;
+      function imagePoint(event) {
+        const matrix = guide.getScreenCTM();
+        if (!matrix) return null;
+        return new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());
+      }
+      guide.addEventListener('pointerdown',event=>{
+        const point = imagePoint(event);
+        if (event.button !== 0 || !point || point.x < 0 || point.y < 0 || point.x > original.naturalWidth || point.y > original.naturalHeight) return;
+        startPoint = [Math.round(point.x),Math.round(point.y)];
+        guide.setPointerCapture(event.pointerId);
+      });
+      function selectTo(event) {
+        if (!startPoint) return;
+        const point = imagePoint(event);
+        if (!point) return;
+        const x = Math.max(0, Math.min(original.naturalWidth, Math.round(point.x)));
+        const y = Math.max(0, Math.min(original.naturalHeight, Math.round(point.y)));
+        const [x0,y0] = startPoint, width = Math.abs(x-x0), height = Math.abs(y-y0);
+        if (!width || !height) return;
+        [Math.min(x,x0),Math.min(y,y0),width,height].forEach((value,index)=>fields[index].value=String(value));
+        redraw();
+      }
+      guide.addEventListener('pointermove',selectTo);
+      guide.addEventListener('pointerup',event=>{ selectTo(event); startPoint = null; });
+      guide.addEventListener('lostpointercapture',()=>{ startPoint = null; });
+      fields.forEach((field,index) => {
+        field.inputMode = 'numeric';
+        field.setAttribute('aria-label',names[index]);
+        field.addEventListener('input',redraw);
+      });
+      dialog.append(h('h3',{},'裁剪图片'),h('p',{class:'muted'},'原图 '+original.naturalWidth+' × '+original.naturalHeight+' 像素。拖出选区，或从左上角输入坐标。'),guide,
+        h('div',{class:'aux-crop-fields'},...fields.map((field,index)=>label(names[index],field))),error,
+        h('div',{class:'aux-actions'},button('取消',close),submit));
+      shade.append(dialog);
+      shade.addEventListener('keydown',event=>{
+        if (event.key==='Escape') { event.preventDefault(); close(); }
+        if (event.key==='Enter' && document.activeElement?.matches('input') && !submit.disabled) { event.preventDefault(); submit.click(); }
+      });
+      root.append(shade); redraw(); fields[0].focus();
+    }
     async function copyOutput(){if(!output)return;try{const png=format.value==='png'?output:await raster(Number(width.value),Number(height.value));await ctx.api.fileAction('copyImage',{dataUrl:png});ctx.notify('已复制图片');}catch(error){setStatus(status,error.message,true);}}
     async function saveOutput(){if(!output)return;try{const result=await ctx.api.fileAction('save',{name:fileName+'.'+(format.value==='jpeg'?'jpg':format.value),dataUrl:output,format:format.value});if(!result?.canceled)setStatus(status,'图片已保存');}catch(error){setStatus(status,error.message,true);}}
-    const pasteEvent=event=>{if(event.target.closest('input,textarea'))return;const file=[...(event.clipboardData?.items||[])].find(item=>item.type.startsWith('image/'))?.getAsFile();if(file){event.preventDefault();dataURL(file).then(value=>load({dataUrl:value,name:file.name}));}};root.addEventListener('paste',pasteEvent);preview.ondragover=event=>event.preventDefault();preview.ondrop=async event=>{event.preventDefault();const file=event.dataTransfer.files[0];if(file&&(/image\//.test(file.type)||/\.(heic|heif|tiff?)$/i.test(file.name)))await load({dataUrl:await dataURL(file),name:file.name});};setEnabled();if(typeof ctx.initialValue==='string'&&ctx.initialValue.startsWith('data:image/'))await load({dataUrl:ctx.initialValue});else if(ctx.initialValue?.dataUrl)await load(ctx.initialValue);else await readImage();return {focus:()=>(image?choose:preview.querySelector('button'))?.focus(),dispose(){dead=true;generation++;clearTimeout(timer);job.dispose();root.removeEventListener('paste',pasteEvent);},paste(){readImage();}};
+    const pasteEvent=event=>{if(event.target.closest('input,textarea'))return;const file=[...(event.clipboardData?.items||[])].find(item=>item.type.startsWith('image/'))?.getAsFile();if(file){event.preventDefault();dataURL(file).then(value=>load({dataUrl:value,name:file.name}));}};root.addEventListener('paste',pasteEvent);preview.ondragover=event=>event.preventDefault();preview.ondrop=async event=>{event.preventDefault();const file=event.dataTransfer.files[0];if(file&&(/image\//.test(file.type)||/\.(heic|heif|tiff?)$/i.test(file.name)))await load({dataUrl:await dataURL(file),name:file.name});};setEnabled();if(typeof ctx.initialValue==='string'&&ctx.initialValue.startsWith('data:image/'))await load({dataUrl:ctx.initialValue});else if(ctx.initialValue?.dataUrl)await load(ctx.initialValue);else await readImage();return {focus:()=>(image?choose:preview.querySelector('button'))?.focus(),dispose(){dead=true;generation++;clearTimeout(timer);scaleObserver.disconnect();job.dispose();root.removeEventListener('paste',pasteEvent);},paste(){readImage();}};
   };
 })();

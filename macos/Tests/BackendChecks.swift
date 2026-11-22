@@ -36,6 +36,11 @@ import Foundation
         precondition(named.sql.contains("'Alice'::text") && named.unresolved == 1)
         let partial = SQLParameterRestorer.restore(sql: "select $2, $2, :missing", parameterText: "first, second")
         precondition(partial.replaced == 2 && partial.unresolved == 1 && partial.unused == 1)
+        let literals = SQLParameterRestorer.restore(sql: "SELECT '💎', 42, ?, $tag$? 42$tag$, /* ? */ $1, :missing", parameterText: "42(Integer)")
+        let prefix = "SELECT '💎', 42, "
+        let secondPrefix = prefix + "42, $tag$? 42$tag$, /* ? */ "
+        precondition(literals.replacementRanges == [NSRange(location: prefix.utf16.count, length: 2),
+                                                    NSRange(location: secondPrefix.utf16.count, length: 2)])
         print("配置、计划、日志与 SQL 参数检查通过")
     }
 }

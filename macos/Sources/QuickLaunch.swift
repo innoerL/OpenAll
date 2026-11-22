@@ -416,21 +416,22 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             detail.textColor = OpenAllTheme.muted
             detail.frame = NSRect(x: 68, y: 99, width: 364, height: 22)
             card.addSubview(detail)
-            let excerpt = NSTextField(labelWithString: "")
+            let excerpt = NSTextField(wrappingLabelWithString: "")
             excerpt.font = .systemFont(ofSize: 12, weight: .medium)
             excerpt.textColor = OpenAllTheme.ink
-            excerpt.lineBreakMode = .byTruncatingTail
-            excerpt.frame = NSRect(x: 68, y: 78, width: 360, height: 18)
+            excerpt.maximumNumberOfLines = 2
+            excerpt.lineBreakMode = .byWordWrapping
+            excerpt.frame = NSRect(x: 68, y: 58, width: 360, height: 37)
             card.addSubview(excerpt)
             sourceExcerpt = excerpt
             let retry = NSButton(title: "重新连接", target: self, action: #selector(retryTranslation))
-            retry.frame = NSRect(x: 68, y: 47, width: 100, height: 32)
+            retry.frame = NSRect(x: 68, y: 19, width: 100, height: 32)
             WindowChrome.styleAction(retry, primary: true)
             retry.isHidden = true
             retry.isEnabled = false
             card.addSubview(retry)
             let browser = NSButton(title: "在浏览器打开 ↗", target: self, action: #selector(openTranslationBrowser))
-            browser.frame = NSRect(x: 68, y: 47, width: 130, height: 32)
+            browser.frame = NSRect(x: 68, y: 19, width: 130, height: 32)
             WindowChrome.styleOutputAction(browser)
             card.addSubview(browser)
             connectionBrowser = browser
@@ -916,6 +917,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         clipboardWindow.show(target: nil)
         try await Task.sleep(nanoseconds: 350_000_000)
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "02-clipboard")
+        try clipboardWindow.captureEditingForDesign()
         clipboardWindow.showSelectedPreviewForDesign()
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "02-clipboard-preview")
         clipboardWindow.showSearchForDesign("json")
@@ -1047,6 +1049,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         else { imageTool.show() }
         try await Task.sleep(nanoseconds: 500_000_000)
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "07-image")
+        guard NSApp.sendAction(Selector(("cropImage")), to: imageTool, from: nil),
+              let crop = DesignPreview.lastWindow, crop.contentView != nil else {
+            throw NSError(domain: "ImageCropPreview", code: 1)
+        }
+        try DesignPreview.capture(crop, name: "07-image-crop")
         comparer.showDesignSample()
         guard try await comparer.verifyForDesign() else {
             throw NSError(domain: "ComparisonRegression", code: 1)
@@ -1064,8 +1071,30 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             selectionWindow.show(.image(previewImage))
             try DesignPreview.capture(DesignPreview.lastWindow!, name: "09-selection-image")
         }
-        selectionWindow.show(nil, message: "正在识别图片文字…", image: previewImage)
+        // 识别前后截同一张样本图片，使用应用正式的本地 Vision 识别器。
+        let sample = NSImage(size: NSSize(width: 800, height: 210), flipped: false) { bounds in
+            NSColor.white.setFill()
+            NSBezierPath(rect: bounds).fill()
+            ("OPENALL NOTES" as NSString).draw(at: NSPoint(x: 30, y: 115),
+                withAttributes: [.font: NSFont.boldSystemFont(ofSize: 48), .foregroundColor: NSColor.black])
+            ("Meeting room 12345" as NSString).draw(at: NSPoint(x: 30, y: 45),
+                withAttributes: [.font: NSFont.systemFont(ofSize: 36), .foregroundColor: NSColor.black])
+            return true
+        }
+        selectionWindow.show(nil, message: "正在识别图片文字…", image: sample)
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "10-selection-ocr")
+        let (text, recognitionError): (String?, String?) = await withCheckedContinuation { continuation in
+            ImageTextRecognizer.recognize(sample) { continuation.resume(returning: ($0, $1)) }
+        }
+        if let text {
+            guard text.contains("12345") else { throw NSError(domain: "SelectionOCRPreview", code: 1) }
+            selectionWindow.show(.text(text))
+            try DesignPreview.capture(DesignPreview.lastWindow!, name: "10-selection-ocr-result")
+        } else {
+            selectionWindow.show(nil, message: recognitionError)
+            try DesignPreview.capture(DesignPreview.lastWindow!, name: "10-selection-ocr-unavailable")
+            print("本机 Vision 未返回识别结果：\(recognitionError ?? "未识别到文字")")
+        }
         let visibleCount = NSApp.windows.filter { $0.isVisible }.count
         guard visibleCount == 0 else { throw NSError(domain: "DesignPreviewVisibleWindow", code: visibleCount) }
         print("离屏预览完成，visibleWindows=0：\(DesignPreview.output.path)")
@@ -2534,22 +2563,23 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             body.addSubview(bindings)
             let names: [UInt32: String] = [55:"Command ⌘",54:"Command ⌘",58:"Option ⌥",61:"Option ⌥",59:"Control ⌃",62:"Control ⌃",56:"Shift ⇧",60:"Shift ⇧"]
             let doubleTitle = settings.value.doubleTapKeyCode.map { "双击 " + (names[$0] ?? shortcutDescription(code: $0, modifiers: settings.value.doubleTapModifiers, label: settings.value.doubleTapKeyLabel)) } ?? "双击 Option ⌥"
-            label("打开搜索", 44, 334, 220)
-            let active = shortcutControl(isDouble ? doubleTitle : shortcutDescription(settings.value), tag: isDouble ? 4 : 1, frame: NSRect(x: keyX, y: 324, width: keyWidth, height: 30))
+            label("打开搜索", 44, 337, 220)
+            let active = shortcutControl(isDouble ? doubleTitle : shortcutDescription(settings.value), tag: isDouble ? 4 : 1, frame: NSRect(x: keyX, y: 337, width: keyWidth, height: 30))
             body.addSubview(active)
             recordButton = active
             if isDouble && !doubleTapMonitor.isActive {
                 let repair = NSButton(title: AXIsProcessTrusted() ? "重试监听" : "前往授权", target: self, action: AXIsProcessTrusted() ? #selector(retryDoubleTapFromSettings) : #selector(openPermissionsTab))
-                repair.frame = NSRect(x: keyX - 100, y: 324, width: 90, height: 30)
+                repair.frame = NSRect(x: keyX - 100, y: 337, width: 90, height: 30)
                 WindowChrome.styleAction(repair)
                 body.addSubview(repair)
             }
             let ready = isDouble ? doubleTapMonitor.isActive : shortcutAvailable
             let warning = OpenAllTheme.isLight ? (NSColor.systemOrange.blended(withFraction: 0.48, of: .black) ?? .systemOrange) : .systemOrange
-            let state = NSTextField(labelWithString: ready ? "已启用" : isDouble ? "监听未启动，请检查辅助功能权限" : "快捷键已占用，请重新录制")
+            let state = NSTextField(labelWithString: ready ? "已启用" : isDouble ? "监听未启动，请检查辅助功能权限" : "已被占用，点击上方快捷键重录")
             state.font = .systemFont(ofSize: 12)
             state.textColor = ready ? OpenAllTheme.muted : warning
-            state.frame = NSRect(x: 44, y: 314, width: 335, height: 24)
+            state.alignment = .right
+            state.frame = NSRect(x: groupRight - 326, y: 311, width: 310, height: 22)
             if !ready { active.layer?.borderColor = warning.withAlphaComponent(0.5).cgColor }
             body.addSubview(state)
             settingsStatus = state
@@ -2598,7 +2628,9 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             pinyin.state = settings.value.pinyinEnabled ? .on : .off
             pinyin.frame = NSRect(x: 28, y: 432, width: 600, height: 30)
             body.addSubview(pinyin)
-            group(chromeAdvancedExpanded ? 196 : 270, chromeAdvancedExpanded ? 190 : 116)
+            let chromeEnabled = settings.value.searchBookmarks || settings.value.searchHistory
+            let showDirectory = chromeEnabled && chromeAdvancedExpanded
+            group(showDirectory ? 196 : 270, showDirectory ? 190 : 116)
             _ = text("Chrome", 358)
             for (name, tag, enabled, y) in [("书签",10,settings.value.searchBookmarks,328.0),("浏览历史",11,settings.value.searchHistory,328.0)] {
                 let toggle = WindowChrome.checkbox(name, target: self, action: #selector(searchSourceChanged(_:)))
@@ -2607,7 +2639,6 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 toggle.frame = NSRect(x: tag == 11 ? 224 : 28, y: y, width: 180, height: 28)
                 body.addSubview(toggle)
             }
-            let chromeEnabled = settings.value.searchBookmarks || settings.value.searchHistory
             let status = !chromeEnabled ? "已关闭 · 开启后自动检测配置" : chrome.profiles.isEmpty ? "尚未发现配置，可指定目录" : "已发现 \(chrome.profiles.count) 个配置"
             _ = text(status, 292, secondary: true)
             let detect = NSButton(title: "重新检测", target: self, action: #selector(redetectChrome))
@@ -2616,13 +2647,13 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             detect.isEnabled = chromeEnabled
             detect.isHidden = !chromeEnabled
             body.addSubview(detect)
-            let advanced = NSButton(title: chromeAdvancedExpanded ? "收起目录  ⌃" : "指定目录  ⌄", target: self, action: #selector(toggleChromeAdvanced))
+            let advanced = NSButton(title: showDirectory ? "收起目录  ⌃" : "指定目录  ⌄", target: self, action: #selector(toggleChromeAdvanced))
             advanced.frame = NSRect(x: 440, y: 288, width: 124, height: 28)
             WindowChrome.styleAction(advanced)
             advanced.isEnabled = chromeEnabled
             advanced.isHidden = !chromeEnabled
             body.addSubview(advanced)
-            if chromeAdvancedExpanded {
+            if showDirectory {
                 let path = NSTextField(frame: NSRect(x: 28, y: 250, width: 536, height: 30))
                 path.placeholderString = "自动发现；也可输入 Chrome 数据目录"
                 path.stringValue = settings.value.chromePath
@@ -2634,7 +2665,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 chromePathField = path
                 _ = text("通常位于 ~/Library/Application Support/Google/Chrome", 220, secondary: true)
             }
-            let offset: CGFloat = chromeAdvancedExpanded ? 12 : 84
+            let offset: CGFloat = showDirectory ? 12 : 84
             group(76 + offset, 122)
             _ = text("文件搜索", 170 + offset)
             let files = WindowChrome.checkbox("搜索文件和文件夹", target: self, action: #selector(searchSourceChanged(_:)))
@@ -2655,7 +2686,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             searchFileHint = hint
             refreshFileSearchHint()
             let manage = NSButton(title: "管理置顶与隐藏结果 →", target: self, action: #selector(openSearchManager))
-            manage.frame = NSRect(x: 28, y: chromeAdvancedExpanded ? 28 : 108, width: 220, height: 32)
+            manage.frame = NSRect(x: 28, y: showDirectory ? 28 : 108, width: 220, height: 32)
             WindowChrome.styleAction(manage)
             body.addSubview(manage)
         case 2:
@@ -2683,12 +2714,29 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             enabled.state = clipboardStore.preferences.enabled ? .on : .off
             enabled.frame = NSRect(x: 28, y: 421, width: 240, height: 28)
             body.addSubview(enabled)
-            let recordingHint = settingLabel("开启后自动保存；下方可临时暂停。", y: 395, width: 536)
-            recordingHint.frame.origin.x = 28
+            let preferences = clipboardStore.preferences
+            let recordingState: String
+            if !preferences.enabled {
+                recordingState = "已关闭，新复制的内容不会存入历史。"
+            } else if let until = preferences.pausedUntil, until > Date() {
+                if until == .distantFuture {
+                    recordingState = "已暂停，选择“持续记录”即可恢复。"
+                } else {
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "M 月 d 日 HH:mm"
+                    recordingState = "已暂停，将于 " + formatter.string(from: until) + " 自动恢复。"
+                }
+            } else {
+                recordingState = "正在记录新复制的内容。"
+            }
+            let recordingHint = settingLabel(recordingState, y: 395, width: 510)
+            recordingHint.frame.origin.x = 50
             recordingHint.font = .systemFont(ofSize: 10.5)
             recordingHint.textColor = OpenAllTheme.muted
             body.addSubview(recordingHint)
-            body.addSubview(settingLabel("记录状态", y: 359))
+            let scheduleLabel = settingLabel("记录安排", y: 359)
+            scheduleLabel.frame.origin.x = 50
+            body.addSubview(scheduleLabel)
             let pause = NSPopUpButton(frame: NSRect(x: 324, y: 355, width: 240, height: 28))
             for title in ["持续记录", "暂停 1 小时", "暂停至明天", "暂停至手动恢复"] { pause.addItem(withTitle: title) }
             let remaining = clipboardStore.preferences.pausedUntil?.timeIntervalSinceNow ?? 0
@@ -2983,7 +3031,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         heading.font = .systemFont(ofSize: 18, weight: .medium)
         body.addSubview(heading)
         let back = NSButton(title: "← 返回搜索设置", target: self, action: #selector(closeSearchManager))
-        back.frame = NSRect(x: 504, y: 445, width: 165, height: 32)
+        back.frame = NSRect(x: 174, y: 445, width: 147, height: 32)
         WindowChrome.styleOutputAction(back)
         body.addSubview(back)
         let hint = NSTextField(wrappingLabelWithString: "管理置顶与隐藏的搜索结果。")
@@ -3037,10 +3085,15 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         body.addSubview(scroll)
         guard ranking.hasUsageHistory else { return }
         let clear = NSButton(title: "清除本机使用排序记录", target: self, action: #selector(clearSearchUsage))
-        clear.frame = NSRect(x: 20, y: 61, width: 220, height: 32)
+        let historyRule = NSView(frame: NSRect(x: 28, y: 100, width: 620, height: 1))
+        historyRule.wantsLayer = true
+        historyRule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
+        body.addSubview(historyRule)
+        body.addSubview(settingLabel("使用频率记录", y: 65, width: 220))
+        clear.frame = NSRect(x: 444, y: 57, width: 204, height: 32)
         WindowChrome.styleOutputAction(clear)
         body.addSubview(clear)
-        let note = settingLabel("仅重置自动学习的排序，不影响手动规则。", y: 27, width: 480)
+        let note = settingLabel("清除后重新学习使用频率，手动规则会保留。", y: 39, width: 480)
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
         body.addSubview(note)
@@ -3056,6 +3109,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
 
     @objc private func clearSearchUsage() {
         ranking.clearUsage()
+        renderSettings()
         update()
     }
 
@@ -3098,8 +3152,10 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         appearanceAccentSample?.layer?.backgroundColor = OpenAllTheme.accent.withAlphaComponent(0.15).cgColor
         backgroundSwatch?.layer?.backgroundColor = OpenAllTheme.canvas.cgColor
         accentSwatch?.layer?.backgroundColor = OpenAllTheme.accent.cgColor
-        backgroundHexLabel?.stringValue = OpenAllTheme.hex(OpenAllTheme.canvas)
-        accentHexLabel?.stringValue = OpenAllTheme.hex(OpenAllTheme.accent)
+        let backgroundIsCustom = !appearancePresetButtons.contains { $0.tag < 100 && $0.chosen }
+        let accentIsCustom = !appearancePresetButtons.contains { $0.tag >= 100 && $0.chosen }
+        backgroundHexLabel?.stringValue = OpenAllTheme.hex(OpenAllTheme.canvas) + (backgroundIsCustom ? "  ✓" : "")
+        accentHexLabel?.stringValue = OpenAllTheme.hex(OpenAllTheme.accent) + (accentIsCustom ? "  ✓" : "")
     }
 
     @objc private func appearancePanelChanged(_ sender: NSColorPanel) {
@@ -3139,6 +3195,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         if sender.tag == 1 { next.enabled = sender.state == .on }
         else if sender.tag == 3 { next.plainTextByDefault = sender.state == .on }
         clipboardStore.updatePreferences(next)
+        if sender.tag == 1 { renderSettings() }
     }
     @objc private func pinyinChanged(_ sender: NSButton) {
         var next = settings.value
@@ -3195,11 +3252,12 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         let until: Date?
         switch sender.indexOfSelectedItem {
         case 1: until = now.addingTimeInterval(3600)
-        case 2: until = Calendar.current.startOfDay(for: now).addingTimeInterval(86400)
+        case 2: until = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now))
         case 3: until = Date.distantFuture
         default: until = nil
         }
         clipboardStore.setPaused(until: until)
+        renderSettings()
     }
     @objc private func showClearMenu(_ sender: NSButton) {
         let menu = NSMenu(title: "清理未固定记录")

@@ -171,6 +171,25 @@
       .heading button { padding-inline:5px; }
       #hint .switch-keys { display:none; }
     }
+    .toolbar .findbar { flex:1; min-width:0; max-width:520px; margin:0 0 0 auto; padding:0; gap:4px; }
+    .toolbar:has(.findbar:not([hidden])) .comparison-status { flex:0 1 auto; }
+    .toolbar:has(.findbar:not([hidden])) .options { padding-left:0; border:0; }
+    .pane-menu { margin-left:auto; position:relative; }
+    .pane-menu > summary { display:none; }
+    .pane-menu .pane-actions { display:flex; gap:2px; }
+    @media (max-width:900px) {
+      .toolbar:has(.findbar:not([hidden])) .comparison-status:has(.navigation:not([hidden])) #summary { display:none; }
+      .toolbar:has(.findbar:not([hidden])) #summary { max-width:120px; }
+    }
+    @media (max-width:730px) {
+      .pane-menu > summary { display:flex; align-items:center; justify-content:center; height:28px; width:32px; border-radius:4px; cursor:pointer; color:var(--secondary); list-style:none; letter-spacing:1px; }
+      .pane-menu > summary::-webkit-details-marker { display:none; }
+      .pane-menu > summary:is(:hover,:focus-visible),.pane-menu[open] > summary { background:var(--raised); color:var(--ink); }
+      .pane-menu > summary:focus-visible { outline:2px solid var(--accent); }
+      .pane-menu .pane-actions { position:absolute; right:0; top:100%; display:grid; z-index:6; min-width:98px; padding:4px; border:1px solid var(--rule); border-radius:6px; background:var(--raised); }
+      .pane-menu .pane-actions button { margin:0; text-align:left; padding-inline:8px; }
+      .pane-menu .pane-actions button:enabled:hover { background:var(--surface); }
+    }
   </style>
   <link rel="stylesheet" href="../src/fonts.css">
   <link rel="stylesheet" href="../../shared/gold-ui/surface-effects.css">
@@ -220,11 +239,11 @@
   </div>
   <div class="editors">
     <section class="pane" data-target>
-      <div class="heading"><div class="pane-title"><strong>左侧</strong><span class="count" id="left-count">0 行</span></div><button class="natural-sort" data-side="0" title="左侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="左侧按行自然升序">自然排序</button><button class="copy" data-side="0" title="复制左侧全文" aria-label="复制左侧全文">复制</button></div>
+      <div class="heading"><div class="pane-title"><strong>左侧</strong><span class="count" id="left-count">0 行</span></div><details class="pane-menu" open><summary aria-label="左侧操作" title="左侧操作">•••</summary><div class="pane-actions"><button class="natural-sort" data-side="0" title="左侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="左侧按行自然升序">自然排序</button><button class="copy" data-side="0" title="复制左侧全文" aria-label="复制左侧全文">复制</button></div></details></div>
       <div class="editor" id="left"></div>
     </section>
     <section class="pane">
-      <div class="heading"><div class="pane-title"><strong>右侧</strong><span class="count" id="right-count">0 行</span></div><button class="natural-sort" data-side="1" title="右侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="右侧按行自然升序">自然排序</button><button class="copy" data-side="1" title="复制右侧全文" aria-label="复制右侧全文">复制</button></div>
+      <div class="heading"><div class="pane-title"><strong>右侧</strong><span class="count" id="right-count">0 行</span></div><details class="pane-menu" open><summary aria-label="右侧操作" title="右侧操作">•••</summary><div class="pane-actions"><button class="natural-sort" data-side="1" title="右侧按行自然升序，item2 排在 item10 前；支持撤销" aria-label="右侧按行自然升序">自然排序</button><button class="copy" data-side="1" title="复制右侧全文" aria-label="复制右侧全文">复制</button></div></details></div>
       <div class="editor" id="right"></div>
     </section>
   </div>

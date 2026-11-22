@@ -93,6 +93,7 @@ app.whenReady().then(async()=>{
 
   await mount('converter');assert.equal(await js('return document.querySelectorAll(".aux-conversion-row").length'),10);await capture('converter-duration');
   assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'1 秒 = 1000 毫秒');
+  assert.match(await js('return document.querySelector(".aux-conversion-row.target").textContent'),/毫秒.*1000/);
   await js('const unit=document.querySelector(".aux-duration-fields select");unit.value="7";unit.dispatchEvent(new Event("change"));');
   assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'1 毫秒 = 0.001 秒');
   await fill('.aux-duration-fields input','xxx');assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'换算结果');
@@ -137,6 +138,7 @@ app.whenReady().then(async()=>{
 
   await mount('sqlRestore',"SELECT * FROM users WHERE id = ? AND name = ?;");await js('document.querySelectorAll("textarea,.aux-editor-frame")[1].value="Parameters: 42(Integer), OpenAll(String)";');await click('还原 SQL');await until('document.querySelectorAll("textarea,.aux-editor-frame")[2].value.includes("id = 42")','SQL 还原');await capture('sqlRestore');
   assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'已还原 2 个占位符');
+  assert.equal(await js('return [...document.querySelectorAll(".editor-bound-parameter")].map(node=>node.textContent).join("|")'),"42|'OpenAll'");
   assert.equal(await js('return document.querySelector(".aux-backend-body > .aux-pane").offsetHeight'),80,'短 SQL 使用紧凑结果区');
   assert.equal(await js('return getComputedStyle(document.querySelector(".aux-report-heading button:not(.aux-locate)")).borderTopWidth'),'1px');
   assert.equal(await js('const result=document.querySelector(".aux-backend-body > .aux-pane .cm-content");result.focus();return result===document.activeElement;'),true,'SQL 结果可通过键盘切入');

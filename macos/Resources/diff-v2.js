@@ -464,6 +464,40 @@
   const comparisonFilters = document.getElementById('comparison-filters');
   const findFilters = document.getElementById('find-filters');
 
+  const searchFitsToolbar = window.matchMedia('(min-width:791px)');
+  function placeFindBar() {
+    const toolbar = document.querySelector('.toolbar');
+    const focused = findBar.contains(document.activeElement) ? document.activeElement : null;
+    if (searchFitsToolbar.matches) toolbar.insertBefore(findBar,document.querySelector('.options'));
+    else toolbar.after(findBar);
+    if (focused) focused.focus({preventScroll:true});
+  }
+  searchFitsToolbar.addEventListener('change',placeFindBar);
+  placeFindBar();
+  const paneMenus = [...document.querySelectorAll('.pane-menu')];
+  function placePaneActions() {
+    for (const menu of paneMenus) menu.open = !compactLayout.matches;
+  }
+  compactLayout.addEventListener('change',placePaneActions);
+  placePaneActions();
+  for (const menu of paneMenus) {
+    const summary = menu.querySelector('summary');
+    menu.addEventListener('keydown',event => {
+      if (compactLayout.matches && menu.open && event.key === 'Escape') {
+        event.preventDefault(); event.stopPropagation(); menu.open = false; summary.focus();
+      }
+    });
+    menu.addEventListener('click',event => {
+      if (compactLayout.matches && event.target.closest('button')) {
+        menu.open = false;
+        if (menu.contains(document.activeElement)) summary.focus();
+      }
+    });
+    menu.addEventListener('focusout',event => {
+      if (compactLayout.matches && event.relatedTarget && !menu.contains(event.relatedTarget)) menu.open = false;
+    });
+  }
+
   function showOptions(open) {
     optionsPanel.hidden = !open;
     optionsButton.setAttribute('aria-expanded', String(open));
@@ -473,7 +507,8 @@
     const focused = document.activeElement;
     const filterFocused = comparisonFilters.contains(focused) || findFilters.contains(focused);
     // 仅在跨越断点时移动原来的控件，保留选项值、监听器和编辑区状态。
-    if (compactLayout.matches) {
+    const grouped = compactLayout.matches || !findBar.hidden;
+    if (grouped) {
       compactOptions.hidden = false;
       optionsPanel.append(comparisonFilters, findFilters);
     } else {
@@ -481,13 +516,14 @@
       document.getElementById('find-filter-slot').append(findFilters);
       compactOptions.hidden = true;
     }
-    showOptions(compactLayout.matches && filterFocused);
+    showOptions(grouped && filterFocused);
     if (filterFocused) focused.focus();
-    else if (focused === optionsButton && !compactLayout.matches) syncScroll.focus();
+    else if (focused === optionsButton && !grouped) syncScroll.focus();
   }
   optionsButton.addEventListener('click', () => showOptions(optionsPanel.hidden));
   document.addEventListener('pointerdown', event => {
     if (!optionsPanel.hidden && !compactOptions.contains(event.target)) showOptions(false);
+    if (compactLayout.matches) for (const menu of paneMenus) if (!menu.contains(event.target)) menu.open = false;
   });
   compactOptions.addEventListener('focusout', event => {
     if (event.relatedTarget && !compactOptions.contains(event.relatedTarget)) showOptions(false);
@@ -500,6 +536,7 @@
     showOptions(false);
     findFilters.hidden = false;
     findBar.hidden = false;
+    placeOptions();
     searchButton.setAttribute('aria-expanded', 'true');
     if (!findQuery.value) {
       const input = inputs[activeSide];
@@ -517,6 +554,7 @@
     showOptions(false);
     findFilters.hidden = true;
     findBar.hidden = true;
+    placeOptions();
     searchButton.setAttribute('aria-expanded', 'false');
     findMatches = [[], []]; findResults = []; findIndex = -1;
     paintSearch();
@@ -608,6 +646,8 @@
   // 在编辑器自己的键盘映射之前接收查找快捷键，焦点仍归当前窗口所有。
   document.addEventListener('keydown', event => {
     if (event.isComposing || findComposing || composing.size || inputs.some(input => input.composing)) return;
+    const paneMenu = event.target.closest?.('.pane-menu[open]');
+    if (compactLayout.matches && paneMenu && event.key === 'Escape') return;
     const command = event.metaKey && !event.ctrlKey && !event.altKey;
     const key = event.key.toLowerCase();
     if (command && key === 'f' && !event.shiftKey) {

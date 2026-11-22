@@ -37,7 +37,7 @@
   font-variant-numeric: tabular-nums;
 }
 .aux-backend .aux-report tr.changed td:last-child { color: var(--accent-text,var(--ink)); }
-.aux-converter .aux-conversion-row.source code,
+.aux-converter .aux-conversion-row.target code,
 .aux-converter .aux-cron-row:first-of-type code { font-weight: 650; }
 .aux-converter .aux-cron-row code,
 .aux-converter .aux-report :is(td,th):nth-child(-n+2) { font-variant-numeric: tabular-nums; }
@@ -140,6 +140,23 @@
 .aux-ascii-match { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
 .aux-ascii-match:empty { display: none; }
 
-.aux-backend .summary-row > td:first-child { box-shadow:inset 2px 0 var(--accent-text); }
+.aux-backend .summary-row { background: color-mix(in srgb,var(--accent) 8%,transparent); }
+.aux-backend .summary-row > td:first-child { box-shadow:inset 3px 0 var(--accent-text); font-weight:600; }
+.aux-backend .aux-report tr.group td { background:var(--surface); font-size:12px; font-weight:400; color:var(--muted); }
+.aux-backend .editor-bound-parameter { background:color-mix(in srgb,var(--accent) 25%,transparent); border-radius:2px; }
+.aux-converter .aux-cron-row { display:flex; align-items:center; gap:10px; }
+.aux-converter .aux-cron-row code { flex:0 1 auto; }
+.aux-converter .aux-cron-row .aux-copy-icon { flex:none; margin-left:auto; }
+.aux-converter .aux-cron-zone { color:var(--muted); font-size:11px; white-space:nowrap; }
+@media (hover:hover) and (pointer:fine) {
+  .aux-converter .aux-cron-row:not(:first-of-type) .aux-copy-icon { opacity:0; }
+  .aux-converter .aux-cron-row:is(:hover,:focus-within) .aux-copy-icon { opacity:1; }
+}
+@media (max-width:800px) {
+  .aux-converter .aux-cron-row { flex-wrap:wrap; }
+  .aux-converter .aux-cron-row .aux-cron-zone { width:100%; order:1; }
+}
+.editor-formatter .editor-formatter-pane.output .formatter-count { margin-left:auto; }
+.editor-formatter .editor-formatter-pane.output .editor-pane-heading button { margin-left:0; }
 
 .aux-converter-body:has(.aux-ascii-lookup) .aux-table-footer { display: none; }

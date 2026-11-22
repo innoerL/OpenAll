@@ -136,7 +136,7 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
         let markdownEditor = OpenAllTextView(frame: left.bounds)
         markdownEditor.placeholderText = "输入 Markdown，右侧实时预览 · ⌘/ 查看语法"
         editor = markdownEditor
-        editor.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        editor.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         markdownEditor.highlightsMarkdown = true
         editor.textContainerInset = NSSize(width: 16, height: 18)
         WindowChrome.styleEditor(left, text: editor)
@@ -259,11 +259,6 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
         scroll.contentView.scroll(to: .zero)
         scroll.reflectScrolledClipView(scroll.contentView)
         card.addSubview(scroll)
-        let scrollHint = NSTextField(labelWithString: "包含基础语法与 Mermaid 图形")
-        scrollHint.font = .systemFont(ofSize: 10, weight: .medium)
-        scrollHint.textColor = OpenAllTheme.muted
-        scrollHint.frame = NSRect(x: 24, y: 9, width: width - 48, height: 17)
-        card.addSubview(scrollHint)
         let shade = NSView(frame: NSRect(x: 0, y: 0, width: root.bounds.width, height: root.bounds.height - WindowChrome.height))
         shade.autoresizingMask = [.width, .height]
         shade.wantsLayer = true

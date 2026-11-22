@@ -104,6 +104,15 @@ final class SnippetEditorView: NSView, NSTableViewDataSource, NSTableViewDelegat
         keywordField.placeholderString = "例如 reply"
         addSubview(keywordField)
         addSubview(label("内容", frame: NSRect(x: 260, y: 311, width: 80, height: 20)))
+        let variables = [("插入日期", "{{date}}"), ("插入时间", "{{time}}"), ("插入剪贴板", "{{clipboard}}")]
+        for (index, item) in variables.enumerated() {
+            let button = NSButton(title: item.0, target: self, action: #selector(insertVariable(_:)))
+            button.frame = NSRect(x: 484 + CGFloat(index) * 94, y: 309, width: 94, height: 25)
+            WindowChrome.styleOutputAction(button)
+            button.identifier = NSUserInterfaceItemIdentifier(item.1)
+            button.toolTip = item.1
+            addSubview(button)
+        }
         let bodyScroll = NSScrollView(frame: NSRect(x: 260, y: 145, width: 391, height: 160))
         bodyScroll.hasVerticalScroller = true
         bodyScroll.borderType = .noBorder
@@ -111,7 +120,7 @@ final class SnippetEditorView: NSView, NSTableViewDataSource, NSTableViewDelegat
         bodyView.isVerticallyResizable = true
         bodyView.autoresizingMask = [.width]
         bodyView.textContainer?.widthTracksTextView = true
-        bodyView.placeholderText = "输入需要重复使用的文字。\n支持 {{date}}、{{time}}、{{clipboard}} 变量。"
+        bodyView.placeholderText = "例如：已于 {{date}} 收到，稍后回复。"
         bodyView.isRichText = false
         bodyView.font = .systemFont(ofSize: 13)
         bodyView.textContainerInset = NSSize(width: 12, height: 10)
@@ -202,6 +211,13 @@ final class SnippetEditorView: NSView, NSTableViewDataSource, NSTableViewDelegat
         chooser.isHidden = store.items.isEmpty
         creationHeading.isHidden = !store.items.isEmpty
         if let id = selectedID, let index = chooser.itemArray.firstIndex(where: { $0.representedObject as? UUID == id }) { chooser.selectItem(at: index) }
+    }
+
+    @objc private func insertVariable(_ sender: NSButton) {
+        guard let token = sender.identifier?.rawValue else { return }
+        let selection = bodyView.selectedRange()
+        window?.makeFirstResponder(bodyView)
+        bodyView.insertText(token, replacementRange: selection)
     }
 
     @objc private func chooseSnippet() {

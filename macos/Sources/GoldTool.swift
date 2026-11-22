@@ -499,6 +499,8 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             try await tool.until("窄窗七日参考价布局") {
                 try await tool.execute("return innerWidth <= 345 && document.querySelector('#forecast-table').getBoundingClientRect().right <= document.querySelector('#outlook').getBoundingClientRect().right;") as? Bool == true
             }
+            try await capture("gold-outlook-narrow")
+            _ = try await tool.execute("document.querySelector('#range-chart-toggle').click(); return true;")
             let narrowPrices = """
             const table = document.querySelector('#forecast-table');
             const rows = [...table.querySelectorAll('.forecast-day-toggle')].map(button => button.closest('tr'));
@@ -518,7 +520,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
               })) && document.querySelector('#close').getBoundingClientRect().right <= width + 1;
             """
             try check(try await tool.execute(narrowPrices) as? Bool == true, "窄窗三列的日期、参考价和区间没有裁切")
-            try await capture("gold-outlook-narrow")
+            try await capture("gold-outlook-narrow-range")
             _ = try await tool.execute("document.querySelector('.forecast-day-toggle').focus(); return true;")
             let dayKeys: [(String, UInt16, Int)] = [("\u{F700}", 126, 0), ("\u{F701}", 125, 1), ("\u{F72B}", 119, 6),
                 ("\u{F701}", 125, 6), ("\u{F700}", 126, 5), ("\u{F729}", 115, 0)]
@@ -670,6 +672,8 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("return await openallGold.action('edge');")
             try await tool.until("左侧贴边收起") { dock.collapsed && !panel.isVisible && dock.rail.isVisible }
             try check(dock.side == "left" && !dock.rail.isOpaque && !dock.rail.canBecomeKey, "透明非激活贴边竖条")
+            try DesignPreview.capture(dock.rail, name: "gold/gold-edge-rail")
+            screenshots.append("gold-edge-rail.png")
             let focus = NSApp.keyWindow
             let hoverTime = ProcessInfo.processInfo.systemUptime
             dock.checkHoverForDesign(at: NSPoint(x: area.midX, y: area.midY), now: hoverTime)

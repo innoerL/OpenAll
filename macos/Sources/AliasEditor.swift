@@ -5,7 +5,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
     private let onChange: () -> Void
     private let list = NSView()
     private let scroll = NSScrollView()
-    private let notice = NSTextField(labelWithString: "修改后保存，别名立即生效。")
+    private let notice = NSTextField(labelWithString: "")
     private let example = NSTextField(labelWithString: "")
     private let countLabel = NSTextField(labelWithString: "")
     private var fields: [NSTextField] = []
@@ -41,7 +41,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
     }
 
     private func input(_ placeholder: String, y: CGFloat, multiline: Bool = false) {
-        let field = NSTextField(frame: NSRect(x: 260, y: y, width: 391, height: multiline ? 70 : 34))
+        let field = NSTextField(frame: NSRect(x: 260, y: y, width: 418, height: multiline ? 70 : 34))
         field.placeholderString = placeholder
         field.font = .systemFont(ofSize: 12)
         WindowChrome.styleInput(field)
@@ -96,7 +96,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         input("例如 google, gg", y: 270)
         label("网址模板 · {query} 代表搜索词", x: 260, y: 229, width: 350)
         input("https://example.com/search?q={query}", y: 155, multiline: true)
-        example.frame = NSRect(x: 260, y: 126, width: 391, height: 20)
+        example.frame = NSRect(x: 260, y: 126, width: 418, height: 20)
         example.font = .systemFont(ofSize: 12)
         example.textColor = OpenAllTheme.muted
         example.lineBreakMode = .byTruncatingTail
@@ -106,12 +106,12 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         WindowChrome.styleAction(saveButton, primary: true)
         addSubview(saveButton)
         deleteButton = NSButton(title: "删除", target: self, action: #selector(deleteAlias))
-        deleteButton.frame = NSRect(x: 581, y: 86, width: 70, height: 30)
+        deleteButton.frame = NSRect(x: 608, y: 86, width: 70, height: 30)
         WindowChrome.styleAction(deleteButton)
         addSubview(deleteButton)
         notice.font = .systemFont(ofSize: 12)
         notice.textColor = OpenAllTheme.muted
-        notice.frame = NSRect(x: 260, y: 54, width: 391, height: 20)
+        notice.frame = NSRect(x: 375, y: 89, width: 221, height: 20)
         addSubview(notice)
         rebuildList(resetScroll: true)
         fillSelection()
@@ -169,6 +169,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
     }
 
     func controlTextDidChange(_ notification: Notification) {
+        showNotice("尚未保存")
         updateExample()
     }
 
@@ -190,6 +191,8 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
 
     private func showNotice(_ text: String, error: Bool = false) {
         notice.stringValue = text
+        notice.toolTip = text
+        notice.frame = error ? NSRect(x: 260, y: 54, width: 418, height: 22) : NSRect(x: 375, y: 89, width: 221, height: 20)
         notice.textColor = error ? .systemOrange : OpenAllTheme.muted
     }
 
@@ -218,17 +221,17 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         return LinkAlias(name: names[0], title: title, template: template, alternateNames: Array(names.dropFirst()))
     }
 
-    @objc private func selectAlias(_ sender: NSButton) { selection = sender.tag; fillSelection() }
-    @objc private func newAlias() { selection = nil; fillSelection(); window?.makeFirstResponder(fields[0]) }
+    @objc private func selectAlias(_ sender: NSButton) { selection = sender.tag; showNotice(""); fillSelection() }
+    @objc private func newAlias() { selection = nil; showNotice(""); fillSelection(); window?.makeFirstResponder(fields[0]) }
     @objc private func saveAlias() {
         guard let alias = validated() else { return }
         if let selection {
             store.replace(at: selection, with: alias)
-            showNotice("已保存“\(alias.title)”并立即生效。")
+            showNotice("已保存“\(alias.title)”")
         } else {
             store.add(alias)
             selection = store.items.count - 1
-            showNotice("已添加“\(alias.title)”并立即生效。")
+            showNotice("已添加“\(alias.title)”")
         }
         fillSelection()
         onChange()

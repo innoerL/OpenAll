@@ -7,7 +7,7 @@
 :is(.aux-unicode,.aux-markdown) .aux-pane-bar strong,
 .aux-id .aux-section-bar strong { color:var(--ink); font-size:13px; font-weight:600; }
 .aux-unicode textarea.aux-editor { padding:14px 16px; font-size:14px; line-height:1.55; }
-.aux-markdown .aux-markdown-preview { padding:18px clamp(16px,2.5vw,32px); line-height:1.65; }
+.aux-markdown .aux-markdown-preview { padding:20px clamp(16px,2.5vw,32px); font-size:15px; line-height:1.72; }
 .aux-markdown-preview > :first-child { margin-top:0; }
 .aux-markdown .aux-markdown-preview > :is(p,h1,h2,h3,ul,ol,pre,blockquote,table) { max-width:68ch; margin-inline:auto; }
 .aux-markdown .aux-markdown-preview h1 { font-size:1.65em; padding-bottom:.34em; }
@@ -82,4 +82,22 @@
 .aux-image .aux-image-canvas img {
   background-color: var(--editor-bg,var(--canvas));
   background-image: repeating-conic-gradient(color-mix(in srgb,var(--ink) 11%,transparent) 0 25%,transparent 0 50%);
+}
+
+.aux-unicode .aux-tabs .aux-button { min-width:68px; }
+.aux-markdown .aux-markdown-preview > p { margin-block:0 .9em; }
+.aux-markdown .aux-help-popover h4 { margin:12px 8px 3px; color:var(--muted); font-size:12px; }
+.aux-id .aux-id-date > :first-child { position:relative; }
+.aux-id .aux-id-date > :first-child::after { content:"→"; position:absolute; left:100%; bottom:.4em; color:var(--muted); }
+.aux-id > .aux-actions { gap:14px; align-items:center; }
+.aux-id > .aux-actions .muted { font-size:12px; }
+.image-preview-caption { display:flex; align-items:baseline; justify-content:space-between; gap:8px; min-height:18px; }
+.image-preview-caption .aux-status { flex:1; min-width:0; }
+.image-preview-scale { color:var(--muted); font:12px ui-monospace,Consolas,monospace; white-space:nowrap; }
+.image-crop-guide { display:block; width:100%; height:clamp(72px,24vh,150px); margin:12px 0; background:var(--canvas); border-radius:4px; }
+
+.aux-markdown .aux-help-popover { left:auto; right:20px; top:16px; width:calc(50% - 22px); max-height:calc(100% - 60px); background:var(--surface); box-shadow:none; }
+.image-crop-guide { cursor:crosshair; touch-action:none; }
+@media (max-width:660px) {
+  .aux-markdown .aux-help-popover { left:20px; right:20px; top:50%; width:auto; max-height:calc(50% - 30px); }
 }

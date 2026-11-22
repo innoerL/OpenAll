@@ -79,13 +79,6 @@ window.mountOpenAllManual = function (host, article, actions) {
   empty.append('没有找到相关命令', reset);
   empty.hidden = true;
   article.append(empty);
-  for (const header of article.querySelectorAll('th')) {
-    if (header.textContent.trim() !== '命令') continue;
-    const hint = document.createElement('small');
-    hint.className = 'manual-copy-hint';
-    hint.textContent = '点按复制';
-    header.append(hint);
-  }
   for (const entry of article.querySelectorAll('td code, pre')) {
     entry.classList.add('aux-copyable'); entry.tabIndex = 0; entry.setAttribute('role', 'button');
     entry.title = '复制命令'; entry.setAttribute('aria-label', '复制命令 ' + entry.textContent);

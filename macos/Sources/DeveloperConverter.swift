@@ -192,7 +192,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             modeHint?.stringValue = "点击行末图标可复制完整精度的数值"
             buildDuration()
         case .cron:
-            modeHint?.stringValue = "执行时间按北京时间（UTC+8）排列"
+            modeHint?.stringValue = ""
             buildCron()
         case .ascii:
             modeHint?.stringValue = "搜索支持字符、十进制数和 0x 开头的十六进制数"
@@ -261,7 +261,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             let row = durationRows[index]
             let card = NSView(frame: NSRect(x: 0, y: CGFloat(333 - position * 37), width: holder.bounds.width, height: 35))
             card.wantsLayer = true
-            card.layer?.backgroundColor = (index == units.indexOfSelectedItem ? OpenAllTheme.accent.withAlphaComponent(0.10) : NSColor.clear).cgColor
+            card.layer?.backgroundColor = (index == target ? OpenAllTheme.accent.withAlphaComponent(0.10) : NSColor.clear).cgColor
             let rule = NSView(frame: NSRect(x: 12, y: 0, width: card.bounds.width - 24, height: 0.5))
             rule.wantsLayer = true
             rule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
@@ -276,7 +276,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             let number = label(display, frame: NSRect(x: 146, y: 6, width: card.bounds.width - 214, height: 24), size: 15)
             number.toolTip = row.value
             number.alignment = .right
-            number.font = .monospacedDigitSystemFont(ofSize: 15, weight: index == units.indexOfSelectedItem ? .semibold : .regular)
+            number.font = .monospacedDigitSystemFont(ofSize: 15, weight: index == target ? .semibold : .regular)
             card.addSubview(number)
             card.addSubview(label(row.title, frame: NSRect(x: 14, y: 8, width: 132, height: 20),
                                   size: 11, color: OpenAllTheme.muted))
@@ -309,8 +309,6 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         input.delegate = self
         content.addSubview(input)
         cronInput = input
-        content.addSubview(label("按中国时间 UTC+8 预览", frame: NSRect(x: 660, y: 344, width: 258, height: 20),
-                                 size: 11, color: OpenAllTheme.muted))
         for index in cronSamples.indices {
             let button = NSButton(title: ["工作日 · 每 15 分钟", "工作日 · 09:00", "每天 · 08:30"][index], target: self, action: #selector(useCronSample(_:)))
             button.tag = index
@@ -375,10 +373,14 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             let weekdays = ["", "星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"]
             let weekday = weekdays[calendar.component(.weekday, from: date)]
             let timestamp = label("\(TimeResults.format(date, "yyyy-MM-dd HH:mm:ss", zone)) \(weekday)",
-                                  frame: NSRect(x: 100, y: 6, width: 414, height: 23), size: 13)
+                                  frame: NSRect(x: 100, y: 6, width: 266, height: 23), size: 13)
             timestamp.font = .monospacedDigitSystemFont(ofSize: 13, weight: index == 0 ? .semibold : .regular)
             timestamp.isSelectable = true
             row.addSubview(timestamp)
+            if index == 0 {
+                row.addSubview(label("北京时间 UTC+8", frame: NSRect(x: 368, y: 8, width: 152, height: 19),
+                                     size: 11, color: OpenAllTheme.muted))
+            }
             holder.addSubview(row)
         }
     }
@@ -408,7 +410,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         let header = NSView(frame: NSRect(x: 12, y: 301, width: 904, height: 30))
         WindowChrome.styleCard(header, radius: 6)
         for (title, x, width) in [("十进制", 15, 100), ("十六进制", 125, 120),
-                                  ("字符", 265, 120), ("说明", 425, 300)] {
+                                  ("字符", 255, 96), ("说明", 367, 375), ("复制字符", 814, 68)] {
             header.addSubview(label(title, frame: NSRect(x: x, y: 5, width: width, height: 20),
                                     size: 11, color: OpenAllTheme.muted, weight: .medium))
         }
@@ -459,9 +461,9 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
                 row.layer?.backgroundColor = OpenAllTheme.surface.withAlphaComponent(0.35).cgColor
             }
             for (value, x, width) in [(String(item.number), 16, 100), (item.hex, 126, 120),
-                                      (item.character, 266, 120), (asciiDescription(item.number), 426, 300)] {
+                                      (item.character, 256, 96), (asciiDescription(item.number), 368, 375)] {
                 let field = label(value, frame: NSRect(x: x, y: 4, width: width, height: 20), size: 12)
-                if x < 426 { field.font = .monospacedSystemFont(ofSize: 12, weight: .regular) }
+                if x < 368 { field.font = .monospacedSystemFont(ofSize: 12, weight: .regular) }
                 field.isSelectable = true
                 row.addSubview(field)
             }

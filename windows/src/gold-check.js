@@ -25,11 +25,11 @@ module.exports = async function verifyGold(searchWindow, output) {
   }
   const read = () => execute(gold, () => openallGold.read());
   const click = id => execute(gold, value => document.getElementById(value).click(), id);
-  async function capture(name) {
+  async function capture(name, target = gold) {
     fs.mkdirSync(output, { recursive: true });
-    await execute(gold, async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+    await execute(target, async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
     const filename = 'gold-' + name + '.png';
-    fs.writeFileSync(path.join(output, filename), (await gold.webContents.capturePage()).toPNG()); screenshots.push(filename);
+    fs.writeFileSync(path.join(output, filename), (await target.webContents.capturePage()).toPNG()); screenshots.push(filename);
   }
   try {
     const result = await execute(searchWindow, async () => (await openall.search('金价')).find(item => item.value === 'gold'));
@@ -58,6 +58,8 @@ module.exports = async function verifyGold(searchWindow, output) {
     await click('layout');
     await until(() => execute(gold, () => !document.querySelector('#combined').hidden), '合并图表');
     check((await read()).combined, '合并报价卡和双轴走势图');
+    check(await execute(gold, () => document.querySelector('#chart-change').getAttribute('aria-pressed') === 'true' && document.querySelector('#chart-basis').textContent.includes('0%')), '外币合并图按同一交易日比较涨跌幅');
+    await click('chart-amount');
     for (const currency of ['EUR', 'CNY', 'USD']) {
       await execute(gold, value => { const field = document.querySelector('#currency'); field.value = value; field.dispatchEvent(new Event('change', { bubbles: true })); }, currency);
       await until(async () => (await read()).currency === currency, '切换币种 ' + currency);
@@ -72,6 +74,7 @@ module.exports = async function verifyGold(searchWindow, output) {
       }, currency), '合并图的价格单位与独立、共用坐标轴 ' + currency);
     }
     check(true, '美元、欧元、人民币报价及历史换算');
+    await click('chart-change');
     await execute(searchWindow, () => openall.saveSettings({ theme: 'light', backgroundHex: '#f2f2ef', accentHex: '#926fad' }));
     await until(async () => (await read()).theme.background === '#f2f2ef' && await execute(gold, () => document.documentElement.dataset.theme === 'light'), '宿主浅色外观同步');
     check(gold.getBackgroundColor().toLowerCase() === '#f2f2ef', '金价原生背景跟随宿主浅色外观');
@@ -134,6 +137,8 @@ module.exports = async function verifyGold(searchWindow, output) {
     try {
       gold.setContentSize(345, normalSize[1]);
       await until(() => execute(gold, () => window.innerWidth <= 345), '调整至最小行情窗口');
+      await capture('outlook-narrow');
+      await click('range-chart-toggle');
       check(await execute(gold, () => {
         const table = document.querySelector('#forecast-table');
         const rows = [...table.querySelectorAll('.forecast-day-toggle')].map(button => button.closest('tr'));
@@ -152,7 +157,7 @@ module.exports = async function verifyGold(searchWindow, output) {
             return text.right <= bounds.right + 1 && text.left >= bounds.left - 1 && cell.scrollWidth <= cell.clientWidth + 1;
           })) && document.querySelector('#close').getBoundingClientRect().right <= width + 1;
       }), '最窄窗口三列全部可见，七行日期、参考价和完整区间无裁切');
-      await capture('outlook-narrow');
+      await capture('outlook-narrow-range');
       await execute(gold, () => document.querySelector('.forecast-day-toggle').focus());
       for (const [keyCode,index] of [['Up',0],['Down',1],['End',6],['Down',6],['Up',5],['Home',0]]) {
         gold.webContents.sendInputEvent({type:'keyDown',keyCode});
@@ -288,6 +293,7 @@ module.exports = async function verifyGold(searchWindow, output) {
     await until(() => execute(gold, () => document.body.dataset.edgeSide === 'left' && document.body.dataset.edgeCollapsing === 'true'), '贴边收起');
     const rail = BrowserWindow.getAllWindows().find(win => /gold-edge-rail\.html/.test(win.webContents.getURL()));
     check(!!rail, '贴边浮条创建并保留展开入口');
+    await capture('edge-rail', rail);
     await execute(searchWindow, () => openall.openTool('gold'));
     await until(() => execute(gold, () => document.body.dataset.edgeCollapsing === 'false'), '搜索重新展开贴边窗口');
     await click('edge-setting'); await until(async () => !(await read()).edgeEnabled, '退出贴边模式');

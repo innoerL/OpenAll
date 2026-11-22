@@ -218,10 +218,10 @@ private final class SelectionRowView: NSTableRowView {
         OpenAllTheme.accent.withAlphaComponent(0.18).setFill()
         let highlight = NSRect(x: 8, y: 3, width: max(0, bounds.width - 16), height: max(0, bounds.height - 6))
         NSBezierPath(roundedRect: highlight, xRadius: 6, yRadius: 6).fill()
-        let mark = NSAttributedString(string: "↵", attributes: [
+        let mark = NSAttributedString(string: "↵ 执行", attributes: [
             .font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: OpenAllTheme.accentText
         ])
-        mark.draw(at: NSPoint(x: highlight.maxX - 26, y: round(highlight.midY - mark.size().height / 2)))
+        mark.draw(at: NSPoint(x: highlight.maxX - mark.size().width - 14, y: round(highlight.midY - mark.size().height / 2)))
     }
 }
 
@@ -265,7 +265,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         actions = content.map { orderStore.sorted(Self.availableActions(for: $0), category: $0.category) } ?? []
         let loading = message?.hasPrefix("正在识别") == true
         let hasImage = image != nil || content?.category == "image"
-        let height: CGFloat = loading ? 360 : hasImage && actions.count <= 3 ? 410 : max(360, 204 + CGFloat(min(7, actions.count)) * 34)
+        let height: CGFloat = loading ? 292 : hasImage && actions.count <= 3 ? 410 : max(360, 204 + CGFloat(min(7, actions.count)) * 34)
         panel?.setContentSize(NSSize(width: 640, height: height))
         panel?.contentView?.viewWithTag(301)?.frame.origin.y = height - 43
         contextLabel.frame.origin.y = height - 35
@@ -273,10 +273,11 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         if case .image(let picture) = content { selectedImage = picture }
         else { selectedImage = loading ? image : nil }
         if let selectedImage {
-            let raster = selectedImage.representations.max { $0.pixelsWide < $1.pixelsWide }
+            let raster = selectedImage.representations.filter { $0.pixelsWide > 0 && $0.pixelsHigh > 0 }.max { $0.pixelsWide < $1.pixelsWide }
             let width = raster?.pixelsWide ?? Int(selectedImage.size.width)
             let height = raster?.pixelsHigh ?? Int(selectedImage.size.height)
-            contextLabel.stringValue = "\(loading ? "图片文字识别" : "选中的图片") · \(width) × \(height)"
+            let label = loading ? "图片文字识别" : "选中的图片"
+            contextLabel.stringValue = width > 0 && height > 0 ? "\(label) · \(width) × \(height)" : label
         } else {
             contextLabel.stringValue = content?.summary ?? (loading ? "图片文字识别" : "当前状态")
         }
@@ -286,13 +287,13 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         imagePreview.isHidden = imagePreview.image == nil
         previewScroll.isHidden = !imagePreview.isHidden
         if loading {
-            imagePreview.frame = NSRect(x: 20, y: 140, width: 600, height: 140)
+            imagePreview.frame = NSRect(x: 20, y: 100, width: 600, height: 140)
             actionHeading.isHidden = true
             actionScroll.isHidden = true
-            progress.frame = NSRect(x: 172, y: 94, width: 24, height: 24)
-            emptyState.frame = NSRect(x: 210, y: 91, width: 360, height: 28)
+            progress.frame = NSRect(x: 24, y: 59, width: 20, height: 20)
+            emptyState.frame = NSRect(x: 54, y: 56, width: 430, height: 22)
             emptyState.alignment = .left
-            cancelButton.frame.origin.y = 49
+            cancelButton.frame = NSRect(x: 520, y: 52, width: 96, height: 30)
         } else if imagePreview.image != nil {
             emptyState.alignment = .center
             imagePreview.frame = NSRect(x: 20, y: height - 196, width: 600, height: 140)
@@ -301,6 +302,8 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
             actionScroll.frame = NSRect(x: 14, y: 42, width: 612, height: height - 272)
             actionScroll.isHidden = false
         } else {
+            emptyState.frame = NSRect(x: 34, y: 152, width: 570, height: 30)
+            emptyState.alignment = .center
             previewScroll.frame = NSRect(x: 20, y: height - 134, width: 600, height: 80)
             actionHeading.frame.origin.y = height - 160
             actionHeading.isHidden = false
@@ -399,7 +402,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         actionHeading = NSTextField(labelWithString: "可用操作")
         actionHeading.font = .systemFont(ofSize: 11, weight: .medium)
         actionHeading.textColor = OpenAllTheme.muted
-        actionHeading.frame = NSRect(x: 24, y: 304, width: 200, height: 18)
+        actionHeading.frame = NSRect(x: 24, y: 304, width: 365, height: 18)
         root.addSubview(actionHeading)
         let scroll = NSScrollView(frame: NSRect(x: 14, y: 42, width: 612, height: 257))
         actionScroll = scroll
@@ -511,7 +514,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         let index = table.selectedRow
-        actionHeading.stringValue = actions.indices.contains(index) ? "可用操作　\(index + 1) / \(actions.count)" : "可用操作"
+        actionHeading.stringValue = actions.indices.contains(index) ? "可用操作　已选第 \(index + 1) 项，共 \(actions.count) 项" : "可用操作"
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { actions.count }
@@ -540,7 +543,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         detail.font = .systemFont(ofSize: 12)
         detail.textColor = OpenAllTheme.muted
         detail.alignment = .left
-        detail.frame = NSRect(x: 240, y: 9, width: 316, height: 21)
+        detail.frame = NSRect(x: 240, y: 9, width: 291, height: 21)
         cell.addSubview(title)
         cell.addSubview(detail)
         return cell

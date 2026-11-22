@@ -150,3 +150,14 @@ html:has(#outlook:not([hidden])) {
   .forecast-day-toggle:focus-visible { outline:2px solid Highlight; }
   .range-track i, .estimate-symbol::after { background:CanvasText; forced-color-adjust:none; }
 }
+
+.combined-chart-head { gap:8px; padding-block:8px 4px; }
+.combined-chart-head button { font-size:11px; padding:2px 7px; }
+#chart-basis { margin:1px 0 4px; }
+#range-chart-toggle { display:none; }
+@media (max-width:440px) {
+  #range-chart-toggle { display:inline-block; float:right; font:inherit; color:var(--secondary); background:transparent; border:1px solid var(--border); padding:1px 5px; border-radius:4px; }
+  #range-chart-toggle[aria-pressed=true] { color:var(--accent-ink); }
+  #outlook:not(.show-range-chart) :is(#range-key,#range-scale,.range-guide,.range-track) { display:none; }
+  #outlook:not(.show-range-chart) .forecast-range { vertical-align:middle; }
+}

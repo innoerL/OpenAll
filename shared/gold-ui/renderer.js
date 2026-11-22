@@ -23,6 +23,7 @@ let preferredPin = true;
 let dockSide = null;
 let outlookSignature;
 let expandedDate = null;
+let chartMode = null;
 
 function showError(error) {
   const panel = $('#error');
@@ -202,14 +203,33 @@ function render(snapshot) {
     updateQuote(id, cards[id], instruments[id], snapshot);
     updateQuote(id, $(`#summary-${id}`), instruments[id], snapshot);
   }
-  const separateAxes = currency !== 'CNY';
+  const valid = row => Number.isFinite(row.price) && row.price > 0 && row.date >= snapshot.since && row.date <= snapshot.today;
+  const retailPrices = new Map(ctf.rows.filter(valid).map(row => [row.date, row.price]));
+  const base = gold.rows.filter(row => valid(row) && retailPrices.has(row.date))
+    .reduce((earliest, row) => !earliest || row.date < earliest.date ? row : earliest, null);
+  const relative = Boolean(base && (chartMode === 'change' || (!chartMode && currency !== 'CNY')));
+  const separateAxes = !relative && currency !== 'CNY';
+  $('#chart-change').disabled = !base;
+  $('#chart-change').title = base ? '以最早的共同报价日为基准' : '两种金价尚无同日报价';
+  $('#chart-amount').setAttribute('aria-pressed', String(!relative));
+  $('#chart-change').setAttribute('aria-pressed', String(relative));
   $('.chart-legend').classList.toggle('dual-axis', separateAxes);
-  $('#legend-gold').textContent = `${separateAxes ? '左轴 ' : ''}国际现货 · ${leftUnit}`;
-  $('#legend-ctf').textContent = `${separateAxes ? '右轴 ' : ''}周大福 · ${separateAxes ? '人民币' : '元'}/克`;
+  $('#legend-gold').textContent = relative ? '国际现货' : (separateAxes ? '左轴 ' : '') + '国际现货 · ' + leftUnit;
+  $('#legend-ctf').textContent = relative ? '周大福' : (separateAxes ? '右轴 周大福 · 人民币/克' : '周大福 · 元/克');
   $('#combined-axis-note').hidden = !separateAxes;
   updateChart('gold', [gold], snapshot, '现货日收盘');
   updateChart('ctf', [ctf], snapshot, '每日挂牌价');
-  updateChart('combined', [gold, ctf], snapshot, separateAxes ? '左右轴各用独立刻度' : '两条曲线共用刻度', separateAxes);
+  if (relative) {
+    const series = [gold, ctf].map(line => {
+      const initial = line.id === 'gold' ? base.price : retailPrices.get(base.date);
+      const rows = line.rows.filter(row => valid(row) && row.date >= base.date)
+        .map(row => ({date:row.date, price:100 * (row.price / initial - 1)}));
+      return {...line, rows, unit:'%'};
+    });
+    updateChart('combined', series, {...snapshot, since:base.date}, '较 ' + base.date + ' · 同日为 0%', false);
+  } else {
+    updateChart('combined', [gold, ctf], snapshot, separateAxes ? '左右轴各用独立刻度' : '两条曲线共用刻度', separateAxes);
+  }
   renderOutlook();
   window.OpenAllGoldUI = { ready: true };
 }
@@ -510,6 +530,13 @@ for (const id of ['gold', 'ctf']) {
   $(`#forecast-${id}`).addEventListener('click', () => selectForecast(id));
 }
 $('#layout').addEventListener('click', () => action('layout', $('#layout').getAttribute('aria-pressed') !== 'true'));
+for (const [id, mode] of [['chart-amount','amount'], ['chart-change','change']]) {
+  $('#' + id).addEventListener('click', () => { chartMode = mode; if (lastSnapshot) render(lastSnapshot); });
+}
+$('#range-chart-toggle').addEventListener('click', event => {
+  const show = $('#outlook').classList.toggle('show-range-chart');
+  event.currentTarget.setAttribute('aria-pressed', String(show));
+});
 $('#currency').addEventListener('change', event => action('currency', event.target.value));
 $('#minimize').addEventListener('click', () => action('minimize'));
 $('#close').addEventListener('click', () => action('close'));

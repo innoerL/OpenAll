@@ -94,8 +94,9 @@ class Chart {
     const shared = this.dualAxis ? null : chartBounds(prices);
     const axes = this.series.map(({ byTime }) => shared || (byTime.size ? chartBounds([...byTime.values()]) : null));
     draw.font = '11px system-ui, sans-serif';
+    const tickLabel = value => whole.format(value) + (this.series[0]?.unit === '%' ? '%' : '');
     const axisWidth = (axis) => axis ? Math.max(30, ...[axis[0], (axis[0] + axis[1]) / 2, axis[1]]
-      .map(value => draw.measureText(whole.format(value)).width + 7)) : 7;
+      .map(value => draw.measureText(tickLabel(value)).width + 7)) : 7;
     this.left = axisWidth(axes[0]);
     const right = width - (this.dualAxis ? axisWidth(axes[1]) : 5);
     this.plotWidth = right - this.left;
@@ -107,7 +108,7 @@ class Chart {
         const [min, max] = axis;
         draw.textAlign = index ? 'right' : 'left';
         draw.fillStyle = this.dualAxis ? this.series[index].accent : theme.getPropertyValue('--secondary').trim();
-        draw.fillText(whole.format(max - tick * (max - min)), index ? width - 1 : 0, y + 3);
+        draw.fillText(tickLabel(max - tick * (max - min)), index ? width - 1 : 0, y + 3);
       }
       draw.strokeStyle = theme.getPropertyValue('--chart-grid').trim();
       draw.lineWidth = 1;

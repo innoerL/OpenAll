@@ -184,7 +184,7 @@
     const hasFilter = () => Boolean(search.value.trim()) || filter !== '全部';
     function updateHints(target) {
       const commands = [];
-      if (filtered.length && target === search) commands.push('↓ 选择卡片');
+      if (filtered.length && target === search) commands.push('↓ 选择卡片，再按空格预览');
       const card = target?.matches?.('.clip-card') ? filtered[Number(target.dataset.index)] : null;
       if (card) {
         const enterAction = settings.clipboardPreferences?.directPaste === false ? '复制' : '粘贴';
@@ -268,7 +268,7 @@
     const image = record.kind === 'image', files = record.kind === 'files' ? record.files || [] : null;
     const text = files ? files.join('\n') : image ? '' : record.text || record.value || '';
     const format = record.type || (image ? '图片' : files ? '文件' : record.kind === 'link' ? '链接' : '文本');
-    const title = h('h1', {}, format + '预览');
+    const title = h('h1', {}, ['Markdown','HTML'].includes(format) ? format + ' 原文' : format + '预览');
     const copiedAt = new Date(record.time ?? record.date ?? NaN);
     const timestamp = Number.isNaN(copiedAt.getTime()) ? '' : copiedAt.toLocaleString(undefined, {dateStyle:'short', timeStyle:'short'});
     const provenance = [record.sourceName, timestamp].filter(Boolean).join(' · ');
@@ -299,16 +299,25 @@
         if (['JSON', 'HTML', 'Markdown'].includes(format)) content.classList.add('is-code');
       }
       copy = () => api.copyText(text);
-      for (const id of ['json','comparison','markdown','translate']) {
-        tools.append(button(titles[id], () => openTool(id, text)));
-      }
+      const openIn = button('用工具打开 ▾', () => menu(['json','comparison','markdown','translate'].map(id =>
+        ({label:titles[id], action:()=>openTool(id, text)})), openIn));
+      openIn.setAttribute('aria-haspopup','menu');
+      tools.append(openIn);
     }
     const copyButton = button(image ? '复制图片' : files ? '复制路径' : '复制全文', async () => {
       try { await copy(); status.textContent = '已复制'; } catch (error) { warn(error); }
+    });
+    const pasteButton = button('粘贴此项', async () => {
+      pasteButton.disabled = true;
+      try {
+        if (await api.clipboardAction('pastePreview')) await call('close');
+        else status.textContent = '未能粘贴到目标窗口';
+      } catch (error) { warn(error); }
+      finally { pasteButton.disabled = false; }
     }, 'primary');
     host.append(h('section', {class:'preview-page clip-preview'},
       h('header', {class:'clip-preview-heading'}, title, source), content,
-      h('footer', {class:'clip-preview-footer'}, tools, h('div', {class:'clip-preview-action'}, status, copyButton))));
+      h('footer', {class:'clip-preview-footer'}, tools, h('div', {class:'clip-preview-action'}, status, copyButton, pasteButton))));
     return {focus:() => content.focus()};
   };
   (async()=>{if(!api)throw Error('应用桥接未加载');settings=await api.settings();applyTheme(settings);const initial=await call('context').catch(()=>null);const params=new URLSearchParams(location.search);await render(initial?.page||params.get('page')||'search',initial?.initialValue||'');window.OpenAllApp.ready=true;})();

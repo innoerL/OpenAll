@@ -24,4 +24,4 @@
 @keyframes translation-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .translation-spinner { animation: none; } }
 
-.translation-message .translation-original { color: var(--ink); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.translation-message .translation-original { color: var(--ink); font-size: 12px; margin-top: 10px; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

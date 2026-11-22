@@ -37,7 +37,7 @@
     let fieldIndex = 0;
     let selectedSnippetID;
     function labelFor(text, control, hint = '') {
-      const input = control.matches('input, select, textarea, button') ? control : control.querySelector('input, select, textarea');
+      const input = control.matches('input, select, textarea, button') ? control : control.querySelector('input, select, textarea, button');
       if (input && !input.id) input.id = 'settings-field-' + ++fieldIndex;
       return h('label', {for:input?.id}, text, hint ? h('small', {}, hint) : null);
     }
@@ -96,22 +96,67 @@
         content.append(row('打开搜索', h('div', {class:'shortcut-control'}, status, trigger)));
         api.diagnostics().then(d => {
           if (disposed || revision !== renderRevision) return;
-          status.textContent = d.shortcuts?.search === false ? '快捷键被占用，请重新录制' : d.shortcuts?.error || '已启用';
+          status.textContent = d.shortcuts?.search === false ? '已被占用，点击重录' : d.shortcuts?.error || '已启用';
+          status.classList.toggle('needs-action',d.shortcuts?.search === false || !!d.shortcuts?.error);
         }).catch(() => {});
         for(const [key,title,desc] of [['clipboard','剪贴板','查找、预览与粘贴历史记录'],['stack','复制堆栈','连续收集内容，按顺序粘贴'],['selection','对选中内容操作','将当前选择交给相应工具处理']])content.append(row(title,shortcut(key),desc,true));
         content.append(h('div',{class:'settings-footer'},'再次按同一快捷键，可关闭对应窗口。',button('查看诊断 →',()=>render('diagnostics'),'ghost')));
       } else if(tab==='search') {
-        heading('搜索');content.append(h('div',{style:{margin:'24px 0 32px'}},checkbox('中文支持拼音和首字母匹配',prefs.pinyinEnabled,value=>save({pinyinEnabled:value}))));
-        const chrome=h('section',{class:'settings-section'},h('h2',{},'Chrome'),h('div',{class:'row'},checkbox('书签',prefs.chromeBookmarks,value=>save({chromeBookmarks:value})),checkbox('浏览历史',prefs.chromeHistory,value=>save({chromeHistory:value})),h('span',{class:'spacer'}),button('重新检测',async()=>{await api.windowAction('rescan');notify('已开始重新检测');})));
-        const path=input(prefs.chromePath,'自动检测；也可指定 Chrome 用户数据目录');chrome.append(h('div',{class:'row',style:{marginTop:'15px'}},path,button('保存目录',()=>save({chromePath:path.value.trim()}))));path.style.flex='1';
-        chrome.append(h('p',{class:'hint small',style:{marginTop:'8px'}},'Windows：%LOCALAPPDATA%\\Google\\Chrome\\User Data'));content.append(chrome);
-        content.append(h('section',{class:'settings-section'},h('h2',{},'文件搜索'),h('div',{class:'row'},checkbox('搜索文件和文件夹',prefs.searchFiles,value=>save({searchFiles:value})),h('span',{class:'spacer'}),button('重新扫描',async()=>{await api.windowAction('rescan');notify('已开始扫描');})),h('p',{class:'hint',style:{marginTop:'14px'}},'搜索 Windows 系统索引及桌面、文档、下载等目录。支持“文件”“文档”“图片”及文件后缀前缀。')));
-        content.append(h('div',{style:{marginTop:'30px'}},button('管理置顶与隐藏结果 →',searchRules)));
+        heading('搜索');
+        content.append(checkbox('中文支持拼音和首字母匹配',prefs.pinyinEnabled,value=>save({pinyinEnabled:value},true)));
+        const bookmarks = checkbox('书签',prefs.chromeBookmarks,value=>updateSource('chromeBookmarks',value));
+        const history = checkbox('浏览历史',prefs.chromeHistory,value=>updateSource('chromeHistory',value));
+        const detect = button('重新检测',async()=>{await api.windowAction('rescan');notify('已开始重新检测');});
+        const sourceHint = h('p',{class:'hint small'});
+        const path = input(prefs.chromePath,'自动检测 Chrome 用户数据目录');
+        path.setAttribute('aria-label','Chrome 用户数据目录');
+        const advanced = h('details',{class:'chrome-directory'},h('summary',{},'指定 Chrome 目录'),
+          h('div',{class:'row'},path,button('保存目录',()=>save({chromePath:path.value.trim()}))));
+        const chrome = h('section',{class:'settings-section'},h('h2',{},'Chrome'),
+          h('div',{class:'row chrome-sources'},bookmarks,history,h('span',{class:'spacer'}),detect),sourceHint,advanced);
+        function showSources() {
+          const enabled = bookmarks.querySelector('input').checked || history.querySelector('input').checked;
+          detect.hidden = advanced.hidden = !enabled;
+          if (!enabled) advanced.open = false;
+          sourceHint.textContent = enabled ? (prefs.chromePath ? '使用指定的用户数据目录' : '自动检测本机 Chrome 配置') : '开启后自动检测本机 Chrome 配置。';
+        }
+        async function updateSource(key,value) {
+          showSources();
+          await save({[key]:value},true);
+        }
+        showSources();
+        const scan = button('重新扫描',async()=>{await api.windowAction('rescan');notify('已开始扫描');});
+        const files = checkbox('搜索文件和文件夹',prefs.searchFiles,value=>{scan.hidden=!value;return save({searchFiles:value},true);});
+        scan.hidden = !prefs.searchFiles;
+        content.append(chrome,h('section',{class:'settings-section'},h('h2',{},'文件搜索'),
+          h('div',{class:'row'},files,h('span',{class:'spacer'}),scan),
+          h('p',{class:'hint small'},'范围包括 Windows 系统索引、桌面、文档和下载目录。')),
+          h('div',{class:'settings-footer'},button('管理置顶与隐藏结果 →',searchRules,'ghost')));
       } else if(tab==='clipboard') {
         const p=prefs.clipboardPreferences||{};heading('剪贴板历史');
-        content.append(h('div',{style:{margin:'28px 0 6px'}},checkbox('自动记录剪贴板',p.enabled!==false,value=>saveClip({enabled:value}))),h('p',{class:'hint small'},'开启后自动保存；下方可临时暂停。'));
         const remaining=p.pausedUntil?new Date(p.pausedUntil).getTime()-Date.now():0;
-        content.append(row('记录状态',select([[0,'持续记录'],[1,'暂停 1 小时'],[2,'暂停至明天'],[3,'暂停至手动恢复']],remaining<=0?0:remaining<=3600000?1:remaining<86400000?2:3,value=>{let until=null;if(value==='1')until=Date.now()+3600000;if(value==='2'){const d=new Date();d.setHours(24,0,0,0);until=d.getTime();}if(value==='3')until=Date.now()+315360000000;saveClip({pausedUntil:until?new Date(until).toISOString():null});})),h('hr'),checkbox('默认粘贴为纯文本（关闭则保留原样式）',!!p.plainTextByDefault,value=>saveClip({plainTextByDefault:value})),h('hr'));
+        const recording = h('p',{class:'hint small recording-hint',role:'status'});
+        const pause = select([[0,'持续记录'],[1,'暂停 1 小时'],[2,'暂停至明天'],[3,'暂停至手动恢复']],remaining<=0?0:remaining<=3600000?1:remaining<86400000?2:3,async value=>{
+          let until=null;
+          if(value==='1')until=Date.now()+3600000;
+          if(value==='2'){const d=new Date();d.setHours(24,0,0,0);until=d.getTime();}
+          if(value==='3')until=Date.now()+315360000000;
+          const iso=until?new Date(until).toISOString():null;
+          await saveClip({pausedUntil:iso});showRecording(!pause.disabled,iso);
+        });
+        function showRecording(enabled,until) {
+          pause.disabled = !enabled;
+          const stop = until && new Date(until);
+          recording.textContent = !enabled ? '已关闭，新复制的内容不会记入历史。' : stop && stop > new Date()
+            ? stop - Date.now() > 365 * 86400000 ? '已暂停，选择“持续记录”即可恢复。' : '已暂停，将于 '+stop.toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 恢复。'
+            : '正在记录新复制的内容。';
+        }
+        showRecording(p.enabled!==false,p.pausedUntil);
+        const enabled = checkbox('自动记录剪贴板',p.enabled!==false,async value=>{
+          await saveClip({enabled:value});showRecording(value,prefs.clipboardPreferences.pausedUntil);
+        });
+        content.append(h('div',{class:'recording-settings'},enabled,recording,row('记录安排',pause)),h('hr'),
+          checkbox('默认粘贴为纯文本（关闭则保留原样式）',!!p.plainTextByDefault,value=>saveClip({plainTextByDefault:value})),h('hr'));
         content.append(row('保留时间',select([[7,'一周'],[30,'一月'],[90,'三月'],[365,'一年']],p.retentionDays||30,value=>saveClip({retentionDays:Number(value)}))),row('单条内容大小上限',select([5,10,20,50].map(n=>[n,n+' MB']),(p.maxItemBytes||20000000)/1000000,value=>saveClip({maxItemBytes:Number(value)*1000000}))));
         content.append(row('排除应用',button((p.ignoreApplications||[]).length?'已排除 '+p.ignoreApplications.length+' 个应用':'未排除应用 · 点击选择',async()=>{
           const value=await prompt('排除应用名称或 exe 文件名（逗号分隔）',(p.ignoreApplications||[]).join(', '));if(value!=null){await saveClip({ignoreApplications:value.split(/[,，\n]/).map(x=>x.trim()).filter(Boolean)});render();}
@@ -122,6 +167,7 @@
         let selected=-1;
         const list=h('div',{class:'editor-list alias-list'}),count=h('span',{class:'muted'}),name=input('','显示名称'),keywords=input('','例如 xhs, xiaohongshu, hongshu'),url=h('textarea',{class:'alias-url',placeholder:'https://example.com/search?q={query}',spellcheck:'false'});
         const example = h('p', {class:'hint small alias-example'});
+        const notice = h('span',{class:'alias-save-notice',role:'status'});
         function updateExample() {
           const key = keywords.value.split(/[,，\n]/)[0].trim();
           const title = name.value.trim();
@@ -130,18 +176,18 @@
             : '';
           example.title = example.textContent;
         }
-        for (const control of [name,keywords,url]) control.addEventListener('input', updateExample);
+        for (const control of [name,keywords,url]) control.addEventListener('input', () => {updateExample();notice.textContent='尚未保存';});
         const form=h('div',{class:'editor-form alias-form'},field('显示名称',name),field('别名 · 最多三个，用逗号分隔',keywords),field('网址模板 · {query} 代表搜索词',url),example);
-        function choose(i){selected=i;const item=prefs.aliases?.[i];name.value=item?.name||'';keywords.value=(item?.keywords||[]).join(', ');url.value=item?.url||'';paint();}
+        function choose(i){selected=i;notice.textContent='';const item=prefs.aliases?.[i];name.value=item?.name||'';keywords.value=(item?.keywords||[]).join(', ');url.value=item?.url||'';paint();}
         function paint(){updateExample();submit.textContent=selected<0?'添加网址':'保存更改';count.textContent=(prefs.aliases||[]).length+' 个网站';remove.disabled=selected<0;list.replaceChildren(...(prefs.aliases||[]).map((item,i)=>{const b=button('',()=>choose(i),i===selected?'selected':'');b.append(h('strong',{},item.name),h('span',{class:'muted'},item.keywords.join(' · ')));return b;}));}
         const remove=button('删除',async()=>{if(selected<0)return;if(await confirm('删除网址别名','删除后将无法通过这些别名打开此网址。')){await save({aliases:prefs.aliases.filter((_,i)=>i!==selected)});choose(prefs.aliases.length?Math.min(selected,prefs.aliases.length-1):-1);}});
         const submit=button('保存更改',async()=>{
           const keys=keywords.value.split(/[,，\n]/).map(x=>x.trim()).filter(Boolean);
           if(!name.value.trim()||!keys.length||keys.length>3||!/^https?:\/\//i.test(url.value.trim()))throw Error('请填写名称、一至三个别名和 HTTP(S) 网址');
           const aliases=[...(prefs.aliases||[])];if(aliases.some((item,i)=>i!==selected&&item.keywords.some(k=>keys.some(x=>x.toLowerCase()===k.toLowerCase()))))throw Error('别名已被其他网址使用');
-          const item={name:name.value.trim(),keywords:keys,url:url.value.trim()};if(selected<0){aliases.push(item);selected=aliases.length-1;}else aliases[selected]=item;await save({aliases});paint();
+          const item={name:name.value.trim(),keywords:keys,url:url.value.trim()};if(selected<0){aliases.push(item);selected=aliases.length-1;}else aliases[selected]=item;await save({aliases},true);paint();notice.textContent='已保存';
         },'primary');
-        form.append(h('div',{class:'row'},submit,h('span',{class:'spacer'}),remove),h('p',{class:'hint small'},'修改后保存，别名立即生效。'));
+        form.append(h('div',{class:'row'},submit,notice,h('span',{class:'spacer'}),remove));
         const navigation=h('div',{class:'alias-navigation'},h('div',{class:'alias-list-heading'},'网站',count),list,button('＋ 新增网址',()=>{choose(-1);name.focus();}));
         content.append(h('div',{class:'alias-layout'},navigation,form));choose(prefs.aliases?.length?0:-1);
       } else if(tab==='commandAliases') {
@@ -152,7 +198,7 @@
         const list = h('div', {class:'editor-list alias-list command-list', role:'group', 'aria-label':'功能'});
         const title = h('h2');
         const builtIn = h('p', {class:'command-words'});
-        const names = input('', '多个别名用逗号分隔');
+        const names = input('', '添加其他叫法，用逗号分隔');
         const draftNotice = h('span', {class:'muted', role:'status'});
         const drafts = new Map();
         const savedNames = id => (prefs.commandAliases?.[id] || []).join(', ');
@@ -228,7 +274,7 @@
         }, 'primary');
         names.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) apply.click(); });
         const detail = h('section', {class:'command-detail'}, title,
-          h('div', {class:'field'}, h('span', {class:'muted'}, '已有匹配词'), builtIn),
+          h('div', {class:'field'}, h('span', {class:'muted'}, '系统匹配词'), builtIn),
           field('自定义别名', names), h('div',{class:'row'},apply,reset,draftNotice));
         const browser = h('div',{class:'alias-navigation'},filter,list);
         content.append(h('div',{class:'alias-layout command-layout'},browser,detail));
@@ -276,19 +322,38 @@
         });
         picker.onchange = () => fill(picker.value);
         fill(selectedSnippetID ?? all[0]?.id);
-        content.append(h('div',{class:'row',style:{margin:'20px 0'}},all.length ? picker : h('h2',{},'新建片段'),all.length ? create : null),
-          h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词',key)),field('内容',text),
-            h('p',{class:'hint small'},'日期示例：{{date:yyyy-MM-dd}} · 时间：{{time:HH:mm:ss}} · 剪贴板：{{clipboard}}'),
+        const variables = h('div',{class:'snippet-variables'},h('span',{},'插入变量'));
+        for (const [label,token] of [['日期','{{date}}'],['时间','{{time}}'],['剪贴板','{{clipboard}}']]) {
+          const insert = button(label,()=>{
+            text.setRangeText(token,text.selectionStart,text.selectionEnd,'end');
+            text.focus();text.dispatchEvent(new Event('input',{bubbles:true}));
+          },'ghost');
+          insert.title=token;variables.append(insert);
+        }
+        text.placeholder='例如：已于 {{date}} 收到，稍后回复。';
+        content.append(h('div',{class:'row snippet-picker'},all.length ? picker : h('h2',{},'新建片段'),all.length ? create : null),
+          h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词 · 用 ; 调用',key)),field('内容',text),variables,
             h('div',{class:'row'},remove,h('span',{class:'spacer'}),preview,apply)));
       } else if(tab==='permissions') {
         heading('权限与隐私','本地运行，内容保存在当前 Windows 用户目录。');const d=await api.diagnostics();
         if (disposed || revision !== renderRevision) return;
-        content.append(h('section',{class:'settings-section'},h('h2',{},'快捷键与自动粘贴'),h('p',{},'自动粘贴和读取选中内容使用 Windows 键盘与窗口接口。目标应用以管理员运行时，OpenAll 也需要相同权限。'),h('div',{class:'row',style:{marginTop:'16px'}},button('检查状态',()=>render()),button('查看快捷键',()=>render('general')))));
-        content.append(h('section',{class:'settings-section'},h('h2',{},'文件访问'),h('p',{},prefs.searchFiles?'文件搜索已开启，仅索引可访问目录。':'文件搜索已关闭，可在搜索设置中开启。'),h('div',{class:'row',style:{marginTop:'14px'}},button('打开搜索设置',()=>render('search')),button('重新扫描',()=>api.windowAction('rescan')))));
-        content.append(h('section',{class:'settings-section'},h('h2',{},'图片文字识别'),h('p',{},d.ocrAvailable===false?'当前 Windows 未安装可用的 OCR 语言包，可在 Windows 语言设置中添加。':'使用 Windows 本机文字识别；图片与识别结果不发送到远端。'),h('div',{style:{marginTop:'14px'}},button('打开 Windows 语言设置',()=>api.fileAction('openSystemSettings',{uri:'ms-settings:regionlanguage'})))));
-        content.append(h('section',{class:'settings-section'},h('h2',{},'本地数据'),button('打开数据目录',()=>api.fileAction('dataDirectory'))));
+        function capability(title,state,description,actions) {
+          return h('section',{class:'permission-row'},h('div',{},h('h2',{},title),h('p',{},description)),
+            h('div',{class:'permission-actions'},h('strong',{},state),...actions));
+        }
+        const shortcuts = ['search','clipboard','stack','selection'].map(key=>d.shortcuts?.[key]);
+        const active = shortcuts.filter(value=>value===true).length;
+        content.append(
+          capability('快捷键与自动粘贴',d.shortcutRecording?'录制中':shortcuts.every(value=>typeof value==='boolean')?active+' / 4 项快捷键已启用':'快捷键状态待确认',
+            '粘贴到以管理员身份运行的应用时，OpenAll 需要相同权限。',[button('查看快捷键 →',()=>render('general'),'ghost'),button('检查状态',()=>render(),'ghost')]),
+          capability('文件访问',prefs.searchFiles?'文件搜索已开启':'文件搜索已关闭','只读取可访问目录的文件名。',
+            [button('打开搜索设置 →',()=>render('search'),'ghost'),...(prefs.searchFiles?[button('重新扫描',()=>api.windowAction('rescan'),'ghost')]:[])]),
+          capability('图片文字识别',d.ocrAvailable===false?'需要 OCR 语言包':'使用本机 OCR','识别使用 Windows 语言包，图片与结果保存在本机。',
+            [button('打开 Windows 语言设置 ↗',()=>api.fileAction('openSystemSettings',{uri:'ms-settings:regionlanguage'}),'ghost')]),
+          capability('本地数据','当前 Windows 账户','查看 OpenAll 的设置与历史文件。',
+            [button('打开数据目录 ↗',()=>api.fileAction('dataDirectory'),'ghost')]));
       } else if(tab==='diagnostics') {
-        heading('诊断','查看运行状态、索引与本地存储。');const d=await api.diagnostics();
+        heading('状态与诊断');const d=await api.diagnostics();
         if (disposed || revision !== renderRevision) return;
         const shortcutNames = [['search','打开搜索'],['clipboard','剪贴板'],['stack','复制堆栈'],['selection','对选中内容操作']];
         const failed = shortcutNames.filter(([key]) => d.shortcuts?.[key] === false);
@@ -297,6 +362,13 @@
             h('div',{},h('strong',{},`${failed.length} 项快捷键未启用`),
               h('p',{},failed.map(([,name])=>name).join('、'))),
             button('查看快捷键',()=>render('general'))));
+        }
+        if (!failed.length || d.shortcutRecording) {
+          const keysReady = shortcutNames.every(([key])=>d.shortcuts?.[key] === true);
+          const summary = d.shortcutRecording ? '正在录制快捷键' : d.index?.indexing ? '索引正在更新'
+            : keysReady ? '全局快捷键已启用' : '快捷键状态待确认';
+          content.append(h('div',{class:'diagnostic-summary'},h('strong',{},summary),
+            h('span',{},'检查于 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}))));
         }
         const rows=[['版本',d.version||'—'],['平台',d.platform==='win32'?'Windows':d.platform||'Windows'],['应用索引',d.index?.apps??0],['文件索引',d.index?.files??0],['Chrome 配置',d.index?.profiles??0],['剪贴板记录',d.clipboard??d.clipboardCount??0],['内存',d.memoryMB?d.memoryMB+' MB':'—'],['索引状态',d.index?.indexing?'正在更新':'就绪'],['系统文件索引',d.index?.systemIndex?.available?'已连接 Windows Search':d.index?.systemIndex?.reason||'搜索文件时自动连接']];
         content.append(h('dl',{class:'status-grid'},rows.flatMap(([name,value])=>[h('dt',{},name),h('dd',{},String(value))])),h('div',{class:'row'},button('刷新状态',()=>render()),button('重新建立索引',()=>api.windowAction('rescan')),button('复制诊断',async()=>{await api.copyText(JSON.stringify(d,null,2));notify('诊断信息已复制');})),h('section',{class:'settings-section'},h('h2',{},'更新'),h('div',{class:'row'},bind(input(prefs.updateFeedURL,'更新源地址（HTTPS）'),value=>save({updateFeedURL:value})),button('检查更新',async()=>{const result=await api.windowAction('checkUpdates');notify(result?.message||'已完成更新检查');render();})),h('div',{class:'row',style:{marginTop:'12px'}},button('安装更新',async()=>{if(await confirm('安装更新','将下载并校验安装包，然后关闭 OpenAll 启动安装器。'))await api.windowAction('installUpdate');},'primary'),button('回退上一版',async()=>{if(await confirm('回退上一版','将关闭 OpenAll，重新安装上次保留的版本。'))await api.windowAction('rollbackUpdate');})),h('p',{class:'hint small'},d.updates?.message||'填写可信的 HTTPS 更新源后检查更新。')));
@@ -322,7 +394,7 @@
           const input = h('input',{type:'color',value:prefs[key]});
           input.dataset.colorKey = key;
           input.oninput = () => save({[key]:input.value,...(key === 'backgroundHex' ? {theme:'custom'} : {})},true);
-          return h('label',{class:'custom-color'},input,label);
+          return h('label',{class:'custom-color'},input,label,h('span',{class:'custom-value'}));
         }
         const preview = h('section',{class:'appearance-preview'},
           h('h3',{},'预览'),
@@ -347,14 +419,20 @@
         choice.classList.toggle('selected', selected);
         choice.setAttribute('aria-pressed', String(selected));
       }
-      for (const color of content.querySelectorAll('input[data-color-key]')) color.value = prefs[color.dataset.colorKey];
+      for (const color of content.querySelectorAll('input[data-color-key]')) {
+        const key = color.dataset.colorKey;
+        color.value = prefs[key];
+        const selected = content.querySelector('.color-choice[data-key="'+key+'"][aria-pressed="true"]');
+        color.parentElement.classList.toggle('active',!selected);
+        color.nextElementSibling.textContent = color.value.toUpperCase() + (selected ? '' : ' ✓');
+      }
     }
     async function clearHistory(all) {if(await confirm('清理剪贴板历史',all?'将删除全部历史记录，包括收藏。':'将删除未收藏的历史记录，收藏保留。')){await api.clipboardAction('clear',{includeFavorites:all});notify('历史记录已清理');}}
     async function searchRules() {
       const revision = ++renderRevision;
       const back = button('← 返回搜索设置', () => render('search'), 'ghost');
       content.replaceChildren(h('div',{class:'settings-rule-heading'},h('h1',{},'搜索排序管理'),back));
-      const data = await api.windowAction('searchRules');
+      const data = await api.windowAction('searchRules',{includeUsage:true});
       if (disposed || revision !== renderRevision) return;
       const rules = Array.isArray(data) ? data : data?.rules || [];
       if (rules.length) {
@@ -369,12 +447,14 @@
           h('p',{},'在搜索中选中结果，按 Ctrl+K 即可置顶或隐藏。'),
           button('打开搜索',()=>api.windowAction('showSearch'),'primary')));
       }
-      content.append(button('清除使用频率记录',async () => {
+      if (!data?.hasUsage) return;
+      content.append(h('section',{class:'ranking-history'},h('div',{},h('h2',{},'使用频率记录'),h('p',{},'清除后重新学习使用频率，手动规则会保留。')),button('清除记录',async () => {
         if (await confirm('清除使用记录','搜索排序将恢复为默认顺序。')) {
           await api.windowAction('searchRule',{action:'clearUsage'});
           notify('已清除使用记录');
+          if (!disposed && revision === renderRevision) searchRules();
         }
-      },'ghost'));
+      },'ghost')));
     }
     await render();return {dispose(){disposed=true;recording?.cancel();},selectTab:render,getTab:()=>tab,settingsChanged:syncAppearance};
   }

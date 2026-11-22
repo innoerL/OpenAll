@@ -392,7 +392,8 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
     override func draw(_ dirtyRect: NSRect) {
         let bounds = self.bounds.insetBy(dx: 4, dy: 4)
         let card = NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12)
-        OpenAllTheme.raised.setFill()
+        let fill = selected ? OpenAllTheme.raised.blended(withFraction: 0.055, of: OpenAllTheme.accent) : nil
+        (fill ?? OpenAllTheme.raised).setFill()
         card.fill()
         (selected ? OpenAllTheme.accent : hovering ? OpenAllTheme.accent.withAlphaComponent(0.55) : OpenAllTheme.rule).setStroke()
         card.lineWidth = selected ? 2.5 : hovering ? 1.5 : 1
@@ -435,7 +436,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             ? sourceIcon?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [barInk])) ?? sourceIcon : sourceIcon
         icon?.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1,
                          respectFlipped: true, hints: nil)
-        let preview = NSRect(x: 15, y: 15, width: bounds.width - 30, height: bounds.height - 55)
+        let preview = NSRect(x: 17, y: 17, width: bounds.width - 34, height: bounds.height - 57)
         var nextMoreRect: NSRect?
         if item.kind == "image", let imageURL {
             let image = previewImage ?? Self.imageCache.object(forKey: imageURL.path as NSString)
@@ -463,11 +464,8 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             let content = item.kind == "files" ? item.filePaths.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: "\n") : item.text
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = item.kind == "link" ? .byCharWrapping : .byWordWrapping
-            paragraph.lineSpacing = 2
+            paragraph.lineSpacing = 3
             let format = formatLabel
-            let attrs: [NSAttributedString.Key: Any] = [.font: format == "JSON" ? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) : NSFont.systemFont(ofSize: 14),
-                                                        .foregroundColor: OpenAllTheme.ink,
-                                                        .paragraphStyle: paragraph]
             if textPreview == nil {
                 // 预览只处理有界内容，长剪贴板条目不会在每次重绘时重新遍历全文。
                 let source = content.isEmpty ? item.title : content
@@ -476,6 +474,10 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
                 textPreview = (String(prefix.prefix(300)), prefix.count > 300)
             }
             let display = textPreview!.text
+            let shortText = !textPreview!.truncated && display.utf16.count <= 46 && display.rangeOfCharacter(from: .newlines) == nil
+            let font = format == "JSON" ? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+                : NSFont.systemFont(ofSize: shortText ? 16 : 14, weight: shortText ? .medium : .regular)
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: OpenAllTheme.ink, .paragraphStyle: paragraph]
             let required = (display as NSString).boundingRect(with: NSSize(width: preview.width, height: .greatestFiniteMagnitude),
                                                                options: [.usesLineFragmentOrigin, .usesFontLeading],
                                                                attributes: attrs).height
@@ -763,7 +765,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         }
         let originalIDs = Set(store.records.map(\.id))
         guard panel.makeFirstResponder(search), let initialEditor = search.currentEditor() as? NSTextView,
-              keyboardHint.stringValue == "↓ 选择卡片",
+              keyboardHint.stringValue == "↓ 选择卡片，再按空格预览",
               control(search, textView: initialEditor, doCommandBy: #selector(NSResponder.moveDown(_:))),
               panel.firstResponder is ClipCard, keyboardHint.stringValue.contains("↵ 粘贴"),
               panel.makeFirstResponder(search), let editor = search.currentEditor() as? NSTextView else { return false }
@@ -896,6 +898,23 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     }
 
     func dismiss() { hide() }
+    @MainActor func captureEditingForDesign() throws {
+        guard DesignPreview.enabled, let panel else { return }
+        startAddingBoard()
+        try DesignPreview.capture(panel, name: "02-clipboard-new-tag")
+        newBoardField?.stringValue = ""
+        commitNewBoard()
+        if let item = displayedItems.first(where: { !$0.text.isEmpty }) { select(item, paste: false) }
+        editSelectedBeforePaste()
+        guard let editor = DesignPreview.lastWindow, editor !== panel else {
+            throw NSError(domain: "ClipboardEditorPreview", code: 1)
+        }
+        try DesignPreview.capture(editor, name: "02-clipboard-edit-before-paste")
+        editPopover = nil
+        editAction = nil
+        DesignPreview.lastWindow = panel
+    }
+
     func showSelectedPreviewForDesign() {
         guard DesignPreview.enabled else { return }
         previewSelected()
@@ -1447,7 +1466,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         root.appearance = OpenAllTheme.appearance
         window.contentView = root
         let format = ClipboardFormat.label(for: item)
-        let heading = NSTextField(labelWithString: format + "预览")
+        let heading = NSTextField(labelWithString: ["Markdown", "HTML"].contains(format) ? format + " 原文" : format + "预览")
         heading.font = .systemFont(ofSize: 17, weight: .semibold)
         heading.textColor = OpenAllTheme.ink
         heading.frame = NSRect(x: 24, y: 386, width: 202, height: 28)
@@ -1475,7 +1494,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         text.isVerticallyResizable = true
         text.autoresizingMask = [.width]
         text.textContainer?.widthTracksTextView = true
-        text.font = ["JSON", "Markdown", "HTML"].contains(format) ?
+        text.font = ["JSON", "HTML"].contains(format) ?
             .monospacedSystemFont(ofSize: 14, weight: .regular) : .systemFont(ofSize: 14)
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = 22
@@ -1611,7 +1630,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         var hints: [String]
         if displayedItems.isEmpty { hints = [] }
         else if let editor = search.currentEditor(), panel.firstResponder === editor {
-            hints = ["↓ 选择卡片"]
+            hints = ["↓ 选择卡片，再按空格预览"]
         } else if let card = panel.firstResponder as? ClipCard {
             hints = [selectedIDs.count > 1 ? "↵ 粘贴所选" : "↵ 粘贴"]
             if !card.item.pinned { hints.append("⌫ 删除此卡") }
@@ -1931,6 +1950,14 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         root.addSubview(confirm)
         controller.view = root
         popover.contentViewController = controller
+        if DesignPreview.enabled {
+            let preview = NSWindow(contentRect: root.bounds, styleMask: [.borderless], backing: .buffered, defer: false)
+            root.wantsLayer = true
+            root.layer?.backgroundColor = OpenAllTheme.sidebar.cgColor
+            preview.contentView = root
+            DesignPreview.lastWindow = preview
+            return
+        }
         presentingDialog = true
         popover.show(relativeTo: card.bounds, of: card, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeFirstResponder(textView)

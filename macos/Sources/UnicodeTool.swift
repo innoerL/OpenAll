@@ -150,10 +150,10 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
         root.layer?.backgroundColor = OpenAllTheme.canvas.cgColor
         root.autoresizingMask = [.width, .height]
         w.contentView = root
-        for (index, title) in ["编码 → Unicode", "解码 → 文本"].enumerated() {
+        for (index, title) in ["编码", "解码"].enumerated() {
             let mode = NSButton(title: title, target: self, action: #selector(changeDirection(_:)))
             mode.tag = index
-            mode.frame = NSRect(x: 24 + CGFloat(index) * 144, y: 295, width: 140, height: 28)
+            mode.frame = NSRect(x: 24 + CGFloat(index) * 76, y: 295, width: 72, height: 28)
             mode.autoresizingMask = [.minYMargin]
             WindowChrome.styleToolMode(mode, active: index == 0)
             root.addSubview(mode)
@@ -202,6 +202,7 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
             copy.frame.size.width = 82
             WindowChrome.styleOutputAction(copy)
             actions = [fill, copy]
+            copy.toolTip = "复制右侧结果"
             resultActions = actions
         }
         let pane = ToolPane(title: title, content: scroll, actions: actions, size: NSSize(width: width, height: 225))

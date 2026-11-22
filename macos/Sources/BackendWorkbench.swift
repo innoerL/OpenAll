@@ -126,18 +126,18 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
         let item = rows[row]
         let view = NSTableCellView()
         if index == 0 && row == markedRow {
-            let marker = NSView(frame: NSRect(x: 0, y: 5, width: 2, height: 24))
+            let marker = NSView(frame: NSRect(x: 0, y: 4, width: 3, height: 26))
             marker.wantsLayer = true
             marker.layer?.backgroundColor = OpenAllTheme.accentText.cgColor
             view.addSubview(marker)
         }
-        if item.tone == "group" {
+        if row == markedRow {
             view.wantsLayer = true
-            view.layer?.backgroundColor = OpenAllTheme.surface.withAlphaComponent(0.3).cgColor
+            view.layer?.backgroundColor = OpenAllTheme.accent.withAlphaComponent(0.08).cgColor
         }
         let text = NSTextField(labelWithString: index < item.values.count ? item.values[index] : "")
         text.translatesAutoresizingMaskIntoConstraints = false
-        text.font = .systemFont(ofSize: 13, weight: item.tone == "group" ? .semibold : .regular)
+        text.font = .systemFont(ofSize: item.tone == "group" ? 12 : 13, weight: row == markedRow && index == 0 ? .semibold : .regular)
         if numericColumns.contains(index) {
             text.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
             text.alignment = .right
@@ -712,6 +712,15 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         case .sql:
             let restored = SQLParameterRestorer.restore(sql: input, parameterText: right?.string ?? "")
             result.string = restored.sql
+            if let storage = result.textStorage {
+                storage.beginEditing()
+                let full = NSRange(location: 0, length: storage.length)
+                storage.removeAttribute(.backgroundColor, range: full)
+                for range in restored.replacementRanges where range.length > 0 {
+                    storage.addAttribute(.backgroundColor, value: OpenAllTheme.accent.withAlphaComponent(0.25), range: range)
+                }
+                storage.endEditing()
+            }
             if let output = result.enclosingScrollView, let detail = reportDetail {
                 let top = detail.frame.minY - 8
                 let short = restored.sql.utf16.count <= 180 && restored.sql.split(separator: "\n", omittingEmptySubsequences: false).count <= 2

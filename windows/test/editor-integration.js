@@ -13,11 +13,19 @@ const report = { passed: false, checks: [] };
 const check = (condition, message) => { assert.ok(condition, message); report.checks.push(message); console.log('通过：' + message); };
 async function until(fn, timeout = 20000) { const start = Date.now(); while (true) { if (await fn()) return; if (Date.now() - start > timeout) throw Error('等待集成状态超时'); await delay(25); } }
 async function page(id) { let window; await until(async () => { window = BrowserWindow.getAllWindows().find(item => new URL(item.webContents.getURL() || 'about:blank').searchParams.get('page') === id); return window && await execute(window, () => !!window.OpenAllApp?.ready).catch(() => false); }); return window; }
-async function pasteFromShelf(target) {
+async function pasteFromShelf(target, usePreview = false) {
   target.show(); target.focus(); await until(() => BrowserWindow.getFocusedWindow()?.id === target.id);
   await execute(target, () => openall.windowAction('showClipboard'));
   const shelf = await page('clipboard');
-  await execute(shelf, async () => { const rows = await openall.history(); await openall.clipboardAction('paste', { ids: [rows.find(row => row.text === '跨窗粘贴').id] }); });
+  await execute(shelf, async preview => {
+    const rows = await openall.history();
+    await openall.clipboardAction(preview ? 'preview' : 'paste', { ids: [rows.find(row => row.text === '跨窗粘贴').id] });
+  }, usePreview);
+  if (usePreview) {
+    const preview = await page('clipboardPreview');
+    await execute(preview, () => document.querySelector('.clip-preview-action button.primary').click());
+    await until(() => preview.isDestroyed());
+  }
   await delay(120);
 }
 app.whenReady().then(async () => {
@@ -50,8 +58,8 @@ app.whenReady().then(async () => {
       return true;
     }), 'JSON 全选后退格或 Delete 一次清空所有折叠内容，撤销重做保真');
     await execute(json, () => { const c = OpenAllApp.controller, at = c.getText().indexOf('目标'); c.editor.focus(); c.editor.view.dispatch({ selection: { anchor: at, head: at + 2 } }); });
-    await pasteFromShelf(json);
-    check(await execute(json, () => OpenAllApp.controller.getText().includes('跨窗粘贴')), '独立剪贴板窗口粘贴回 JSON 原选区');
+    await pasteFromShelf(json, true);
+    check(await execute(json, () => OpenAllApp.controller.getText().includes('跨窗粘贴')), '从剪贴板全文预览直接粘贴回 JSON 原选区');
     const beforeSearchPaste = await execute(json, async () => { await OpenAllApp.controller.search('tail'); const q = document.querySelector('.editor-findbar input'); q.focus(); q.select(); return OpenAllApp.controller.getText(); });
     await pasteFromShelf(json);
     check(await execute(json, original => document.querySelector('.editor-findbar input').value === '跨窗粘贴' && OpenAllApp.controller.getText() === original, beforeSearchPaste), 'JSON 查找框聚焦时跨窗粘贴仅替换查询');
@@ -148,9 +156,27 @@ app.whenReady().then(async () => {
       return doc.querySelector('#open-search').getBoundingClientRect().width > 0 &&
         OpenAllApp.controller.getEditors().some(editor => doc.activeElement === editor.view.contentDOM);
     }), '退出搜索恢复搜索入口，键盘焦点回到当前编辑栏');
+    const paneMenuState = await execute(comparison, () => {
+      const doc = OpenAllApp.controller.frame.contentDocument;
+      const menu = doc.querySelector('.pane-menu');
+      const summary = menu.querySelector('summary'), actions = menu.querySelector('.pane-actions');
+      const compact = !menu.open && summary.getBoundingClientRect().width >= 28;
+      summary.click();
+      const visible = [...actions.querySelectorAll('button')].every(b => b.getBoundingClientRect().width >= 44);
+      menu.querySelector('.copy').click();
+      return compact && visible && !menu.open;
+    });
+    check(paneMenuState, '窄窗可从栏操作展开自然排序与复制，执行后自动收起');
     await execute(comparison, () => OpenAllApp.controller.search('文本对比'));
     comparison.setContentSize(...normalSize);
     await delay(100);
+    check(await execute(comparison, () => {
+      const doc = OpenAllApp.controller.frame.contentDocument;
+      const range = id => doc.querySelector(id).getBoundingClientRect();
+      const difference = range('.navigation'), find = range('#findbar'), query = range('#find-query');
+      return difference.right <= find.left && find.top < difference.bottom && query.width >= 100 &&
+        doc.querySelector('.pane-menu').open && range('.natural-sort').width > 0;
+    }), '宽窗的差异与查找同排独立显示，两栏操作直接可见');
     fs.writeFileSync(path.join(output, 'json-light.png'), (await json.webContents.capturePage()).toPNG());
     fs.writeFileSync(path.join(output, 'comparison-light.png'), (await comparison.webContents.capturePage()).toPNG());
     report.passed = true;

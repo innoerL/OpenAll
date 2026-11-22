@@ -291,8 +291,8 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
             button.cell?.lineBreakMode = .byTruncatingTail
         }
         provinceChanged()
-        for (title, x, width) in [("年龄", CGFloat(24), CGFloat(70)),
-                                   ("出生日期 · 留空随机", 110, 196),
+        for (title, x, width) in [("按年龄推算", CGFloat(24), CGFloat(78)),
+                                   ("出生日期 · 可手填", 126, 180),
                                    ("性别", 326, 136), ("生成数量 · 1–500", 482, 154)] {
             let label = NSTextField(labelWithString: title)
             label.font = .systemFont(ofSize: 11, weight: .medium)
@@ -302,9 +302,13 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         }
         age = numericField("周岁", x: 24, y: 304, width: 70, root: root)
         age.setAccessibilityLabel("年龄")
-        year = numericField("年", x: 110, y: 304, width: 68, root: root)
-        month = numericField("月", x: 186, y: 304, width: 56, root: root)
-        day = numericField("日", x: 250, y: 304, width: 56, root: root)
+        let arrow = NSImageView(image: NSImage(systemSymbolName: "arrow.right", accessibilityDescription: "年龄自动回填生日") ?? NSImage())
+        arrow.frame = NSRect(x: 100, y: 313, width: 16, height: 14)
+        arrow.contentTintColor = OpenAllTheme.muted
+        root.addSubview(arrow)
+        year = numericField("年", x: 126, y: 304, width: 62, root: root)
+        month = numericField("月", x: 194, y: 304, width: 53, root: root)
+        day = numericField("日", x: 253, y: 304, width: 53, root: root)
         gender = NSPopUpButton(frame: NSRect(x: 326, y: 304, width: 136, height: 30))
         WindowChrome.stylePopUp(gender)
         gender.addItems(withTitles: ["随机性别", "男", "女"])
@@ -316,6 +320,11 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         WindowChrome.styleAction(generate, primary: true)
         generate.keyEquivalent = "\r"
         root.addSubview(generate)
+        let birthdayHint = NSTextField(labelWithString: "按周岁沿用今天的月日；生日留空则随机。")
+        birthdayHint.font = .systemFont(ofSize: 12)
+        birthdayHint.textColor = OpenAllTheme.muted
+        birthdayHint.frame = NSRect(x: 172, y: 264, width: 442, height: 18)
+        root.addSubview(birthdayHint)
         resultLabel = NSTextField(labelWithString: "生成结果")
         resultLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         resultLabel.textColor = OpenAllTheme.ink

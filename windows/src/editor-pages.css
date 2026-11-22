@@ -65,3 +65,17 @@
   .editor-toolbar kbd { display: none; }
 }
 .editor-json-comment{color:var(--muted)}.editor-json-heading{color:var(--accent);font-weight:600}.editor-json-strong{font-weight:700}
+
+.editor-json-page .editor-toolbar { flex-wrap:nowrap; }
+.editor-json-page .editor-view-group[hidden] { display:none; }
+.editor-json-page .editor-findbar { flex:1; min-width:0; max-width:510px; margin-left:auto; padding:0; gap:5px; }
+.editor-json-page .editor-find-count { min-width:0; }
+.editor-json-page .editor-findbar input[type=search] { width:0; min-width:48px; }
+.editor-json-page .editor-codemirror .cm-foldGutter .cm-gutterElement { min-width:26px; padding:0; text-align:center; }
+.editor-json-page .cm-foldGutter .cm-gutterElement:has(span):hover, .editor-json-page .cm-foldPlaceholder:hover { background:var(--raised); color:var(--ink); }
+.editor-json-page .cm-foldPlaceholder { padding:2px 7px; }
+@media (max-width:620px) {
+  .editor-json-page .editor-toolbar:has(.editor-findbar:not([hidden])) { gap:4px; padding-inline:6px; }
+  .editor-json-page .editor-toolbar kbd { display:none; }
+  .editor-json-page .editor-findbar { gap:3px; }
+}

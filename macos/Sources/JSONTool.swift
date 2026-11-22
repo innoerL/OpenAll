@@ -427,7 +427,7 @@ private final class JSONLineRuler: NSRulerView {
         NotificationCenter.default.addObserver(self, selector: #selector(refresh),
             name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         setAccessibilityLabel("JSON 行号；点击三角形折叠或展开对象与数组")
-        toolTip = "点击行号旁的三角形，折叠或展开对象与数组"
+        toolTip = "点击有箭头的行号，折叠或展开对象与数组"
     }
     required init(coder: NSCoder) { fatalError("不支持从归档创建") }
     deinit { NotificationCenter.default.removeObserver(self) }
@@ -482,9 +482,9 @@ private final class JSONLineRuler: NSRulerView {
                     .font: numberFont,
                     .foregroundColor: OpenAllTheme.ink.withAlphaComponent(0.74), .paragraphStyle: paragraph])
             if let region = regionsByLine[index], onToggle != nil {
-                let target = NSRect(x: bounds.width - 20, y: point.y, width: 19, height: height)
+                let target = NSRect(x: 0, y: point.y, width: bounds.width - 1, height: height)
                 foldTargets.append((target, region.region.start))
-                let center = NSPoint(x: target.midX, y: point.y + baseline - (editor.font?.capHeight ?? 10) / 2)
+                let center = NSPoint(x: bounds.width - 12, y: point.y + baseline - (editor.font?.capHeight ?? 10) / 2)
                 let path = NSBezierPath()
                 if region.isCollapsed {
                     path.move(to: NSPoint(x: center.x - 2, y: center.y - 3.5))
@@ -556,6 +556,8 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
     private var operationButtons: [NSButton] = []
     private let history = UndoManager()
     private var searchBar: NSView!
+    private var overflowFold: NSMenuItem!
+    private var overflowCopy: NSMenuItem!
     private var searchButton: NSButton!
     private var searchField: NSSearchField!
     private var searchCount: NSTextField!
@@ -646,6 +648,13 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
             let item = NSMenuItem(title: title, action: #selector(performMenuOperation(_:)), keyEquivalent: "")
             item.tag = tag
             item.target = self
+            more.menu?.addItem(item)
+        }
+        overflowFold = NSMenuItem(title: "全部折叠", action: #selector(toggleAllFolds), keyEquivalent: "")
+        overflowCopy = NSMenuItem(title: "复制全文", action: #selector(copyContent), keyEquivalent: "")
+        for item in [overflowFold!, overflowCopy!] {
+            item.target = self
+            item.isHidden = true
             more.menu?.addItem(item)
         }
         root.addSubview(more)
@@ -771,7 +780,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         root.addSubview(open)
         searchButton = open
         searchBar = NSView(frame: NSRect(x: 426, y: 472, width: 514, height: 32))
-        searchBar.autoresizingMask = [.minXMargin, .minYMargin]
+        searchBar.autoresizingMask = []
         searchBar.wantsLayer = true
         searchBar.layer?.cornerRadius = 6
         searchBar.layer?.backgroundColor = OpenAllTheme.surface.cgColor
@@ -831,6 +840,8 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
             if title == "↑" { searchPrevious = button }
             if title == "↓" { searchNext = button }
         }
+        root.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(layoutSearchBar), name: NSView.frameDidChangeNotification, object: root)
         NotificationCenter.default.addObserver(self, selector: #selector(searchViewportChanged),
             name: NSView.boundsDidChangeNotification, object: editor.enclosingScrollView?.contentView)
     }
@@ -847,12 +858,26 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         return false
     }
 
+    @objc private func layoutSearchBar() {
+        guard let root = searchBar?.superview else { return }
+        let compact = root.bounds.width < 888
+        let start: CGFloat = compact ? 314 : 476
+        let width = min(514, root.bounds.width - 20 - start)
+        searchBar.frame = NSRect(x: root.bounds.width - 20 - width, y: searchButton.frame.midY - 16, width: width, height: 32)
+        let overflow = searchVisible && compact
+        foldButton.isHidden = overflow
+        copyButton.isHidden = overflow
+        overflowFold.isHidden = !overflow
+        overflowCopy.isHidden = !overflow
+        overflowFold.title = foldButton.title
+    }
+
     @objc private func openSearch() {
         if !searchVisible {
             searchVisible = true
             searchBar.isHidden = false
             searchButton.isHidden = true
-            editor.enclosingScrollView?.frame.size.height -= 36
+            layoutSearchBar()
         }
         if searchField.stringValue.isEmpty, let selected = selectedSource(),
            !selected.isEmpty, selected.utf16.count <= 256, !selected.contains("\n") {
@@ -870,7 +895,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         searchVisible = false
         searchBar.isHidden = true
         searchButton.isHidden = false
-        editor.enclosingScrollView?.frame.size.height += 36
+        layoutSearchBar()
         searchMatches = []
         searchLimited = false
         searchIndex = -1
@@ -1377,6 +1402,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         ruler.onToggle = supportsFolding ? { [weak self] start in self?.toggleFold(start: start) } : nil
         foldButton.isEnabled = supportsFolding && !result.regions.isEmpty
         foldButton.title = result.collapsed.isEmpty ? "全部折叠" : "全部展开"
+        overflowFold.title = foldButton.title
         copyButton.isEnabled = !result.source.isEmpty
         editor.isEditable = true
         editor.toolTip = result.collapsed.isEmpty ? nil : "全选删除直接清空；局部删除折叠区域时，第一次只展开，第二次才删除"

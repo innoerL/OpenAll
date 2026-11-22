@@ -54,7 +54,7 @@ function parseParameters(text){
 }
 function restoreSQL(sql,parameters){
   bounded(sql);const params=parseParameters(parameters);if(!Array.isArray(params)&&(!params||typeof params!=='object'))throw Error('参数需为 JSON 数组、对象或参数日志');
-  sql=sql.replace(/^(?:==>\s*)?Preparing:\s*/i,'');let output='',index=0,state='normal',depth=0,dollar='',used=new Set(),missing=[],replaced=0;
+  sql=sql.replace(/^(?:==>\s*)?Preparing:\s*/i,'');let output='',index=0,state='normal',depth=0,dollar='',used=new Set(),missing=[],replacementRanges=[];
   for(let i=0;i<sql.length;i++){const ch=sql[i],next=sql[i+1];if(state==='line'){output+=ch;if(ch==='\n')state='normal';continue;}
     if(state==='block'){output+=ch;if(ch==='/'&&next==='*'){output+=next;i++;depth++;}else if(ch==='*'&&next==='/'){output+=next;i++;if(--depth===0)state='normal';}continue;}
     if(state==='dollar'){if(sql.startsWith(dollar,i)){output+=dollar;i+=dollar.length-1;state='normal';}else output+=ch;continue;}
@@ -64,8 +64,8 @@ function restoreSQL(sql,parameters){
     if(ch==="'"||ch==='"'||ch==='`'){state=ch;output+=ch;continue;}
     if(ch==='$'){const tag=sql.slice(i).match(/^\$(?:[A-Za-z_]\w*)?\$/);if(tag){dollar=tag[0];output+=dollar;i+=dollar.length-1;state='dollar';continue;}}
     let name,token;if(ch==='?'){name=String(index++);token='?';}else if(ch==='$'&&/[1-9]/.test(next||'')){const match=sql.slice(i).match(/^\$([1-9]\d*)/);token=match[0];name=String(Number(match[1])-1);i+=token.length-1;}else if(ch===':'&&sql[i-1]!==':'&&/[A-Za-z_]/.test(next||'')){const match=sql.slice(i).match(/^:([A-Za-z_]\w*)/);token=match[0];name=match[1];i+=token.length-1;}
-    if(token){if(Object.hasOwn(params,name)){output+=sqlLiteral(params[name]);used.add(name);replaced++;}else{output+=token;missing.push(token);}continue;}output+=ch;
-  }return {sql:output,missing,unused:Object.keys(params).filter(x=>!used.has(x)),replaced,unresolved:missing.length};
+    if(token){if(Object.hasOwn(params,name)){const from=output.length;output+=sqlLiteral(params[name]);replacementRanges.push({from,to:output.length});used.add(name);}else{output+=token;missing.push(token);}continue;}output+=ch;
+  }return {sql:output,missing,unused:Object.keys(params).filter(x=>!used.has(x)),replacementRanges,replaced:replacementRanges.length,unresolved:missing.length};
 }
 function explain(text){
   bounded(text);const raw=text.trim();if(!raw)throw Error('请粘贴执行计划');
