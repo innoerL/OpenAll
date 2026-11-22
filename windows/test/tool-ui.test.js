@@ -99,10 +99,12 @@ app.whenReady().then(async()=>{
 
   await mount('configDiff');
   await js('const fields=document.querySelectorAll("textarea,.aux-editor-frame");fields[0].value="server:\\n  port: 80\\npassword: old";fields[1].value="server:\\n  port: 81\\npassword: new\\nfeature: true";');
-  await click('比较配置');await until('document.querySelector(".aux-status").textContent.includes("修改 2")','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-status").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),"server.port · 80 → 81");assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');await capture('configDiff');
+  await click('比较配置');await until('document.querySelector(".aux-status").textContent.includes("修改 2")','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-status").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),"其中一项：server.port · 80 → 81");assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');await capture('configDiff');
+  await click('定位到行');assert.equal(await js('return document.activeElement.cells[1].textContent'),'server.port','定位到摘要列出的配置键');
   await js('document.querySelector(".aux-editor-frame").value="server: 123";');
   await until('document.querySelector(".aux-status").textContent.includes("重新运行")','配置更改状态');
-  assert.equal(await js('return document.querySelector(".aux-report-heading button").disabled'),true,'源配置变更后应禁用旧结果复制');
+  assert.equal(await js('return document.querySelector(".aux-report-heading button:not(.aux-locate)").disabled'),true,'源配置变更后应禁用旧结果复制');
+  assert.equal(await js('return document.querySelector(".aux-locate").hidden'),true,'旧结果不提供行定位');
   await js('const fields=document.querySelectorAll(".aux-editor-frame");fields[0].value="password: secret-old";fields[1].value="password: secret-new";');
   await click('比较配置');await until('document.querySelector(".aux-report-title").textContent==="敏感字段已变更"','只含敏感字段的结果');
   await js('document.querySelector(".aux-actions input[type=checkbox]").click()');
@@ -112,17 +114,19 @@ app.whenReady().then(async()=>{
 
   await mount('explain',JSON.stringify([{Plan:{'Node Type':'Nested Loop','Plan Rows':200,Plans:[{'Node Type':'Index Scan','Relation Name':'users','Index Name':'users_pkey','Plan Rows':1,'Actual Rows':1,'Actual Total Time':0.04},{'Node Type':'Seq Scan','Relation Name':'orders','Plan Rows':200,'Actual Rows':174,'Actual Total Time':1.24}]}}]));await click('分析计划');await until('document.querySelectorAll("tbody tr").length===3','执行计划');assert.match(await js('return document.querySelector("tbody").textContent'),/全表扫描/);await capture('explain');
   assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'orders 使用全表扫描');
+  await click('定位到行');assert.equal(await js('return document.activeElement.cells[1].textContent'),'orders');
   assert.match(await js('return document.querySelector(".aux-status").textContent'),/实际 174 行 · 耗时 1.24 ms/);
   assert.equal(await js('return document.querySelector(".aux-backend-body").classList.contains("has-finding")'),false,'扫描方式本身不等于行数异常');
   const mismatch=JSON.stringify([{Plan:{'Node Type':'Seq Scan','Relation Name':'orders','Plan Rows':12000,'Actual Rows':3}}]);
   await fill('.aux-editor-frame',mismatch);await click('分析计划');
   await until('document.querySelector(".aux-report-title").textContent==="orders · 估算偏高 4000 倍"','计划关键结果');
+  assert.match(await js('return document.querySelector(".aux-status").textContent'),/估算 12000 行 · 实际 3 行/);
 
 
   await mount('sqlRestore',"SELECT * FROM users WHERE id = ? AND name = ?;");await js('document.querySelectorAll("textarea,.aux-editor-frame")[1].value="Parameters: 42(Integer), OpenAll(String)";');await click('还原 SQL');await until('document.querySelectorAll("textarea,.aux-editor-frame")[2].value.includes("id = 42")','SQL 还原');await capture('sqlRestore');
   assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'已还原 2 个占位符');
   assert.equal(await js('return document.querySelector(".aux-backend-body > .aux-pane").offsetHeight'),80,'短 SQL 使用紧凑结果区');
-  assert.equal(await js('return getComputedStyle(document.querySelector(".aux-report-heading button")).borderTopWidth'),'1px');
+  assert.equal(await js('return getComputedStyle(document.querySelector(".aux-report-heading button:not(.aux-locate)")).borderTopWidth'),'1px');
   assert.equal(await js('const result=document.querySelector(".aux-backend-body > .aux-pane .cm-content");result.focus();return result===document.activeElement;'),true,'SQL 结果可通过键盘切入');
   const longSQL=Array.from({length:80},(_,i)=>'SELECT '+i+';').join('\n');
   await fill('.aux-editor-frame',longSQL);await js('document.querySelectorAll(".aux-editor-frame")[1].value=""');await click('还原 SQL');
@@ -135,14 +139,15 @@ app.whenReady().then(async()=>{
   assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'请求 req-002 · 数据库超时');
   assert.match(await js('return document.querySelector(".aux-status").textContent'),/1 条错误/);
   assert.equal(await js('return document.querySelector(".aux-table-footer span").textContent'),'3 项','分组标题不计入日志条数');
-  const boundaryLogs=Array.from({length:151},(_,index)=>JSON.stringify({requestId:index===0?'a':'b',level:'INFO',message:'检查分页'})).join('\n');
+  const boundaryLogs=Array.from({length:152},(_,index)=>JSON.stringify({requestId:index===0?'a':'b',level:index===151?'ERROR':'INFO',message:index===151?'database timeout':'检查分页'})).join('\n');
   await mount('logTimeline',boundaryLogs);await click('识别字段');
-  await until('document.querySelector(".aux-status").textContent.includes("151 条日志")','多页日志');
+  await until('document.querySelector(".aux-status").textContent.includes("152 条日志")','多页日志');
   await js('const select=document.querySelectorAll("select")[0];select.value="requestId";select.dispatchEvent(new Event("change"));');
   await until('document.querySelector(".aux-status").textContent.includes("2 个分组")','分页分组');
-  await click('下一页');
-  assert.equal(await js('return document.querySelector(".aux-table-footer span").textContent'),'151 项 · 第 2 / 2 页');
-  assert.equal(await js('return document.querySelectorAll("tbody tr").length'),2,'跨页保留当前分组标题和最后一条日志');
+  await js('const btn=document.querySelector(".aux-locate");btn.focus();btn.dispatchEvent(new KeyboardEvent("keydown",{key:"l",ctrlKey:true,bubbles:true}));');
+  assert.equal(await js('return document.activeElement.cells[2].textContent'),'database timeout','从摘要跨页聚焦到正确分组里的错误事件');
+  assert.equal(await js('return document.querySelector(".aux-table-footer span").textContent'),'152 项 · 第 2 / 2 页');
+  assert.equal(await js('return document.querySelectorAll("tbody tr").length'),4,'跨页保留当前分组和后续分组的标题及日志');
 
 
 

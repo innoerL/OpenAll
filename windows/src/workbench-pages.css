@@ -127,3 +127,10 @@
 }
 .aux-backend-body[data-mode=sqlRestore].short-sql > .aux-pane { flex: 0 0 80px; min-height: 80px; }
 .aux-backend-body[data-mode=sqlRestore].short-sql > .aux-pane:has(.aux-findbar:not([hidden])) { flex-basis: 122px; }
+
+.aux-backend .aux-locate[hidden] { display: none; }
+.aux-backend .aux-report tbody tr:focus {
+  outline: 2px solid var(--accent-text,var(--ink));
+  outline-offset: -2px;
+  background: var(--raised);
+}

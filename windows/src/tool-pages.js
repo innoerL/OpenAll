@@ -34,7 +34,7 @@
     const body = h('tbody'), footer = h('div',{class:'aux-table-footer'});
     const group = h('colgroup',{},columns.map(c => h('col',Array.isArray(c) ? {style:'width:'+c[1]/totalWidth*100+'%'} : {})));
     const node = h('div',{class:'aux-report'},h('table',{},group,head,body),footer);
-    let pages = [], page = 0, count = 0, emptyText = emptyMessage;
+    let pages = [], records = [], page = 0, count = 0, emptyText = emptyMessage;
     function render() {
       body.replaceChildren();
       for (const row of pages[page] || []) {
@@ -51,7 +51,7 @@
       }
     }
     function set(rows, message = emptyMessage) {
-      pages = []; page = 0; count = 0; emptyText = message;
+      pages = []; records = rows; page = 0; count = 0; emptyText = message;
       let group = null, lastGroup = null;
       for (const row of rows) {
         if (row.tone === 'group') { group = row; continue; }
@@ -64,7 +64,18 @@
       render();
     }
     render();
-    return {node,set};
+    function locate(index) {
+      const record = records[index];
+      if (!record || record.tone === 'group') return;
+      const found = pages.findIndex(items => items.includes(record));
+      if (found < 0) return;
+      if (page !== found) { page = found; render(); }
+      const row = body.rows[pages[page].indexOf(record)];
+      row.tabIndex = -1;
+      row.focus({preventScroll:true});
+      row.scrollIntoView({block:'nearest',inline:'nearest'});
+    }
+    return {node,set,locate};
   }
   function copyButtonIcon(callback,title){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [key,value]of Object.entries({viewBox:'0 0 24 24',width:18,height:18,fill:'none',stroke:'currentColor','stroke-width':1.5,'aria-hidden':'true'}))svg.setAttribute(key,value);const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d','M9 8h11v14H9zM15 8V2H3v14h6M15 2l5 6');svg.append(path);const result=button('',callback,'quiet aux-copy-icon');result.title=title;result.setAttribute('aria-label',title);result.append(svg);return result;}
   function backend(ctx,action,...args){return ctx.api.backendTask?ctx.api.backendTask(action,args):Promise.resolve(ctx.api.backend[action](...args));}
@@ -159,17 +170,23 @@
     const status=shell(root,'backend'),old=backendInputs.get(id)||{},left=editor('粘贴内容',ctx.initialValue||old.left||'',false,syntax),right=editor('粘贴另一份内容',old.right||'',false,id==='sqlRestore'?'json':syntax),copyButton=button('复制结果',()=>copy(ctx,copyValue),'quiet'),actions=h('div',{class:'aux-actions'}),body=h('div',{class:'aux-backend-body'});let copyValue='',sequence=0,dead=false,logs=[];copyButton.disabled=true;
     const titles = {configDiff:'差异结果',explain:'计划节点',logTimeline:'事件时间线',sqlRestore:'还原结果'};
     const headline = h('strong', {class:'aux-report-title'}, titles[id]);
-    function setHeadline(message, attention = false) {
+    let target = null;
+    const locateButton = button('定位到行', () => target?.report.locate(target.index), 'quiet aux-locate');
+    locateButton.title = '定位到摘要对应的行（Ctrl+L）';
+    locateButton.hidden = true;
+    function setHeadline(message, attention = false, destination = null) {
+      target = destination;
+      locateButton.hidden = !target;
       headline.textContent = message;
       body.classList.toggle('has-finding', attention);
     }
     body.dataset.mode=id;root.append(backendTabs(id,ctx),body,status);
     async function run(action,...args){const serial=++sequence;setHeadline(titles[id]);body.classList.remove('stale-result');setStatus(status,'正在本机处理…');copyButton.disabled=true;try{const result=await backend(ctx,action,...args);if(dead||serial!==sequence)return null;return result;}catch(error){if(!dead&&serial===sequence){copyValue='';setStatus(status,error.message,true);}return null;}}
-    function complete(value, summary, detail, attention = false) {
+    function complete(value, summary, detail, attention = false, destination = null) {
       copyValue = value;
       copyButton.disabled = !value;
       body.classList.remove('stale-result');
-      setHeadline(summary, attention);
+      setHeadline(summary, attention, destination);
       setStatus(status, detail);
     }
     function invalidate(event){
@@ -190,11 +207,12 @@
         const text = String(value).replace(/[\r\n]+/g,' ');
         return text ? text.slice(0,26) + (text.length > 26 ? '…' : '') : '空字符串';
       };
-      const title = first ? first.key.slice(0,52) + ' · ' + brief(first.left,first.leftType) + ' → ' + brief(first.right,first.rightType) : rows.length ? '敏感字段已变更' : '两份配置相同';
+      const example = first && rows.length > 1 ? '其中一项：' : '';
+      const title = first ? example + first.key.slice(0,52) + ' · ' + brief(first.left,first.leftType) + ' → ' + brief(first.right,first.rightType) : rows.length ? '敏感字段已变更' : '两份配置相同';
       complete(rows.map(row=>`${row.status} ${row.key}\n  ${row.left} [${row.leftType}] → ${row.right} [${row.rightType}]`).join('\n\n'),title,['新增','变化','删除'].map(kind => {
         const count = rows.filter(row => row.status === kind).length;
         return count ? (kind === '变化' ? '修改' : kind) + ' ' + count : '';
-      }).filter(Boolean).join('　'));}actions.append(button('比较配置',analyze,'primary'),format,reveal.node,h('span',{class:'aux-spacer'}),copyButton);body.append(h('div',{class:'aux-split inputs'},pane('左侧配置',left),pane('右侧配置',right)),actions,report.node);reveal.box.onchange=analyze;format.onchange=invalidate;}
+      }).filter(Boolean).join('　'),false,first ? {report,index:rows.indexOf(first)} : null);}actions.append(button('比较配置',analyze,'primary'),format,reveal.node,h('span',{class:'aux-spacer'}),copyButton);body.append(h('div',{class:'aux-split inputs'},pane('左侧配置',left),pane('右侧配置',right)),actions,report.node);reveal.box.onchange=analyze;format.onchange=invalidate;}
     if (id === 'explain') {
       left.placeholder = '支持 PostgreSQL JSON、文本；MySQL JSON、TREE、表格';
       const report = table([['计划节点',170],['对象 / 索引',170],['估算行',90],['实际行',90],['耗时 ms',90],['观察项',338]]);
@@ -202,14 +220,14 @@
         report.set([]);
         const rows = await run('explain', left.value);
         if (!rows) return;
-        let largest = null, scans = 0, firstScan = '', measurement = '';
-        report.set(rows.map(row => {
+        let largest = null, scans = 0, firstScan = '', firstScanIndex = -1, measurement = '';
+        report.set(rows.map((row,index) => {
           const node = row.relation || row.name.split(' (')[0].trim();
           const notes = [];
           if (row.warning) {
             scans++;
             if (!firstScan) {
-              firstScan = node;
+              firstScan = node; firstScanIndex = index;
               measurement = [row.engine !== 'MySQL · JSON' && row.actual !== '' && row.actual != null ? '实际 '+row.actual+' 行' : '',
                 row.time !== '' && row.time != null ? '耗时 '+row.time+' ms' : ''].filter(Boolean).join(' · ');
             }
@@ -225,7 +243,7 @@
           if (deviation) {
             const label = '估算偏' + (estimate > actual ? '高 ' : '低 ') + Math.round(ratio) + ' 倍';
             notes.push(label);
-            if (!largest || ratio > largest.ratio) largest = { ratio, label, node };
+            if (!largest || ratio > largest.ratio) largest = { ratio, label, node, index, estimate:row.estimated, actual:measured };
           }
           return {tone:deviation ? 'estimate-gap' : '', cells:[
             '　'.repeat(Math.min(row.depth || 0,12)) + row.name, [row.relation,row.index].filter(Boolean).join(' / ') || '—',
@@ -234,8 +252,8 @@
         }));
         const title = largest ? largest.node.slice(0,48) + ' · ' + largest.label : scans === 1 ? firstScan.slice(0,48) + ' 使用全表扫描' :
           scans ? scans + ' 个节点使用全表扫描' : rows.length + ' 个计划节点';
-        const detail = [!largest && scans === 1 ? measurement : '',rows[0]?.engine, (largest || scans) ? rows.length + ' 个节点' : ''].filter(Boolean).join(' · ');
-        complete(rows.map(row => '  '.repeat(row.depth || 0) + (row.warning ? '⚠ ' : '') + row.name + ' · ' + row.detail).join('\n'), title, detail, !!largest);
+        const detail = [largest ? '估算 '+largest.estimate+' 行 · 实际 '+largest.actual+' 行' : scans === 1 ? measurement : '',rows[0]?.engine, (largest || scans) ? rows.length + ' 个节点' : ''].filter(Boolean).join(' · ');
+        complete(rows.map(row => '  '.repeat(row.depth || 0) + (row.warning ? '⚠ ' : '') + row.name + ' · ' + row.detail).join('\n'), title, detail, !!largest,largest || scans === 1 ? {report,index:largest?.index ?? firstScanIndex} : null);
       }
       actions.append(button('分析计划',analyzePlan,'primary'),h('span',{class:'aux-spacer'}),copyButton);
       body.append(pane('粘贴 PostgreSQL / MySQL 的 EXPLAIN 输出',left),actions,report.node);
@@ -272,25 +290,25 @@
               else if (/服务不可用|service unavailable/i.test(message)) kind = '服务不可用';
               const request = ['requestId','request_id','traceId','trace_id','trace.id'].map(key=>row.fields[key])
                 .find(value => typeof value === 'string' && /^[a-zA-Z0-9_.-]{1,64}$/.test(value));
-              representative = {rank,position:row.position,title:[request ? '请求 ' + request.slice(0,32) + (request.length > 32 ? '…' : '') : '',kind].filter(Boolean).join(' · ')};
+              representative = {rank,index:rows.length,position:row.position,title:[request ? '请求 ' + request.slice(0,32) + (request.length > 32 ? '…' : '') : '',kind].filter(Boolean).join(' · ')};
             }
           }
           rows.push({tone:error ? 'log-error' : warn ? 'log-warning' : '', cells:[row.fields[time.value] || '#'+(row.position+1),level,row.fields.message || row.fields.msg || row.raw]});
         }}report.set(rows);
         const alerts = [errors ? errors+' 条错误' : '', warnings ? warnings+' 条警告' : ''].filter(Boolean).join(' · ');
         complete(groups.map(g=>`▸ ${g.name} · ${g.entries.length} 条\n`+g.entries.map(row=>'  '+(row.fields[time.value]||'#'+(row.position+1))+'  '+row.raw).join('\n')).join('\n\n'),representative?.title || alerts || '已整理事件时间线',
-        [representative?.title ? alerts : '',logs.length+' 条日志',groups.length+' 个分组',affected.size>1 ? '涉及 '+affected.size+' 个分组' : ''].filter(Boolean).join(' · '), !!affected.size);}
+        [representative?.title ? alerts : '',logs.length+' 条日志',groups.length+' 个分组',affected.size>1 ? '涉及 '+affected.size+' 个分组' : ''].filter(Boolean).join(' · '), !!affected.size,representative ? {report,index:representative.index} : null);}
       const recognize=button('识别字段',async()=>{report.set([]);const parsed=await run('parseLogs',left.value,manual.value);if(!parsed)return;logs=parsed;const fields=await run('logFields',logs);if(!fields)return;group.replaceChildren(...fields.map(v=>h('option',{value:v.key},`${v.key}（${v.count} 条）`)));time.replaceChildren(h('option',{value:''},'原始顺序'),...fields.map(v=>h('option',{value:v.key},v.key)));const request=fields.find(v=>['requestid','traceid','trace.id'].includes(v.key.toLowerCase()));if(request)group.value=request.key;const detected=fields.find(v=>/time|时间|timestamp|date/i.test(v.key));if(detected)time.value=detected.key;if(!fields.length){setStatus(status,'没有识别到字段，可展开手动规则补充提取');return;}await renderGroups();if(left.value.split('\n').length>10000 && logs.length)setStatus(status,status.textContent+' · 仅前 10000 行');},'primary');group.onchange=time.onchange=renderGroups;
       actions.append(recognize,label('聚合字段',group),label('时间字段',time),button('手动规则',()=>{manualHolder.hidden=!manualHolder.hidden;if(!manualHolder.hidden)manual.focus();},'quiet'),h('span',{class:'aux-spacer'}),copyButton);body.append(pane('粘贴 JSON Lines 或 key=value 日志',left),actions,manualHolder,report.node);body.dataset.rule=manual.value;manual.oninput=()=>{body.dataset.rule=manual.value;invalidate();};
     }
     const result=body.querySelector(id==='sqlRestore'?':scope > .aux-pane':':scope > .aux-report');
-    const reportHeading=h('div',{class:'aux-section-bar aux-report-heading'},h('div',{class:'aux-report-reading','aria-live':'polite'},headline,status),copyButton);
+    const reportHeading=h('div',{class:'aux-section-bar aux-report-heading'},h('div',{class:'aux-report-reading','aria-live':'polite'},headline,status),h('div',{class:'aux-inline'},locateButton,copyButton));
     if (id === 'sqlRestore') {
       copyButton.textContent = '复制 SQL';
       copyButton.setAttribute('aria-label','复制还原后的完整 SQL');
     }
     body.insertBefore(reportHeading,result);
-    let activeEditor=left;for(const field of [left,right])field.addEventListener('focusin',()=>activeEditor=field);const keydown=event=>{if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();actions.querySelector('.primary')?.click();}};root.addEventListener('keydown',keydown);return {focus:()=>left.focus(),paste(text){activeEditor.setRangeText(text,activeEditor.selectionStart,activeEditor.selectionEnd,'end');if(activeEditor instanceof HTMLTextAreaElement)invalidate();activeEditor.focus();},dispose(){root.removeEventListener('keydown',keydown);dead=true;sequence++;backendInputs.set(id,{left:left.value,right:right.value,rule:body.dataset.rule??old.rule??''});for(const node of root.querySelectorAll('.aux-editor-frame'))node.disposeEditor?.();}};
+    let activeEditor=left;for(const field of [left,right])field.addEventListener('focusin',()=>activeEditor=field);const keydown=event=>{if((event.ctrlKey||event.metaKey)&&!event.altKey && event.key.toLowerCase()==='l' && target){event.preventDefault();locateButton.click();return;}if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();actions.querySelector('.primary')?.click();}};root.addEventListener('keydown',keydown);return {focus:()=>left.focus(),paste(text){activeEditor.setRangeText(text,activeEditor.selectionStart,activeEditor.selectionEnd,'end');if(activeEditor instanceof HTMLTextAreaElement)invalidate();activeEditor.focus();},dispose(){root.removeEventListener('keydown',keydown);dead=true;sequence++;backendInputs.set(id,{left:left.value,right:right.value,rule:body.dataset.rule??old.rule??''});for(const node of root.querySelectorAll('.aux-editor-frame'))node.disposeEditor?.();}};
   };}
   for(const id of ['configDiff','explain','logTimeline','sqlRestore'])pages[id]=backendPage(id);
 

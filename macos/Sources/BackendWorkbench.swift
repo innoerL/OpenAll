@@ -87,6 +87,19 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
         table.reloadData()
         needsLayout = true
     }
+    @discardableResult
+    func locate(_ index: Int) -> Bool {
+        guard rows.indices.contains(index), rows[index].tone != "group" else { return false }
+        table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        table.scrollRowToVisible(index)
+        window?.makeFirstResponder(table)
+        return table.selectedRow == index
+    }
+    var selectedValues: [String] {
+        rows.indices.contains(table.selectedRow) ? rows[table.selectedRow].values : []
+    }
+    func clearPreviewSelection() { table.deselectAll(nil); table.scrollRowToVisible(0) }
+
     func verifyColumnGeometry() -> Bool {
         guard !rows.isEmpty else { return true }
         layoutSubtreeIfNeeded()
@@ -165,6 +178,8 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
     private var reportSummary: NSTextField?
     private var reportDetail: NSTextField?
     private weak var copyResultButton: NSButton?
+    private weak var locateButton: NSButton?
+    private var targetRow: Int?
     private var result: NSTextView?
     private var status: NSTextField!
     private var reveal: NSButton?
@@ -209,6 +224,12 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         if let reportView {
             window?.contentView?.layoutSubtreeIfNeeded()
             precondition(reportView.verifyColumnGeometry(), "工作台表头和单元格文字边界未对齐")
+            if let index = targetRow {
+                precondition(locateButton?.isHidden == false && reportView.locate(index), "结果摘要未定位到表格行")
+                let expected = selected == .config ? "feature.enabled" : selected == .logs ? "数据库超时" : "12000"
+                precondition(reportView.selectedValues.contains(expected), "摘要所指内容和表格选中行不一致")
+                reportView.clearPreviewSelection()
+            }
         }
     }
 
@@ -311,6 +332,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
 
     private func rebuild() {
         body.subviews.forEach { $0.removeFromSuperview() }
+        targetRow = nil
         reportView = nil
         reportSummary = nil
         left = nil; right = nil; result = nil; reveal = nil
@@ -487,6 +509,13 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
             output.isHidden = true
             body.addSubview(report)
             reportView = report
+            let locate = button("定位到行", x: 752, y: (reportSummary?.frame.minY ?? 0) - 4, w: 80, action: #selector(locateResult))
+            locate.keyEquivalent = "l"
+            locate.keyEquivalentModifierMask = .command
+            locate.toolTip = "定位到摘要对应的行（⌘L）"
+            WindowChrome.styleOutputAction(locate)
+            locate.isHidden = true
+            locateButton = locate
         }
     }
 
@@ -506,7 +535,14 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         if let field = notification.object as? NSTextField, field === manualRule { markResultsStale() }
     }
 
-    private func setHeadline(_ title: String, detail: String = "", attention: Bool = false) {
+    @objc private func locateResult() {
+        if let targetRow { reportView?.locate(targetRow) }
+    }
+
+    private func setHeadline(_ title: String, detail: String = "", attention: Bool = false, target: Int? = nil) {
+        targetRow = target
+        locateButton?.isHidden = target == nil
+        if mode != .sql { reportSummary?.frame.size.width = target == nil ? 810 : 734 }
         reportSummary?.stringValue = title
         reportSummary?.textColor = attention ? OpenAllTheme.accentText : OpenAllTheme.ink
         if mode == .sql, let reportSummary, let button = copyResultButton {
@@ -576,7 +612,9 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                         let value = field.value.replacingOccurrences(of: "\n", with: " ")
                         return value.isEmpty ? "空字符串" : String(value.prefix(26)) + (value.count > 26 ? "…" : "")
                     }
-                    setHeadline("\(String(key.prefix(52))) · \(brief(a[key])) → \(brief(b[key]))", detail: breakdown)
+                    let example = differences.count > 1 ? "其中一项：" : ""
+                    setHeadline(example + "\(String(key.prefix(52))) · \(brief(a[key])) → \(brief(b[key]))",
+                                detail: breakdown, target: differences.firstIndex(of: key))
                 } else {
                     setHeadline(differences.isEmpty ? "两份配置相同" : "敏感字段已变更", detail: breakdown)
                 }
@@ -587,9 +625,9 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         case .explain:
             if let report = ExplainReader.parse(input) {
                 result.string = "\(report.engine) · 执行计划\n\n" + report.lines.joined(separator: "\n\n")
-                var largest: (ratio: Double, label: String, node: String)?
-                var scans = 0, firstScan = "", measurement = ""
-                reportView?.display(report.lines.map { line in
+                var largest: (ratio: Double, label: String, node: String, index: Int, measurement: String)?
+                var scans = 0, firstScan = "", firstScanIndex: Int?, measurement = ""
+                reportView?.display(report.lines.enumerated().map { index, line in
                     let parts = line.components(separatedBy: " · ")
                     func metric(_ prefix: String, suffix: String = " 行") -> String {
                         guard let part = parts.first(where: { $0.hasPrefix(prefix) }) else { return "—" }
@@ -606,6 +644,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                         scans += 1
                         if firstScan.isEmpty {
                             firstScan = name
+                            firstScanIndex = index
                             measurement = [actual == "—" ? "" : "实际 \(actual) 行", time == "—" ? "" : "耗时 \(time) ms"]
                                 .filter { !$0.isEmpty }.joined(separator: " · ")
                         }
@@ -616,7 +655,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                             let label = "估算偏\(estimate > count ? "高" : "低") \(String(format: "%.0f", ratio)) 倍"
                             signals.append(label)
                             deviation = true
-                            if ratio > (largest?.ratio ?? 0) { largest = (ratio, label, name) }
+                            if ratio > (largest?.ratio ?? 0) { largest = (ratio, label, name, index, "估算 \(estimated) 行 · 实际 \(actual) 行") }
                         }
                     }
                     let object = parts.dropFirst().filter { !$0.hasPrefix("估算 ") && !$0.hasPrefix("扫描 ") && !$0.hasPrefix("实际 ") && !$0.hasPrefix("输出 ") && !$0.hasSuffix(" ms") }.joined(separator: " · ")
@@ -625,9 +664,9 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                 })
                 let title = largest.map { "\(String($0.node.prefix(48))) · \($0.label)" }
                     ?? (scans == 1 ? "\(String(firstScan.prefix(48))) 使用全表扫描" : scans > 1 ? "\(scans) 个节点使用全表扫描" : "\(report.lines.count) 个计划节点")
-                let detail = [largest == nil && scans == 1 ? measurement : "", report.engine, largest != nil || scans > 0 ? "共 \(report.lines.count) 个计划节点" : ""]
+                let detail = [largest?.measurement ?? (scans == 1 ? measurement : ""), report.engine, largest != nil || scans > 0 ? "共 \(report.lines.count) 个计划节点" : ""]
                     .filter { !$0.isEmpty }.joined(separator: " · ")
-                setHeadline(title, detail: detail, attention: largest != nil)
+                setHeadline(title, detail: detail, attention: largest != nil, target: largest?.index ?? (scans == 1 ? firstScanIndex : nil))
                 status.stringValue = report.warning ?? ""
             } else {
                 result.string = ""; status.stringValue = "无法识别执行计划，请粘贴完整的 EXPLAIN 输出"
@@ -698,7 +737,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         let groups = Dictionary(grouping: logs) { $0.fields[group] ?? "未分组" }
         var reportRows: [AnalysisReportView.Row] = []
         var errors = 0, warnings = 0
-        var representative: (rank: Int, position: Int, kind: String, request: String)?
+        var representative: (rank: Int, position: Int, index: Int, kind: String, request: String)?
         var affected = Set<String>()
         result.string = groups.keys.sorted().map { key in
             let rows = groups[key]!.sorted {
@@ -721,7 +760,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                     let rank = error ? 2 : 1
                     if representative == nil || rank > representative!.rank || (rank == representative!.rank && entry.position < representative!.position) {
                         let message = entry.fields["message"] ?? entry.fields["msg"] ?? ""
-                        representative = (rank, entry.position, LogTimeline.summaryKind(message), LogTimeline.requestLabel(entry.fields))
+                        representative = (rank, entry.position, reportRows.count, LogTimeline.summaryKind(message), LogTimeline.requestLabel(entry.fields))
                     }
                 }
                 let rawTime = entry.fields[time] ?? "—"
@@ -748,7 +787,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         let detail = [title.isEmpty ? "" : alerts.joined(separator: " · "), counts,
                       affected.count > 1 ? "涉及 \(affected.count) 个分组" : ""].filter { !$0.isEmpty }.joined(separator: " · ")
         setHeadline(title.isEmpty ? (alerts.isEmpty ? "已整理事件时间线" : alerts.joined(separator: " · ")) : title,
-                    detail: detail, attention: !alerts.isEmpty)
+                    detail: detail, attention: !alerts.isEmpty, target: representative?.index)
         copyResultButton?.isEnabled = !result.string.isEmpty
     }
 
