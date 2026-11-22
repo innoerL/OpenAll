@@ -22,6 +22,7 @@ let forecastInstrument = 'gold';
 let preferredPin = true;
 let dockSide = null;
 let outlookSignature;
+let expandedDate = null;
 
 function showError(error) {
   const panel = $('#error');
@@ -215,6 +216,120 @@ function render(snapshot) {
 
 const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', weekday: 'short' });
 
+function unavailableReason(day) {
+  if (day.closed) return '例行休市';
+  return { 'gold-history': '国际行情不足', 'ctf-history': '牌价历史不足', 'paired-history': '同期样本不足' }[day.sparseReason] || '样本不足';
+}
+
+function renderForecastDays(data, today, number, unit) {
+  const body = $('#forecast-rows');
+  const focusedDate = document.activeElement.closest?.('.forecast-day-toggle')?.dataset.date;
+  const days = data?.days || [];
+  if (!days.some(day => day.date === expandedDate)) expandedDate = null;
+  const priced = days.filter(day => Number.isFinite(day.low) && Number.isFinite(day.high));
+  const min = Math.min(...priced.map(day => day.low)), max = Math.max(...priced.map(day => day.high));
+  const scale = $('#range-scale');
+  scale.hidden = $('#range-key').hidden = !(max > min);
+  if (!scale.hidden) {
+    scale.firstElementChild.textContent = number.format(min);
+    scale.lastElementChild.textContent = number.format(max);
+    scale.setAttribute('aria-label', '七天共用刻度：' + number.format(min) + ' 至 ' + number.format(max) + ' ' + unit);
+  }
+  const tomorrow = Date.parse(today + 'T00:00:00Z') + DAY;
+  const fragment = document.createDocumentFragment();
+  for (const day of days) {
+    const date = day.date, stamp = new Date(date + 'T00:00:00Z'), next = stamp.getTime() === tomorrow;
+    const row = element('tr', undefined, 'forecast-day');
+    row.classList.toggle('next-day', next);
+    const dateCell = element('td'), toggle = element('button', undefined, 'forecast-day-toggle');
+    const time = element('time', date.slice(5).replace('-', '/'));
+    time.dateTime = date;
+    const name = weekday.format(stamp);
+    toggle.type = 'button';
+    toggle.dataset.date = date;
+    toggle.setAttribute('aria-label', date + ' ' + name + '，预测详情');
+    const detailID = 'forecast-day-' + date;
+    toggle.setAttribute('aria-controls', detailID);
+    toggle.setAttribute('aria-expanded', String(expandedDate === date));
+    toggle.append(time, element('span', next ? '明日' : name, 'weekday'));
+    dateCell.append(toggle);
+    const hasPrice = Number.isFinite(day.mid);
+    const price = element('td', hasPrice ? number.format(day.mid) : (day.closed ? '休市' : '暂无'), 'forecast-price');
+    if (!hasPrice) price.classList.add('no-price');
+    if (day.pointMethod === 'persistence') price.title = '沿用发行时的基准牌价';
+    const range = element('td', undefined, 'forecast-range');
+    if (Number.isFinite(day.low) && Number.isFinite(day.high)) {
+      const label = element('span', number.format(day.low) + ' – ' + number.format(day.high), 'range-values');
+      range.append(label);
+      if (max > min) {
+        const track = element('span', undefined, 'range-track');
+        const position = value => (100 * (value - min) / (max - min)) + '%';
+        track.setAttribute('aria-hidden', 'true');
+        track.style.setProperty('--low', position(day.low));
+        track.style.setProperty('--high', position(day.high));
+        if (hasPrice) {
+          const mark = element('i');
+          mark.style.left = position(day.mid);
+          track.append(mark);
+        }
+        range.append(track);
+        range.title = '七天共用价格刻度：' + number.format(min) + ' 至 ' + number.format(max) + ' ' + unit;
+      }
+    } else {
+      range.textContent = '—';
+    }
+    row.append(dateCell, price, range);
+    const detail = element('tr', undefined, 'forecast-detail');
+    detail.id = detailID;
+    detail.hidden = expandedDate !== date;
+    const cell = element('td'), panel = element('div', undefined, 'day-reading');
+    cell.colSpan = 3;
+    if (day.model && Number.isFinite(day.confidence)) {
+      const headline = element('div', undefined, 'day-direction');
+      headline.dataset.direction = day.direction;
+      headline.append(element('b', FORECAST_LABELS[day.direction] || '方向待定'),
+        element('span', '方向概率 ' + day.confidence + '%'), element('small', '未校准', 'calibration'));
+      panel.append(headline);
+      const evidence = element('p', day.model);
+      if (Number.isFinite(day.sample)) evidence.append(' · ' + day.sample + ' 个历史情景');
+      panel.append(evidence);
+      if (day.pointMethod === 'persistence') panel.append(element('p', '此档参考价沿用基准牌价。'));
+    } else {
+      panel.append(element('strong', unavailableReason(day)), element('p', day.closed ? '该日休市，不生成参考价和方向概率。' : '该期限可用样本不足，暂无价格或方向估计。'));
+    }
+    cell.append(panel); detail.append(cell);
+    fragment.append(row, detail);
+  }
+  body.replaceChildren(fragment);
+  if (focusedDate) [...body.querySelectorAll('.forecast-day-toggle')].find(b => b.dataset.date === focusedDate)?.focus({preventScroll:true});
+}
+
+function toggleForecastDay(button, open) {
+  expandedDate = open ? button.dataset.date : null;
+  for (const item of $('#forecast-rows').querySelectorAll('.forecast-day-toggle')) {
+    const active = item.dataset.date === expandedDate;
+    item.setAttribute('aria-expanded', String(active));
+    document.getElementById(item.getAttribute('aria-controls')).hidden = !active;
+  }
+}
+
+$('#forecast-rows').addEventListener('click', event => {
+  const button = event.target.closest('.forecast-day')?.querySelector('.forecast-day-toggle');
+  if (!button) return;
+  const selection = window.getSelection();
+  if (!event.target.closest('button') && selection && !selection.isCollapsed && selection.containsNode(button.closest('tr'), true)) return;
+  button.focus({preventScroll:true});
+  toggleForecastDay(button, button.getAttribute('aria-expanded') !== 'true');
+});
+$('#forecast-rows').addEventListener('keydown', event => {
+  const button = event.target.closest('.forecast-day-toggle');
+  if (button && event.key === 'Escape' && expandedDate) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleForecastDay(button, false);
+  }
+});
+
 function renderOutlook() {
   if (!lastSnapshot) return;
   const { outlook, currency, today, instruments } = lastSnapshot;
@@ -228,8 +343,6 @@ function renderOutlook() {
   const unit = isCTF ? '人民币/克' : `${UNITS[currency]}/克`;
   const number = forecastInstrument === 'gold' ? amount : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 });
   $('#outlook').dataset.instrument = forecastInstrument;
-  const target = $('#forecast-rows');
-  target.replaceChildren();
   const meta = $('#forecast-meta');
   meta.replaceChildren();
   const hasQuote = quote?.date && Number.isFinite(quote.price);
@@ -242,6 +355,7 @@ function renderOutlook() {
     const line = element('div', undefined, 'forecast-baseline');
     const stamp = element('time', date);
     stamp.dateTime = date;
+    stamp.hidden = date === today;
     const value = element('strong', price == null ? '待更新' : formatter.format(price));
     if (price != null) value.append(' ', element('span', unit, 'forecast-unit'));
     line.append(element('span', label, 'forecast-label'), value, stamp);
@@ -253,70 +367,17 @@ function renderOutlook() {
   }
   if (data) {
     if (!isCTF || !hasQuote || data.anchor.date !== quote.date || data.anchor.price !== quote.price) {
-      addPrice(isCTF ? '预测基准' : '基准', data.anchor.price, data.anchor.date, isCTF ? whole : number);
+      addPrice(isCTF ? '预测基准' : '国际现货基准价', data.anchor.price, data.anchor.date, isCTF ? whole : number);
     }
-    const method = hasFixed ? '旧版沿用基准价 · ' : '';
-    meta.append(element('span', `${method}模型 ${data.version || verification.version || '—'}${data.provisional ? ' · 数据尚未就绪，暂估' : ''}`));
+    $('#model-version').textContent = '模型 ' + (data.version || verification.version || '—');
+    const status = [hasFixed ? '旧版沿用基准价' : '', data.provisional ? '数据尚未就绪，暂估' : ''].filter(Boolean).join(' · ');
+    if (status) meta.append(element('span', status));
   } else {
     meta.append(element('span', isCTF ? '等待足够的预测数据' : '等待足够的最新历史报价或参考汇率'));
   }
   $('#forecast-table').hidden = !data;
   $('#method-details').hidden = !data;
-  const ranges = data?.days.filter(day => Number.isFinite(day.low) && Number.isFinite(day.high) && Number.isFinite(day.mid)) ?? [];
-  const scaleMin = Math.min(...ranges.map(day => day.low));
-  const scaleMax = Math.max(...ranges.map(day => day.high));
-  const scale = $('#forecast-scale');
-  scale.hidden = !(scaleMax > scaleMin);
-  if (!scale.hidden) {
-    scale.firstElementChild.textContent = number.format(scaleMin);
-    scale.lastElementChild.textContent = number.format(scaleMax);
-    scale.title = `各日共用 ${number.format(scaleMin)} 至 ${number.format(scaleMax)} ${unit}的价格刻度`;
-    scale.setAttribute('aria-label', scale.title);
-  }
-  const tomorrow = Date.parse(today + 'T00:00:00Z') + 86400000;
-  for (const item of data?.days ?? []) {
-    const row = element('tr');
-    const isTomorrow = Date.parse(item.date + 'T00:00:00Z') === tomorrow;
-    if (isTomorrow) row.className = 'next-day';
-    const dateCell = element('td');
-    const date = element('time', item.date.slice(5).replace('-', '/'));
-    date.dateTime = item.date;
-    const dayName = weekday.format(new Date(item.date));
-    const weekdayLabel = element('span', isTomorrow ? '明日' : dayName, 'weekday');
-    date.title = item.date + ' ' + dayName;
-    dateCell.append(date, ' ', weekdayLabel);
-    const trend = element('td', undefined, 'forecast-direction');
-    if (item.model) {
-      trend.dataset.direction = item.direction;
-      const label = element('span', undefined, 'daily-direction');
-      const confidence = element('span', `${item.confidence}%`, 'daily-confidence');
-      confidence.setAttribute('aria-label', `方向概率 ${item.confidence}%，未校准，不是价格命中率`);
-      label.append(element('b', FORECAST_LABELS[item.direction]), confidence);
-      trend.append(label);
-      trend.title = `${item.sample} 个历史情景 · ${item.model} · 方向概率未校准，不是价格命中率`;
-    } else {
-      const reason = { 'gold-history': '国际行情不足', 'ctf-history': '牌价历史不足', 'paired-history': '同期样本不足' };
-      trend.textContent = item.closed ? '例行休市' : reason[item.sparseReason] || '样本不足';
-    }
-    const price = element('td', Number.isFinite(item.mid) ? number.format(item.mid) : '—', 'forecast-price');
-    if (Number.isFinite(item.mid)) {
-      price.title = item.pointMethod === 'joint-history' ? '根据近期国际现货与周大福牌价涨跌，单独估算该日参考价' :
-        item.pointMethod === 'persistence' ? '旧版参考价沿用发行时的基准牌价' : '参考估计来自该期限的历史情景';
-    }
-    const range = element('td', item.low && item.high ? `${number.format(item.low)} – ${number.format(item.high)}` : '—', 'forecast-range');
-    if (Number.isFinite(item.mid) && Number.isFinite(item.low) && Number.isFinite(item.high) && scaleMax > scaleMin) {
-      // 各行共用价格刻度，线段标区间，圆点标出当日参考价。
-      const track = element('span', undefined, 'range-track');
-      track.setAttribute('aria-hidden', 'true');
-      const position = price => `${100 * (price - scaleMin) / (scaleMax - scaleMin)}%`;
-      track.style.setProperty('--low', position(item.low));
-      track.style.setProperty('--high', position(item.high));
-      track.style.setProperty('--mid', position(item.mid));
-      range.append(track);
-    }
-    row.append(dateCell, price, trend, range);
-    target.append(row);
-  }
+  renderForecastDays(data, today, number, unit);
 
   const counts = Object.entries(verification.byHorizon).map(([horizon, score]) => score.total ?
     `${horizon} 日方向命中 ${score.hit}/${score.total}` : `${horizon} 日无到期样本`);
@@ -388,11 +449,12 @@ function renderOutlook() {
     '涨跌相对基准价，±0.2% 以内为维持。方向概率未校准，不是价格命中率。' +
       (hasJoint ? '周大福每日参考价结合近期牌价涨跌与基准日前的国际现货收盘走势，按各日期分别估算。' :
         hasFixed ? '此档周大福参考价沿用发行时的基准牌价，方向与区间按期限估计。' : '参考估计来自历史情景。') +
-      '各行情景区间采用相同刻度，圆点标示参考价。区间覆盖率用到期记录验证。市场因素和日历用于解读行情。' +
+      '各行情景区间采用相同刻度，竖线标示参考价。区间覆盖率用到期记录验证。市场因素和日历用于解读行情。' +
       (forecastInstrument === 'gold' && currency !== 'USD' ? ' 展望按当前汇率折算，方向基于美元金价。' : '') : '';
 }
 
 function selectForecast(id) {
+  if (forecastInstrument !== id) expandedDate = null;
   forecastInstrument = id;
   $('#forecast-gold').setAttribute('aria-pressed', id === 'gold');
   $('#forecast-ctf').setAttribute('aria-pressed', id === 'ctf');

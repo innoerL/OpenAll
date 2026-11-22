@@ -81,7 +81,7 @@ module.exports = async function verifyGold(searchWindow, output) {
     await until(async () => (await read()).pinned !== pinned, '置顶切换');
     check(gold.isAlwaysOnTop() === !pinned, '置顶设置同步原生窗口');
     await click('outlook-view');
-    await until(() => execute(gold, () => !document.querySelector('#outlook').hidden && document.querySelectorAll('#forecast-rows tr').length === 7), '七日展望');
+    await until(() => execute(gold, () => !document.querySelector('#outlook').hidden && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7), '七日展望');
     const toolbar = () => execute(gold, () => ['layout', 'currency'].map(id => document.getElementById(id).getClientRects().length > 0));
     assert.deepEqual(await toolbar(), [false, true], '国际展望仅显示币种切换');
     await click('forecast-ctf');
@@ -91,37 +91,27 @@ module.exports = async function verifyGold(searchWindow, output) {
       const quote = state.instruments.ctf.quote;
       const days = state.outlook.forecasts.ctf.days;
       const format = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 });
-      const price = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(quote.price);
-      const rows = [...document.querySelectorAll('#forecast-rows tr')];
+      const actual = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(quote.price);
+      const buttons = [...document.querySelectorAll('#forecast-rows .forecast-day-toggle')];
       const header = document.querySelector('.forecast-baseline');
-      const minimum = Math.min(...days.map(day => day.low));
-      const maximum = Math.max(...days.map(day => day.high));
-      const scale = document.querySelector('#forecast-scale');
       return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date &&
-        header.querySelector('strong').textContent.trim() === price + ' 人民币/克' &&
-        !scale.hidden && scale.firstElementChild.textContent === format.format(minimum) &&
-        scale.lastElementChild.textContent === format.format(maximum) &&
-        document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
-        rows.length === 7 && days.length === 7 && rows.every((row, i) => {
-          const day = days[i];
-          const track = row.querySelector('.range-track');
-          if (!track) return false;
-          const [low, mid, high] = ['--low', '--mid', '--high'].map(name => Number.parseFloat(track.style.getPropertyValue(name)));
-          const positions = [day.low, day.mid, day.high].map(value => 100 * (value - minimum) / (maximum - minimum));
-          return [low, mid, high].every((value, index) => Math.abs(value - positions[index]) < .001) &&
-            0 <= low && low <= mid && mid <= high && high <= 100 &&
-            day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
-            row.querySelector('time').dateTime === day.date &&
-            row.cells[1].matches('.forecast-price') && row.cells[1].textContent === format.format(day.mid) &&
-            row.cells[2].matches('.forecast-direction') && row.cells[2].textContent.includes(day.confidence + '%') &&
-            row.cells[3].matches('.forecast-range') && row.cells[3].textContent.includes(format.format(day.high));
+        header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
+        document.querySelector('#forecast-price-heading').textContent.includes('参考价') &&
+        document.querySelectorAll('#forecast-table thead th').length === 3 &&
+        buttons.length === 7 && days.length === 7 && buttons.every((button, i) => {
+          const day = days[i], row = button.closest('tr');
+          return day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
+            button.getAttribute('aria-expanded') === 'false' && row.querySelector('time').dateTime === day.date &&
+            row.cells.length === 3 && row.cells[1].textContent.trim() === format.format(day.mid) &&
+            [day.low, day.high].every(value => row.cells[2].textContent.includes(format.format(value))) &&
+            !row.innerText.includes('%');
         });
     }), '当日周大福牌价与日期在表头，七个目标日逐行展示双品种模型实际参考价');
     assert.deepEqual(await toolbar(), [false, false], '周大福展望隐藏无关控件');
     gold.show();
     gold.focus();
     gold.webContents.focus();
-    const disclosureIds = ['verification-breakdown', 'method-details'];
+    const disclosureIds = ['verification-breakdown', 'market-context', 'method-details'];
     for (const id of disclosureIds) {
       check(await execute(gold, id => {
         const details = document.getElementById(id);
@@ -137,24 +127,66 @@ module.exports = async function verifyGold(searchWindow, output) {
       }
     }
     await execute(gold, () => { document.activeElement.blur(); document.querySelector('main').scrollTop = 0; window.scrollTo(0,0); });
-    check(true, '回车可分别展开与收拢验证统计、预测说明');
+    check(true, '回车可分别展开与收拢验证统计、市场日历和预测说明');
     const normalSize = gold.getContentSize();
     try {
       gold.setContentSize(345, normalSize[1]);
       await until(() => execute(gold, () => window.innerWidth <= 345), '调整至最小行情窗口');
       check(await execute(gold, () => {
         const table = document.querySelector('#forecast-table');
-        const card = document.querySelector('#outlook').getBoundingClientRect();
-        return document.querySelector('.forecast-baseline strong')?.textContent.includes('/克') &&
-          table.querySelectorAll('tbody time[datetime]').length === 7 &&
-          table.getBoundingClientRect().right <= card.right &&
-          document.querySelector('#close').getBoundingClientRect().right <= document.documentElement.clientWidth;
-      }), '最窄窗口可同时查看七行日期、完整情景区间和窗口操作');
+        const rows = [...table.querySelectorAll('.forecast-day-toggle')].map(button => button.closest('tr'));
+        const width = document.documentElement.clientWidth;
+        return table.getBoundingClientRect().right <= width + 1 && document.documentElement.scrollWidth <= width + 1 &&
+          rows.length === 7 && rows.every(row => Array.from(row.cells).every(cell => {
+            const range = document.createRange();
+            range.selectNodeContents(cell);
+            const bounds = cell.getBoundingClientRect(), text = range.getBoundingClientRect();
+            return text.right <= bounds.right + 1 && text.left >= bounds.left - 1 && cell.scrollWidth <= cell.clientWidth + 1;
+          })) && document.querySelector('#close').getBoundingClientRect().right <= width + 1;
+      }), '最窄窗口三列全部可见，七行日期、参考价和完整区间无裁切');
       await capture('outlook-narrow');
+      await execute(gold, () => document.querySelector('.forecast-day-toggle').focus());
+      gold.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+      gold.webContents.sendInputEvent({ type: 'char', keyCode: '\r' });
+      gold.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+      const expandedDetails = async () => execute(gold, async index => {
+        const button = document.querySelectorAll('.forecast-day-toggle')[index];
+        const detail = document.getElementById(button.getAttribute('aria-controls'));
+        const day = (await openallGold.read()).outlook.forecasts.ctf.days[index];
+        return button.getAttribute('aria-expanded') === 'true' && detail?.matches('.forecast-detail') &&
+          detail.getClientRects().length > 0 && detail.innerText.includes(day.confidence + '%') &&
+          detail.innerText.includes('未校准');
+      }, 0);
+      await until(expandedDetails, '回车查看首日方向概率与校准说明');
+      await capture('outlook-narrow-detail');
+      gold.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});
+      gold.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});
+      await until(() => execute(gold, () =>
+        document.activeElement === document.querySelector('.forecast-day-toggle') &&
+        !document.querySelector('.forecast-day-toggle[aria-expanded=true]')), 'Esc 收起当前日期并保留键盘焦点');
+      await execute(gold, () => document.querySelector('.forecast-range').click());
+      check(await expandedDetails(),'点击区间也能打开该日详情');
+      await execute(gold, () => document.querySelectorAll('.forecast-day-toggle')[1].click());
+      check(await execute(gold, () => {
+        const open = [...document.querySelectorAll('.forecast-day-toggle[aria-expanded=true]')];
+        return open.length === 1 && open[0] === document.querySelectorAll('.forecast-day-toggle')[1];
+      }), '点击其他日期时切换到该日详情');
+      await click('forecast-gold');
+      check(await execute(gold, () => !document.querySelector('.forecast-day-toggle[aria-expanded=true]')), '切换品种收起已展开的日期');
+      await capture('outlook-gold-narrow');
+      await click('forecast-ctf');
+      await execute(searchWindow, () => openall.saveSettings({theme:'light',backgroundHex:'#f2f2ef',accentHex:'#926fad'}));
+      await until(() => execute(gold, () => document.documentElement.dataset.theme === 'light'), '浅色窄窗展望');
+      await capture('outlook-narrow-light');
+      await execute(gold, () => document.querySelector('.forecast-day-toggle').click());
+      await capture('outlook-narrow-light-detail');
+      await execute(gold, () => document.querySelector('.forecast-day-toggle[aria-expanded=true]').click());
+      await execute(searchWindow, () => openall.saveSettings({theme:'dark',backgroundHex:'#242626',accentHex:'#d8c19e'}));
+      await until(() => execute(gold, () => document.documentElement.dataset.theme === 'dark'), '恢复展望主题');
     } finally {
       gold.setContentSize(...normalSize);
     }
-    check(await execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true' && document.querySelectorAll('#forecast-rows tr').length === 7), '两品种七日展望切换');
+    check(await execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true' && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7), '两品种七日展望切换');
     check(await execute(gold, () => !!document.querySelector('#verification-note').textContent && document.querySelector('#drivers').children.length > 0 && document.querySelector('#events').children.length > 0 && document.querySelector('#calendar').children.length > 0), '报价验证、市场因素、国际事件与财经日历');
     check(await execute(gold, () => ['gold', 'goldHistory', 'ctf', 'ctfHistory', 'fx', 'news'].every(key => !!document.querySelector('[data-source="' + key + '"]'))), '报价与新闻来源链接保留');
     await execute(gold, () => { window.__goldDocument = document.documentElement; window.__goldForecast = document.querySelector('#forecast-ctf'); });

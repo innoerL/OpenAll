@@ -10,12 +10,12 @@ OpenAll 支持 **macOS 和 Windows**。用快捷键搜索应用、文件或工�
 
 ## 下载安装
 
-当前版本为 **0.27.8**。可在设置的“外观”页调整背景与强调色。安装包和 SHA-256 校验文件见 [Releases](https://github.com/innoerL/OpenAll/releases/latest)。
+当前版本为 **0.27.9**。可在设置的“外观”页调整背景与强调色。安装包和 SHA-256 校验文件见 [Releases](https://github.com/innoerL/OpenAll/releases/latest)。
 
 | 平台 | 安装包 | 运行要求 |
 | --- | --- | --- |
-| macOS | [下载通用版](https://github.com/innoerL/OpenAll/releases/download/v0.27.8/OpenAll-macOS-0.27.8.zip) | macOS 13 或更新版本，Intel / Apple Silicon |
-| Windows | [下载安装版](https://github.com/innoerL/OpenAll/releases/download/v0.27.8/OpenAll-Windows-0.27.8-x64-setup.exe) | Windows x64 |
+| macOS | [下载通用版](https://github.com/innoerL/OpenAll/releases/download/v0.27.9/OpenAll-macOS-0.27.9.zip) | macOS 13 或更新版本，Intel / Apple Silicon |
+| Windows | [下载安装版](https://github.com/innoerL/OpenAll/releases/download/v0.27.9/OpenAll-Windows-0.27.9-x64-setup.exe) | Windows x64 |
 
 macOS 解压后将 `OpenAll.app` 放入“应用程序”；Windows 双击安装器，按向导完成安装。安装包尚未经过 Apple 公证或 Windows 代码签名，系统可能提示未知开发者。
 
@@ -61,7 +61,7 @@ Windows 使用右上角窗口按钮；标题栏、内容区和输入框跟随主
 <details>
 <summary>查看金价工具</summary>
 
-输入“金价”打开。以下为离线验收样例，包含合并曲线和独立深色模式。
+输入“金价”打开。进入“7 日展望”可按日期浏览参考价与情景区间，点选某一天查看方向概率及当天详情。下图为离线验收样例。
 
 <img src="docs/assets/gold.png" alt="OpenAll 金价工具：合并曲线与三币种" width="462">
 

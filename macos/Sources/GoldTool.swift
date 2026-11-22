@@ -443,47 +443,47 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("document.querySelector('#outlook-view').click(); return true;")
             try await tool.until("七日展望页面") { try await tool.execute("return !document.querySelector('#outlook').hidden;") as? Bool == true }
             _ = try await tool.execute("document.querySelector('#forecast-ctf').click(); return true;")
-            try check(try await tool.execute("return document.querySelectorAll('#forecast-rows tr').length === 7 && !!document.querySelector('#verification-note').textContent;") as? Bool == true,
+            try check(try await tool.execute("return document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7 && !!document.querySelector('#verification-note').textContent;") as? Bool == true,
                 "七日表格与实际报价验证展示")
             let checkPrices = """
             const state = await openallGold.read();
-            const {date, price} = state.instruments.ctf.quote;
+            const quote = state.instruments.ctf.quote;
             const days = state.outlook.forecasts.ctf.days;
-            const rows = [...document.querySelectorAll('#forecast-rows tr')];
-            const header = document.querySelector('.forecast-baseline');
             const format = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:0});
-            const actual = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(price);
-            const scale = document.querySelector('#forecast-scale');
-            return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === date &&
-              header.querySelector('strong').textContent.trim() === actual + ' 人民币/克' &&
-              document.querySelector('#forecast-table th:nth-child(3)').textContent === '方向概率未校准' &&
-              !scale.hidden && scale.firstElementChild.textContent === format.format(Math.min(...days.map(day => day.low))) &&
-              scale.lastElementChild.textContent === format.format(Math.max(...days.map(day => day.high))) &&
-              document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
-              rows.length === 7 && days.length === 7 && rows.every((row,i) => {
-                const day = days[i];
+            const actual = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(quote.price);
+            const buttons = [...document.querySelectorAll('#forecast-rows .forecast-day-toggle')];
+            const header = document.querySelector('.forecast-baseline');
+            return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date &&
+              header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
+              document.querySelector('#forecast-price-heading').textContent.includes('参考价') &&
+              document.querySelectorAll('#forecast-table thead th').length === 3 &&
+              buttons.length === 7 && days.length === 7 && buttons.every((button, i) => {
+                const day = days[i], row = button.closest('tr');
                 return day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
-                  row.querySelector('time').dateTime === day.date &&
-                  row.cells[1].matches('.forecast-price') && row.cells[1].textContent === format.format(day.mid) &&
-                  row.cells[2].matches('.forecast-direction') && row.cells[2].textContent.includes(day.confidence + '%') &&
-                  row.cells[3].matches('.forecast-range') && row.cells[3].textContent.includes(format.format(day.high));
+                  button.getAttribute('aria-expanded') === 'false' && row.querySelector('time').dateTime === day.date &&
+                  row.cells.length === 3 && row.cells[1].textContent.trim() === format.format(day.mid) &&
+                  [day.low, day.high].every(value => row.cells[2].textContent.includes(format.format(value))) &&
+                  !row.innerText.includes('%');
               });
             """
             try check(try await tool.execute(checkPrices) as? Bool == true, "周大福当日牌价表头与七个目标日参考价对应模型输出")
-            // 用 WebKit 的原生键盘事件操作两段详情，截图前恢复首屏。
+            // 用 WebKit 的原生键盘事件操作折叠区及日期，截图前恢复首屏。
             guard let browser = tool.webView else { throw componentError("未出现金价内容视图") }
             _ = panel.makeFirstResponder(browser)
-            for id in ["verification-breakdown", "method-details"] {
+            func pressReturn() throws {
+                for type in [NSEvent.EventType.keyDown, .keyUp] {
+                    guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber,
+                        context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)
+                    else { throw componentError("无法创建回车事件") }
+                    if type == .keyDown { browser.keyDown(with: event) } else { browser.keyUp(with: event) }
+                }
+            }
+            for id in ["verification-breakdown", "market-context", "method-details"] {
                 let focused = try await tool.execute("const details=document.getElementById('\(id)'), summary=details.querySelector('summary'); summary.focus(); return !details.open && document.activeElement===summary;")
                 try check(focused as? Bool == true, "键盘可聚焦详情摘要：\(id)")
                 for opened in [true, false] {
-                    for type in [NSEvent.EventType.keyDown, .keyUp] {
-                        guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
-                            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber,
-                            context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)
-                        else { throw componentError("无法创建回车事件") }
-                        if type == .keyDown { browser.keyDown(with: event) } else { browser.keyUp(with: event) }
-                    }
+                    try pressReturn()
                     try await tool.until("回车切换详情 \(id)") {
                         try await tool.execute("return document.getElementById('\(id)').open===\(opened);") as? Bool == true
                     }
@@ -495,7 +495,40 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             try await tool.until("窄窗七日参考价布局") {
                 try await tool.execute("return innerWidth <= 345 && document.querySelector('#forecast-table').getBoundingClientRect().right <= document.querySelector('#outlook').getBoundingClientRect().right;") as? Bool == true
             }
+            let narrowPrices = """
+            const table = document.querySelector('#forecast-table');
+            const rows = [...table.querySelectorAll('.forecast-day-toggle')].map(button => button.closest('tr'));
+            const width = document.documentElement.clientWidth;
+            return table.getBoundingClientRect().right <= width + 1 && document.documentElement.scrollWidth <= width + 1 &&
+              rows.length === 7 && rows.every(row => Array.from(row.cells).every(cell => {
+                const range = document.createRange();
+                range.selectNodeContents(cell);
+                const bounds = cell.getBoundingClientRect(), text = range.getBoundingClientRect();
+                return text.right <= bounds.right + 1 && text.left >= bounds.left - 1 && cell.scrollWidth <= cell.clientWidth + 1;
+              })) && document.querySelector('#close').getBoundingClientRect().right <= width + 1;
+            """
+            try check(try await tool.execute(narrowPrices) as? Bool == true, "窄窗三列的日期、参考价和区间没有裁切")
             try await capture("gold-outlook-narrow")
+            _ = try await tool.execute("document.querySelector('.forecast-day-toggle').focus(); return true;")
+            try pressReturn()
+            try check(try await tool.execute("""
+                const button=document.querySelector('.forecast-day-toggle'), detail=document.getElementById(button.getAttribute('aria-controls'));
+                const day=(await openallGold.read()).outlook.forecasts.ctf.days[0];
+                return button.getAttribute('aria-expanded')==='true' && detail?.matches('.forecast-detail') &&
+                  detail.getClientRects().length>0 && detail.innerText.includes(day.confidence+'%') && detail.innerText.includes('未校准');
+                """) as? Bool == true, "按日期查看对应的方向概率与校准状态")
+            try await capture("gold-outlook-narrow-detail")
+            try pressReturn()
+            try await tool.until("键盘再次确认收起所选日期") {
+                try await tool.execute("return !document.querySelector('.forecast-day-toggle[aria-expanded=true]');") as? Bool == true
+            }
+            _ = try await tool.execute("document.querySelector('.forecast-day-toggle').click(); return true;")
+            _ = try await tool.execute("document.querySelectorAll('.forecast-day-toggle')[1].click();return true;")
+            try check(try await tool.execute("const open=document.querySelectorAll('.forecast-day-toggle[aria-expanded=true]');return open.length===1 && open[0]===document.querySelectorAll('.forecast-day-toggle')[1];") as? Bool == true, "可从已展开的日期直接切换到另一天")
+            _ = try await tool.execute("document.querySelector('#forecast-gold').click();return true;")
+            try check(try await tool.execute("return !document.querySelector('.forecast-day-toggle[aria-expanded=true]');") as? Bool == true,"切换品种后重置日期详情")
+            try await capture("gold-outlook-gold-narrow")
+            _ = try await tool.execute("document.querySelector('#forecast-ctf').click(); return true;")
             panel.setFrame(originalFrame, display: true)
             try await capture("gold-outlook")
             let preserved = try await tool.execute("window.__goldCheckDocument=document; window.__goldCheckCanvas=document.querySelector('#gold canvas'); return document.querySelector('#gold .hover').textContent;") as? String
@@ -510,6 +543,13 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
                 try check(try await tool.execute("const s=getComputedStyle(document.documentElement); return s.getPropertyValue('--gold-line')!==s.getPropertyValue('--ctf-line') && s.getPropertyValue('--rise')!==s.getPropertyValue('--fall') && s.getPropertyValue('--rise')!==s.getPropertyValue('--flat');") as? Bool == true,
                     "品种曲线与涨跌持平保持独立语义颜色")
                 try await capture("gold-outlook-light")
+                panel.setFrame(NSRect(origin: originalFrame.origin, size: NSSize(width: 345, height: originalFrame.height)), display: true)
+                try await tool.until("浅色窄窗排版") { try await tool.execute("return innerWidth <= 345;") as? Bool == true }
+                try await capture("gold-outlook-narrow-light")
+                _ = try await tool.execute("document.querySelector('.forecast-day-toggle').click(); return true;")
+                try await capture("gold-outlook-narrow-light-detail")
+                _ = try await tool.execute("document.querySelector('.forecast-day-toggle[aria-expanded=true]').click(); return true;")
+                panel.setFrame(originalFrame, display: true)
             }
             var appearanceOpened = false
             tool.onAppearanceSettings = { appearanceOpened = true }

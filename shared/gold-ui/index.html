@@ -94,17 +94,18 @@
     <footer><span id="network" class="online"><i></i><b>读取状态</b></span><span id="next">每日 10:00 取价</span></footer>
     <div id="fx-source" class="source-line fx-source" hidden><button data-source="fx">参考汇率 Frankfurter / ECB</button></div>
   </div>
-  <section id="outlook" class="quote-card outlook" hidden>
-    <div class="outlook-heading"><h2>未来 7 日展望</h2><nav class="view-switch" aria-label="展望品种"><button id="forecast-gold" aria-pressed="true">国际现货</button><button id="forecast-ctf" aria-pressed="false">周大福</button></nav></div>
-    <div id="forecast-meta" class="outlook-meta"></div>
-    <table id="forecast-table" aria-label="各目标日参考价、方向概率和情景区间">
+  <section id="outlook" class="outlook" aria-label="七日展望" hidden>
+    <div class="forecast-sheet">
+    <div class="forecast-top"><div id="forecast-meta" class="outlook-meta"></div><nav class="view-switch" aria-label="展望品种"><button id="forecast-gold" aria-pressed="true">国际现货</button><button id="forecast-ctf" aria-pressed="false">周大福</button></nav></div>
+    <table id="forecast-table" aria-label="七日参考价与情景区间">
       <thead><tr>
-        <th scope="col">北京日期</th><th scope="col" id="forecast-price-heading">参考估计</th>
-        <th scope="col">方向概率<span class="forecast-column-note">未校准</span></th>
-        <th scope="col">情景区间<span id="forecast-scale" hidden><span></span><span></span></span></th>
+        <th scope="col">日期</th><th scope="col" id="forecast-price-heading">参考估计</th>
+        <th scope="col" class="range-heading"><span>情景区间</span><span id="range-key" hidden><i aria-hidden="true"></i>参考价</span>
+          <span id="range-scale" hidden><span></span><span></span></span></th>
       </tr></thead>
       <tbody id="forecast-rows"></tbody>
     </table>
+    </div>
     <details id="verification-breakdown" class="outlook-block forecast-disclosure">
       <summary><span>实际报价验证</span><span id="verification-note"></span></summary>
       <div class="validation-body">
@@ -113,11 +114,14 @@
         <p id="verification-recent" class="outlook-meta" hidden></p>
       </div>
     </details>
+    <details id="market-context" class="outlook-block forecast-disclosure"><summary>市场背景与日历</summary>
     <section class="outlook-block"><div class="outlook-heading"><h3>市场因素</h3><span id="market-status"></span></div><div id="drivers"></div></section>
     <section class="outlook-block"><div class="outlook-heading"><h3>近期国际事件</h3><button class="text-button" data-source="news">联合国新闻 ↗</button></div><p id="event-note" class="outlook-meta"></p><ul id="events"></ul></section>
     <section class="outlook-block"><div class="outlook-heading"><h3>未来 7 日财经日历</h3><span id="calendar-status"></span></div><ul id="calendar"></ul></section>
+    </details>
     <details id="method-details" class="outlook-block forecast-disclosure">
       <summary>预测方法与区间</summary>
+      <p id="model-version" class="outlook-meta"></p>
       <p id="model-note" class="model-note"></p>
     </details>
   </section>

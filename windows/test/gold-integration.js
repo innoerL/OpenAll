@@ -28,10 +28,12 @@ async function verifyForecastMetrics(search, checks) {
     await execute(gold, () => openallGold.action('view', 'outlook'));
     await execute(gold, () => document.querySelector('#forecast-ctf').click());
     original = await execute(gold, () => openallGold.read());
-    check(await execute(gold, () => document.querySelector('#forecast-table th:nth-child(3)').textContent === '方向概率未校准' &&
-      document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
-      document.querySelector('.forecast-column-note').getClientRects().length > 0 && !document.body.textContent.includes('可信度')),
-    '展望区分方向概率与每日参考价');
+    check(await execute(gold, () => {
+      const headings = [...document.querySelectorAll('#forecast-table thead th')].map(cell => cell.innerText);
+      return headings.length === 3 && headings[1].includes('参考价') && headings[2].includes('区间') &&
+        !document.querySelector('#forecast-table').innerText.includes('概率') &&
+        !document.querySelector('.forecast-day-toggle[aria-expanded=true]');
+    }), '首屏只展示日期、参考价与区间');
     check(original.outlook.verification.ctf.byHorizon[1].priceCount === 0 &&
       await execute(gold, () => document.querySelector('#verification-note').textContent.includes('暂无到期的准时报价可验证') &&
         !/0(?:\.0+)?%/.test(document.querySelector('#verification-note').textContent)), '没有到期样本时明确说明，不展示零误差');
@@ -51,6 +53,20 @@ async function verifyForecastMetrics(search, checks) {
     check(await execute(gold, () => document.querySelector('#forecast-meta').textContent.includes('旧版沿用基准价') &&
       document.querySelector('#model-note').textContent.includes('发行时的基准牌价')), '旧档按发行版本标明固定参考价');
 
+    // 第三天的快照改变后，详情必须带出同一日期的新概率。
+    const refreshed = structuredClone(original);
+    const updatedDay = refreshed.outlook.forecasts.ctf.days[2];
+    updatedDay.confidence = updatedDay.confidence === 85 ? 84 : 85;
+    await execute(gold, () => document.querySelectorAll('.forecast-day-toggle')[2].click());
+    gold.webContents.send('openall:gold-snapshot', refreshed);
+    await until(() => execute(gold, () => {
+      const button = document.querySelectorAll('.forecast-day-toggle')[2];
+      return button.getAttribute('aria-expanded') === 'true' &&
+        /8[45]%/.test(document.getElementById(button.getAttribute('aria-controls')).innerText);
+    }));
+    check(true, '收到行情刷新后仍展示所选日期的最新概率');
+    await execute(gold, () => document.querySelectorAll('.forecast-day-toggle')[2].click());
+
     const stale = structuredClone(original);
     stale.instruments.ctf.quote.date = '2026-11-19';
     stale.instruments.ctf.quote.price = 1058;
@@ -68,13 +84,31 @@ async function verifyForecastMetrics(search, checks) {
       date, sparse: true, sparseReason: reasons[index % reasons.length],
     }));
     gold.webContents.send('openall:gold-snapshot', sparse);
-    await until(() => execute(gold, () => document.querySelector('#forecast-rows').textContent.includes('同期样本不足')));
+    await until(() => execute(gold, () => !(/\d/).test(document.querySelector('#forecast-rows .forecast-price').textContent)));
     check(await execute(gold, () => {
-      const rows = [...document.querySelectorAll('#forecast-rows tr')];
-      const reasons = ['国际行情不足', '牌价历史不足', '同期样本不足'];
-      return rows.length === 7 && rows.every((row, i) =>
-        row.querySelector('.forecast-direction').textContent === reasons[i % reasons.length] && row.querySelector('.forecast-price').textContent === '—');
-    }), '缺国际行情、近期牌价或配对样本时逐日显示原因');
+      const dates = [...document.querySelectorAll('.forecast-day-toggle')].map(button => button.dataset.date);
+      const reasons = ['国际行情不足','牌价历史不足','同期样本不足'];
+      return dates.length === 7 && dates.every((date, i) => {
+        const button = document.querySelector('.forecast-day-toggle[data-date="' + date + '"]');
+        button.click();
+        const row = button.closest('tr'), detail = document.getElementById(button.getAttribute('aria-controls'));
+        const reason = row.innerText + (detail?.innerText || '');
+        return reason.includes(reasons[i % reasons.length]) && !(/\d+%/).test(row.innerText) && !(/\d+%/).test(detail?.innerText || '');
+      });
+    }), '缺国际行情、近期牌价或配对样本时逐日说明原因，避免显示虚构概率');
+
+    const closed = structuredClone(original);
+    closed.outlook.forecasts.gold.days[0] = {date: closed.outlook.forecasts.gold.days[0].date, closed: true};
+    gold.webContents.send('openall:gold-snapshot', closed);
+    await execute(gold, () => document.querySelector('#forecast-gold').click());
+    await until(() => execute(gold, () => {
+      const button = document.querySelector('.forecast-day-toggle');
+      if (button.getAttribute('aria-expanded') !== 'true') button.click();
+      const row = button.closest('tr'), detail = document.getElementById(button.getAttribute('aria-controls'));
+      return (row.innerText + (detail?.innerText || '')).includes('休市') && !(/\d+%/).test(detail?.innerText || '');
+    }));
+    check(true, '国际休市日可以查看原因并保留空价格');
+    await execute(gold, () => document.querySelector('#forecast-ctf').click());
 
     const empty = structuredClone(original);
     empty.outlook.forecasts.ctf = null;

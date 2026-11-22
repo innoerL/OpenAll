@@ -1,7 +1,7 @@
 {
   "name": "openall-windows",
   "productName": "OpenAll",
-  "version": "0.27.8",
+  "version": "0.27.9",
   "description": "OpenAll Windows 效率工具",
   "main": "src/main.js",
   "scripts": {
