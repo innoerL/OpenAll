@@ -37,10 +37,10 @@ async function capture(name){
   if(['configDiff','explain','logTimeline'].includes(name))assert.equal(await js('const report=document.querySelector(".aux-report");return report.scrollWidth<=report.clientWidth+1;'),true,name+' 结果表格不应横向溢出');
   if(name==='converter-duration')assert.equal(await js('const body=document.querySelector(".aux-converter-body"),last=document.querySelector(".aux-conversion-row:last-child");return last.getBoundingClientRect().bottom<=body.getBoundingClientRect().bottom;'),true,'默认窗口应展示纳秒行');
   if(name==='unicode')assert.equal(await js('const tab=document.querySelector(".aux-tabs .active");return getComputedStyle(tab).backgroundColor==="rgba(0, 0, 0, 0)"&&getComputedStyle(tab,"::after").height==="2px";'),true,'Unicode 使用文字下划线标签');
-  if(name.startsWith('id'))assert.equal(await js('return [...document.querySelectorAll(".aux-id-top,.aux-id-date")].every(row=>row.scrollWidth<=row.clientWidth+1&&[...row.children].every(field=>field.getBoundingClientRect().right<=row.getBoundingClientRect().right+1));'),true,'省市区与日期行不应横向溢出');
+  if(name.startsWith('id'))assert.equal(await js('return [...document.querySelectorAll(".aux-id-top,.aux-id-date,.aux-id-options")].every(row=>row.scrollWidth<=row.clientWidth+1&&[...row.children].every(field=>field.getBoundingClientRect().right<=row.getBoundingClientRect().right+1));'),true,'省市区与日期行不应横向溢出');
   fs.writeFileSync(path.join(destination,name+'.png'),(await win.webContents.capturePage()).toPNG());
 }
-async function mount(id,value='',width,height){if(!width)[width,height]=({unicode:[800,380],id:[660,520],converter:[980,610],markdown:[980,540],manual:[980,540],image:[900,540],selection:[640,460],stack:[340,262]})[id]||[1000,680];win.setSize(width,height);await js('window.controller?.dispose?.();document.querySelector("main").replaceChildren();document.querySelector("main").className="";document.body.dataset.page='+JSON.stringify(id)+';document.querySelector("#title").textContent=(window.OpenAllCatalog.find(command=>command.id==='+JSON.stringify(id)+')?.title||"OpenAll");window.controller=await window.OpenAllPages['+JSON.stringify(id)+'](document.querySelector("main"),{...window.context,initialValue:'+JSON.stringify(value)+'});');}
+async function mount(id,value='',width,height){if(!width)[width,height]=({unicode:[800,(value?.length||0)<=240 && String(value||'').split('\n',4).length<=3?306:440],id:[660,520],converter:[980,610],markdown:[980,540],manual:[980,540],image:[900,540],selection:[640,460],stack:[340,262]})[id]||[1000,680];win.setSize(width,height);await js('window.controller?.dispose?.();document.querySelector("main").replaceChildren();document.querySelector("main").className="";document.body.dataset.page='+JSON.stringify(id)+';document.querySelector("#title").textContent=(window.OpenAllCatalog.find(command=>command.id==='+JSON.stringify(id)+')?.title||"OpenAll");window.controller=await window.OpenAllPages['+JSON.stringify(id)+'](document.querySelector("main"),{...window.context,initialValue:'+JSON.stringify(value)+'});');}
 app.whenReady().then(async()=>{
   fs.mkdirSync(destination,{recursive:true});
   const base=pathToFileURL(path.join(root,'src/')).href;
@@ -172,6 +172,8 @@ app.whenReady().then(async()=>{
 
 
   await mount('manual');
+  assert.ok(await js(`const notes=document.querySelector('.manual-notes'),toggle=notes.querySelector('summary');if(notes.open)return false;
+    toggle.click();const shown=notes.open&&notes.querySelector('p').getBoundingClientRect().height>0;toggle.click();return shown&&!notes.open;`),'用说明标题展开和收起导语');
   assert.ok(await js(`const picker=document.querySelector('.manual-sections');picker.value='1';picker.dispatchEvent(new Event('change'));return document.activeElement===document.querySelectorAll('.manual-article h2')[1] && document.querySelector('.manual-article').scrollTop>0;`));
   const manualRowCount=await js('return document.querySelectorAll("tbody tr").length');
   assert.ok(manualRowCount>20);
@@ -193,6 +195,8 @@ app.whenReady().then(async()=>{
   await mount('markdown','# OpenAll 笔记\n\n在一处编辑与预览。\n\n- [x] Markdown\n- [x] Mermaid 图表\n\n```mermaid\nflowchart LR\nA[输入] --> B[编辑]\nB --> C[导出]\n```\n\n| 工具 | 状态 |\n| --- | --- |\n| JSON | 可用 |');await until('document.querySelector(".aux-diagram svg")!==null','Mermaid 图表');await capture('markdown');await js('document.querySelector(".aux-editor-frame").focus();');win.webContents.sendInputEvent({type:'keyDown',keyCode:'F',modifiers:[process.platform==='darwin'?'meta':'control']});await until('!document.querySelector(".aux-findbar").hidden','Markdown 搜索框');await fill('.aux-findbar input','OpenAll');await until('document.querySelector(".aux-findbar span").textContent.includes("1 / 1")','Markdown 内容搜索');await js('document.querySelector(".aux-findbar button:last-child").click();');await click('复制 Markdown');assert.match(await js('return window.copied'),/# OpenAll/);await click('导出 HTML…');await until('window.saved.length===1','HTML 导出');assert.match(await js('return window.saved[0].text'),/<svg/);
   await fill('textarea,.aux-editor-frame','<script>window.hacked=1</script>\n<img src=x onerror="window.hacked=1">\n[bad](javascript:alert(1))');await until('document.querySelector(".aux-status").textContent.includes("预览已更新")','Markdown 安全预览');assert.equal(await js('return Boolean(window.hacked||document.querySelector(".aux-markdown-preview script")||document.querySelector(".aux-markdown-preview [onerror]"))'),false);
 
+  await mount('markdown','# 项目记录\n\n## 验收清单\n\n- [x] 拆分编辑与阅读操作\n- [ ] 复查窄窗\n\n`Ctrl+F` 查找源文。');
+  await click('语法示例'); await capture('markdown-help'); await click('关闭');
   await fill('.aux-editor-frame','前后');
   await js("const input=document.querySelector('.aux-editor-frame'); input.focus();");
   win.webContents.sendInputEvent({type:'keyDown',keyCode:'Home'});
@@ -200,7 +204,7 @@ app.whenReady().then(async()=>{
   await until('document.querySelector(".aux-editor-frame").selectionStart===1','移动至 Markdown 插入位置');
   await click('语法示例');
   assert.ok(await js('const right=document.querySelector(".aux-help-popover"), left=document.querySelector(".aux-editor-frame"); return right.getBoundingClientRect().left>=left.getBoundingClientRect().right-1 && right.querySelector("h4").textContent==="基础语法";'));
-  await capture('markdown-help');
+  await capture('markdown-help-insertion');
   await click('加粗');
   assert.equal(await js('return document.querySelector(".aux-editor-frame").value'),'前**加粗文字**后');
 
@@ -251,6 +255,9 @@ app.whenReady().then(async()=>{
   await mount('selection','https://example.com/docs?q=1');assert.deepEqual(await js('return window.controller.getActions()'),['openURL','copy','copyDomain','translate']);await js('await window.controller.activate({id:"copyDomain"});');assert.equal(await js('return window.copied'),'example.com');
   await mount('selection','{"answer":42}');await js('await window.controller.activate({id:"jsonCompact"});');assert.deepEqual(await js('return window.opened.at(-1)'),{id:'json',value:{text:'{"answer":42}',action:'compact'}});
   await mount('selection',{kind:'image',dataUrl:image});await capture('selection-image');await js('await window.controller.activate({id:"recognizeText"});');assert.equal(await js('return window.controller.getContent().text'),'识别结果：OpenAll');
+  assert.equal(await js('return document.querySelector(".selection-summary").textContent'),'已识别 12 字');
+  assert.ok(await js('return !document.querySelector(".selection-status").textContent.includes("12 字")'));
+  await capture('selection-ocr-result');
   await js('window.queue={active:true,items:[{id:"one",kind:"text",title:"会议纪要 · 产品体验"},{id:"two",kind:"text",title:"确认新版交互与快捷键"},{id:"three",kind:"text",title:"周五前完成回归测试"}]};window.context.api.stack=async(action,payload={})=>{if(action==="move"){const from=window.queue.items.findIndex(x=>x.id===payload.id),item=window.queue.items.splice(from,1)[0];window.queue.items.splice(payload.to,0,item);}if(action==="remove")window.queue.items=window.queue.items.filter(x=>x.id!==payload.id);if(action==="next"){window.queue.items.shift();if(!window.queue.items.length)window.queue.active=false;}if(action==="start")window.queue.active=true;if(action==="stop")window.queue.active=false;return structuredClone(window.queue);};window.context.api.onStackChanged=()=>()=>{};');
   await mount('stack');await capture('stack');assert.equal(await js('return document.querySelectorAll(".queue-row").length'),3);await js('document.querySelectorAll(".queue-row")[2].click();');await until('window.queue.items[0].id==="three"','堆栈置顶');await js('document.querySelectorAll(".queue-remove")[1].click();');await until('window.queue.items.length===2','堆栈移除');await click('粘贴下一项');await until('window.queue.items.length===1','堆栈取下一项');
   await js('window.controller?.dispose?.();');

@@ -451,6 +451,9 @@ final class CommandManualWindow: NSObject, WKNavigationDelegate, WKScriptMessage
         (() => {const input=document.querySelector('input[type=search]'); if(!input)return false;
         const update=value=>{input.value=value;input.dispatchEvent(new Event('input'))};
         const matching=()=>[...document.querySelectorAll('tbody tr')].filter(row=>!row.closest('[hidden]'));
+        const notes=document.querySelector('.manual-notes'), toggle=notes?.querySelector('summary');
+        if(!notes||notes.open||!toggle)return false;toggle.click();const expanded=notes.open&&notes.querySelector('p')?.getBoundingClientRect().height>0;
+        toggle.click();if(!expanded||notes.open)return false;
         const total=matching().length;update('journalctl');const ok=matching().length>0&&matching().length<total&&!!document.querySelector('td code[role=button]');
         update('OpenAll-无此命令');const empty=document.querySelector('[role=status]').textContent==='没有匹配项';update('');return ok&&empty&&matching().length===total;})()
         """)
