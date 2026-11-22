@@ -132,6 +132,15 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       return samples.every(color => color && color !== 'rgba(0, 0, 0, 0)') && new Set(samples).size === 3;
     }), '普通文本、JSON 与 Markdown 实际绘制为三种类型色');
     await capture('05-clipboard');
+    await evaluate(() => document.querySelector('[aria-label="新建标签"]').click());
+    await until(() => evaluate(() => !!document.querySelector('dialog[open] input')), '剪贴板标签命名');
+    await capture('tool-clipboard-new-tag');
+    await evaluate(() => document.querySelector('dialog[open] button').click());
+    await evaluate(() => document.querySelector('.clip-card').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:80,clientY:80})));
+    await evaluate(() => [...document.querySelectorAll('.context-menu button')].find(item=>item.textContent === '编辑后粘贴…').click());
+    await until(() => evaluate(() => !!document.querySelector('dialog[open] textarea')), '剪贴板编辑后粘贴');
+    await capture('tool-clipboard-edit-before-paste');
+    await evaluate(() => document.querySelector('dialog[open] button').click());
     const before = await evaluate(() => openall.history());
     const previewText = await evaluate(() => {
       const current = OpenAllApp.controller;
@@ -299,6 +308,17 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
         await click('管理置顶与隐藏结果 →');
         await until(() => evaluate(() => !!document.querySelector('.rules-empty, .settings-content .data-table')), '搜索排序管理内容');
         await capture('settings-search-manager');
+      } else if (tab === 'snippets') {
+        await evaluate(() => { document.querySelector('.editor-form textarea').value = '会议日期 {{date:yyyy-MM-dd}}'; });
+        await click('预览展开');
+        await until(() => evaluate(() => !!document.querySelector('dialog[open] pre')), '查看片段展开结果');
+        await capture('settings-snippet-expansion');
+        await evaluate(() => document.querySelector('dialog[open] button').click());
+      } else if (tab === 'clipboard') {
+        await evaluate(() => [...document.querySelectorAll('.settings-content button')].find(item=>item.textContent.includes('排除')).click());
+        await until(() => evaluate(() => !!document.querySelector('dialog[open] input')), '剪贴板排除应用');
+        await capture('settings-clipboard-exclusions');
+        await evaluate(() => document.querySelector('dialog[open] button').click());
       }
     }
     await evaluate(() => OpenAllApp.controller.selectTab('general'));

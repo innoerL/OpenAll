@@ -916,6 +916,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         clipboardWindow.show(target: nil)
         try await Task.sleep(nanoseconds: 350_000_000)
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "02-clipboard")
+        try clipboardWindow.captureEditingForDesign()
         clipboardWindow.showSelectedPreviewForDesign()
         try DesignPreview.capture(DesignPreview.lastWindow!, name: "02-clipboard-preview")
         clipboardWindow.showSearchForDesign("json")

@@ -896,6 +896,23 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     }
 
     func dismiss() { hide() }
+    @MainActor func captureEditingForDesign() throws {
+        guard DesignPreview.enabled, let panel else { return }
+        startAddingBoard()
+        try DesignPreview.capture(panel, name: "02-clipboard-new-tag")
+        newBoardField?.stringValue = ""
+        commitNewBoard()
+        if let item = displayedItems.first(where: { !$0.text.isEmpty }) { select(item, paste: false) }
+        editSelectedBeforePaste()
+        guard let editor = DesignPreview.lastWindow, editor !== panel else {
+            throw NSError(domain: "ClipboardEditorPreview", code: 1)
+        }
+        try DesignPreview.capture(editor, name: "02-clipboard-edit-before-paste")
+        editPopover = nil
+        editAction = nil
+        DesignPreview.lastWindow = panel
+    }
+
     func showSelectedPreviewForDesign() {
         guard DesignPreview.enabled else { return }
         previewSelected()
@@ -1931,6 +1948,14 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         root.addSubview(confirm)
         controller.view = root
         popover.contentViewController = controller
+        if DesignPreview.enabled {
+            let preview = NSWindow(contentRect: root.bounds, styleMask: [.borderless], backing: .buffered, defer: false)
+            root.wantsLayer = true
+            root.layer?.backgroundColor = OpenAllTheme.sidebar.cgColor
+            preview.contentView = root
+            DesignPreview.lastWindow = preview
+            return
+        }
         presentingDialog = true
         popover.show(relativeTo: card.bounds, of: card, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeFirstResponder(textView)
