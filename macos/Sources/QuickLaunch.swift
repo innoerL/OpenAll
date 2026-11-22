@@ -618,6 +618,8 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     private var hotkeyHandler: EventHandlerRef?
     private let doubleTapMonitor = DoubleTapMonitor()
     private var lastDoubleTapPress: TimeInterval = 0
+    private var shortcutsChecked = false
+    private var doubleTapChecked = false
     private var shortcutAvailable = false
     private var clipboardShortcutAvailable = false
     private var stackShortcutAvailable = false
@@ -1465,6 +1467,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     }
 
     private func registerHotkey() {
+        shortcutsChecked = true
         if let hotkey { UnregisterEventHotKey(hotkey); self.hotkey = nil }
         if let clipboardHotkey { UnregisterEventHotKey(clipboardHotkey); self.clipboardHotkey = nil }
         if let stackHotkey { UnregisterEventHotKey(stackHotkey); self.stackHotkey = nil }
@@ -1511,6 +1514,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     }
 
     private func installDoubleTapMonitor() {
+        doubleTapChecked = true
         doubleTapMonitor.stop()
         lastDoubleTapPress = 0
         guard settings.value.searchShortcutMode == "double", settings.value.doubleTapKeyCode != nil else { return }
@@ -2584,7 +2588,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             let active = shortcutControl(isDouble ? doubleTitle : shortcutDescription(settings.value), tag: isDouble ? 4 : 1, frame: NSRect(x: keyX, y: 337, width: keyWidth, height: 30))
             body.addSubview(active)
             recordButton = active
-            if isDouble && !doubleTapMonitor.isActive {
+            if isDouble && doubleTapChecked && !doubleTapMonitor.isActive {
                 let repair = NSButton(title: AXIsProcessTrusted() ? "重试监听" : "前往授权", target: self, action: AXIsProcessTrusted() ? #selector(retryDoubleTapFromSettings) : #selector(openPermissionsTab))
                 repair.frame = NSRect(x: keyX - 100, y: 337, width: 90, height: 30)
                 WindowChrome.styleAction(repair)
@@ -2592,12 +2596,13 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             }
             let ready = isDouble ? doubleTapMonitor.isActive : shortcutAvailable
             let warning = OpenAllTheme.isLight ? (NSColor.systemOrange.blended(withFraction: 0.48, of: .black) ?? .systemOrange) : .systemOrange
-            let state = NSTextField(labelWithString: ready ? "已启用" : isDouble ? "监听未启动" : "已占用 · 点击重录")
+            let checked = isDouble ? doubleTapChecked : shortcutsChecked
+            let state = NSTextField(labelWithString: !checked ? "未检测" : ready ? "已启用" : isDouble ? "监听未启动" : "已占用 · 点击重录")
             state.font = .systemFont(ofSize: 12)
-            state.textColor = ready ? OpenAllTheme.muted : warning
+            state.textColor = !checked || ready ? OpenAllTheme.muted : warning
             state.alignment = .left
             state.frame = NSRect(x: 286, y: 339, width: isDouble && !ready ? 100 : 192, height: 22)
-            if !ready { active.layer?.borderColor = warning.withAlphaComponent(0.5).cgColor }
+            if checked && !ready { active.layer?.borderColor = warning.withAlphaComponent(0.5).cgColor }
             body.addSubview(state)
             settingsStatus = state
             let shortcuts: [(String, String, String, Int, Bool)] = [
@@ -2612,10 +2617,10 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 body.addSubview(rule)
                 label(item.0, 44, y, 250)
                 label(item.1, 44, y - 20, 234, secondary: true)
-                let registration = settingLabel(item.4 ? "已启用" : "已占用 · 点击重录", y: y - 5, width: 190)
+                let registration = settingLabel(!shortcutsChecked ? "未检测" : item.4 ? "已启用" : "已占用 · 点击重录", y: y - 5, width: 190)
                 registration.frame.origin.x = 286
                 registration.font = .systemFont(ofSize: 12)
-                registration.textColor = item.4 ? OpenAllTheme.muted : warning
+                registration.textColor = !shortcutsChecked || item.4 ? OpenAllTheme.muted : warning
                 body.addSubview(registration)
                 body.addSubview(shortcutControl(item.2, tag: item.3, frame: NSRect(x: keyX, y: y - 10, width: keyWidth, height: 30)))
             }
@@ -2858,7 +2863,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 doubleTapConfigured: false, doubleTapActive: false, chromeProfileCount: 0, chromeBookmarksEnabled: false,
                 chromeHistoryEnabled: false, fileSearchEnabled: false, fileIndexCount: 0,
                 fileIndexing: false, unreadableFolderCount: 0, clipboardRecordingEnabled: false,
-                clipboardPaused: false, clipboardItemCount: 0, exportedAt: Date()) }
+                clipboardPaused: false, clipboardItemCount: 0, exportedAt: Date(), shortcutsChecked: false) }
             body.addSubview(diagnostics)
             diagnostics.reload()
         case 7:
@@ -3343,7 +3348,8 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             fileSearchEnabled: settings.value.searchFiles, fileIndexCount: fileSearch.isIndexing ? fileSearch.scannedCount : fileSearch.indexedCount,
             fileIndexing: fileSearch.isIndexing, unreadableFolderCount: fileSearch.unreadableFolders.count,
             clipboardRecordingEnabled: clipboardStore.preferences.enabled, clipboardPaused: clipboardStore.isPaused,
-            clipboardItemCount: clipboardStore.records.count, exportedAt: Date())
+            clipboardItemCount: clipboardStore.records.count, exportedAt: Date(),
+            shortcutsChecked: shortcutsChecked && (settings.value.searchShortcutMode != "double" || doubleTapChecked))
     }
     @objc private func openPermissionsTab() { settingsTabIndex = 5; renderSettings() }
     @objc private func openDiagnosticsTab() { settingsTabIndex = 6; renderSettings() }

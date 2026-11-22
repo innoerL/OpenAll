@@ -25,6 +25,7 @@ struct DiagnosticSnapshot: Codable {
     let clipboardPaused: Bool
     let clipboardItemCount: Int
     let exportedAt: Date
+    var shortcutsChecked: Bool? = nil
 }
 
 final class DiagnosticsView: NSView {
@@ -72,22 +73,23 @@ final class DiagnosticsView: NSView {
         formatter.dateFormat = "HH:mm"
         let checkedTime = formatter.string(from: value.exportedAt)
         metrics.subviews.forEach { $0.removeFromSuperview() }
+        let checked = value.shortcutsChecked != false
         let activeHotkeys = [value.searchHotkeyActive, value.clipboardHotkeyActive,
                              value.stackHotkeyActive, value.selectionHotkeyActive].filter { $0 }.count
         let rows: [(String, String, Bool?)] = [
             ("版本", "\(value.version) (\(value.build))", nil),
             ("辅助功能", value.accessibilityEffective ? "已授权" : "未授权", value.accessibilityEffective),
-            ("全局快捷键", activeHotkeys == 4 ? "4 项快捷键均已启用" : "\(4 - activeHotkeys) 项快捷键未注册", activeHotkeys == 4),
-            ("双击修饰键", value.doubleTapActive ? "已启用" : value.doubleTapConfigured ?
+            ("全局快捷键", !checked ? "未检测" : activeHotkeys == 4 ? "4 项快捷键均已启用" : "\(4 - activeHotkeys) 项快捷键未注册", checked ? activeHotkeys == 4 : nil),
+            ("双击修饰键", !checked && value.doubleTapConfigured ? "未检测" : value.doubleTapActive ? "已启用" : value.doubleTapConfigured ?
                 (value.accessibilityEffective ? "监听未启动" : "需授权辅助功能") : "未设置",
-             value.doubleTapConfigured && !value.doubleTapActive ? false : nil),
+             checked && value.doubleTapConfigured && !value.doubleTapActive ? false : nil),
             ("Chrome 配置", "检测到 \(value.chromeProfileCount) 个配置 · 书签\(value.chromeBookmarksEnabled ? "开启" : "关闭") · 历史\(value.chromeHistoryEnabled ? "开启" : "关闭")", nil),
             ("文件索引", value.fileSearchEnabled ? "\(value.fileIndexCount) 项\(value.fileIndexing ? " · 扫描中" : "")" : "未启用", nil),
             ("无法读取的目录", "\(value.unreadableFolderCount) 个", value.unreadableFolderCount == 0),
             ("剪贴板记录", value.clipboardRecordingEnabled ? "\(value.clipboardItemCount) 项\(value.clipboardPaused ? " · 已暂停" : "")" : "已关闭", nil)
         ]
         let issues = rows.filter { $0.2 == false }.count
-        updated.stringValue = "\(issues == 0 ? "各项状态正常" : "\(issues) 类问题需要处理") · 最近检查 \(checkedTime)"
+        updated.stringValue = "\(issues == 0 ? (checked ? "各项状态正常" : "快捷键状态待检测") : "\(issues) 类问题需要处理") · 最近检查 \(checkedTime)"
         updated.textColor = issues == 0 ? OpenAllTheme.muted : OpenAllTheme.accentText
         var y: CGFloat = 300
         let ordered = rows.enumerated().sorted { lhs, rhs in
@@ -118,14 +120,14 @@ final class DiagnosticsView: NSView {
                 let names = [("搜索", value.searchHotkeyActive), ("剪贴板", value.clipboardHotkeyActive),
                              ("复制堆栈", value.stackHotkeyActive), ("选中操作", value.selectionHotkeyActive)]
                 let failed = names.filter { !$0.1 }.map { $0.0 }
-                let detail = NSTextField(labelWithString: failed.isEmpty ? "搜索、剪贴板、复制堆栈、选中操作" : "未注册：" + failed.joined(separator: "、"))
+                let detail = NSTextField(labelWithString: !checked || failed.isEmpty ? "搜索、剪贴板、复制堆栈、选中操作" : "未注册：" + failed.joined(separator: "、"))
                 detail.font = .systemFont(ofSize: 12)
                 detail.textColor = OpenAllTheme.muted
                 detail.frame = NSRect(x: 218, y: y - 23, width: 400, height: 20)
                 metrics.addSubview(detail)
             }
-            if (index == 1 && !value.accessibilityEffective) || (index == 2 && activeHotkeys < 4) ||
-                (index == 3 && value.doubleTapConfigured && !value.doubleTapActive) {
+            if (index == 1 && !value.accessibilityEffective) || (index == 2 && checked && activeHotkeys < 4) ||
+                (index == 3 && checked && value.doubleTapConfigured && !value.doubleTapActive) {
                 let retry = index == 3 && value.accessibilityEffective
                 let button = NSButton(title: index == 2 ? "修改快捷键 →" : retry ? "重新启动 →" : "检查权限 →",
                                       target: self, action: index == 2 ? #selector(showHotkeys) :

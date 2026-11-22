@@ -14,11 +14,32 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
   const evaluate = (fn, ...args) => active.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`, true);
   const check = (condition, name) => { assert.ok(condition, name); report.checks.push(name); };
   async function until(fn, name, timeout = 20000) { const start = Date.now(); while (!await fn()) { if (Date.now() - start > timeout) throw Error('等待超时：' + name); await pause(40); } }
-  async function capture(name) {
+  async function capture(name, acceptFrame) {
     await evaluate(async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+    let image;
+    await until(async () => {
+      image = await active.webContents.capturePage();
+      return !image.isEmpty() && (!acceptFrame || acceptFrame(image));
+    }, '实际绘制截图 '+name);
     const filename = name + '.png';
-    fs.writeFileSync(path.join(output, filename), (await active.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(output, filename), image.toPNG());
     report.screenshots.push(filename);
+    return image;
+  }
+  // 在一致的像素网格上检查右栏。弹层 DOM 已打开时，合成器仍有可能返回上一帧。
+  function rightPaneChanged(before, after) {
+    const width = 180, height = 100;
+    const bitmap = image => image.resize({width,height}).toBitmap({scaleFactor:1});
+    const a = bitmap(before), b = bitmap(after);
+    if (a.length !== width*height*4 || b.length !== a.length) return false;
+    let changed = 0;
+    for (let y=18; y<88; y++) {
+      for (let x=94; x<177; x++) {
+        const i = (y*width+x)*4;
+        if (Math.max(Math.abs(a[i]-b[i]), Math.abs(a[i+1]-b[i+1]), Math.abs(a[i+2]-b[i+2])) > 10) changed++;
+      }
+    }
+    return changed > (88-18)*(177-94)*0.025;
   }
   async function open(id, value = '') {
     await evaluate((page, value) => openall.openTool(page, value), id, value);
@@ -157,7 +178,7 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     active.webContents.sendInputEvent({ type:'keyDown', keyCode:'Down' });
     active.webContents.sendInputEvent({ type:'keyUp', keyCode:'Down' });
     await until(() => evaluate(() => document.activeElement === document.querySelectorAll('.clip-card')[2]), '列表方向键下移一行');
-    await evaluate(() => OpenAllApp.render('clipboard'));
+    await evaluate(async () => { await OpenAllApp.render('clipboard'); });
     check(await evaluate(() => document.querySelector('.clipboard-layout').getAttribute('aria-pressed') === 'true'), '重建剪贴板后恢复紧凑布局');
     await evaluate(() => {
       const input = document.querySelector('.clipboard-search');
@@ -291,11 +312,29 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
         }), '安装后手册的共享脚本、样式与命令筛选');
       }
       if (id === 'markdown') await until(() => evaluate(() => !!document.querySelector('.aux-diagram svg')), 'Mermaid 渲染');
-      await capture('tool-' + id);
+      if (id === 'unicode') {
+        await until(() => evaluate(() => {
+          const values = [...document.querySelectorAll('.aux-pane textarea')].map(field=>field.value);
+          return values.length===2 && values[0].includes('OpenAll') && values[1].includes('\\u4F60');
+        }), 'Unicode 输入与编码结果已绘制');
+      }
+      const size = active.getContentBounds();
+      if (id === 'unicode') check(size.width===800 && size.height===306, '正式短文本 Unicode 窗口为 800 × 306');
+      const initialFrame = await capture('tool-' + id, id === 'unicode' ? image => {
+        const captureSize = image.getSize();
+        return Math.abs(captureSize.width * size.height - captureSize.height * size.width) <= Math.max(size.width,size.height);
+      } : undefined);
       if (id === 'markdown') {
         await click('语法示例');
-        check(await evaluate(() => !document.querySelector('.aux-help-popover').hidden), '打开 Markdown 语法示例');
-        await capture('tool-markdown-help');
+        await until(() => evaluate(() => {
+          const help = document.querySelector('.aux-help-popover'), source = document.querySelector('.aux-editor-frame');
+          const row = help?.querySelector('[data-sample]'), box = row?.getBoundingClientRect();
+          if (!box || !source?.value.includes('OpenAll') || help.hidden) return false;
+          return help.getBoundingClientRect().left >= source.getBoundingClientRect().right-1 &&
+            row.contains(document.elementFromPoint(box.left+box.width/2,box.top+box.height/2));
+        }), 'Markdown 源文与帮助首行同时可见');
+        const helpFrame = await capture('tool-markdown-help', image => rightPaneChanged(initialFrame,image));
+        check(rightPaneChanged(initialFrame,helpFrame), '正式帮助截图已切换至语法列表');
         await click('关闭');
       }
     }
