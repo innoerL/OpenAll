@@ -207,6 +207,13 @@
     @media (max-width:790px) {
       .findbar:not([hidden]) .query-field { border-color:var(--match-ink,var(--secondary)); }
     }
+    @media (max-width:690px) {
+      .editors { grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(2,minmax(0,1fr)); }
+      .pane + .pane { border-left:0; border-top:1px solid var(--rule); }
+      .heading { min-height:29px; height:29px; }
+      .match-nav button { font-size:18px; }
+      #hint { max-width:50%; }
+    }
   </style>
   <link rel="stylesheet" href="../src/fonts.css">
   <link rel="stylesheet" href="../../shared/gold-ui/surface-effects.css">
@@ -232,25 +239,22 @@
           <button id="find-next" title="下一个匹配（Enter / F3）" aria-label="下一个搜索结果" disabled>›</button>
         </div>
       </div>
-      <div id="find-filter-slot" class="filter-slot">
-        <div id="find-filters" class="filters" role="group" aria-label="查找选项" hidden>
-          <select id="find-scope" aria-label="搜索范围"><option value="both">左右两侧</option><option value="0">仅左侧</option><option value="1">仅右侧</option></select>
-          <label><input id="find-case" type="checkbox">区分大小写</label>
-        </div>
-      </div>
       <button id="find-close" title="关闭搜索（Esc）" aria-label="关闭搜索">×</button>
     </div>
     <div class="options">
     <button id="open-search" aria-controls="findbar" aria-expanded="false" title="搜索内容（Ctrl+F）" aria-keyshortcuts="Control+F">搜索<kbd aria-hidden="true">Ctrl+F</kbd></button>
-      <div id="comparison-filter-slot" class="filter-slot">
+      <div class="compact-options">
+        <button id="options-toggle" aria-expanded="false" aria-controls="options-panel">选项</button>
+        <div id="options-panel" class="options-panel" role="group" aria-label="文本对比选项" hidden>
         <div id="comparison-filters" class="filters" role="group" aria-label="对比选项">
           <label><input id="sync-scroll" type="checkbox" checked>同步滚动</label>
           <label><input id="ignore-space" type="checkbox">忽略行尾空格</label>
         </div>
-      </div>
-      <div class="compact-options" hidden>
-        <button id="options-toggle" aria-expanded="false" aria-controls="options-panel">选项</button>
-        <div id="options-panel" class="options-panel" role="group" aria-label="文本对比选项" hidden></div>
+        <div id="find-filters" class="filters" role="group" aria-label="查找选项" hidden>
+          <select id="find-scope" aria-label="搜索范围"><option value="both">左右两侧</option><option value="0">仅左侧</option><option value="1">仅右侧</option></select>
+          <label><input id="find-case" type="checkbox">区分大小写</label>
+        </div>
+        </div>
       </div>
     </div>
   </div>

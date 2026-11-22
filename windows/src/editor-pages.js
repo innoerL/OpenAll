@@ -231,10 +231,10 @@
     });
     expand.setAttribute('aria-pressed','false');
     copy.disabled = true;
-    inputPane.append(h('div', { class: 'editor-pane-heading' }, '原文', inputCount), inputBox);
+    inputPane.append(h('div', { class: 'editor-pane-heading' }, '原文', inputCount, action), inputBox);
     outputPane.append(h('div', { class: 'editor-pane-heading' }, '结果', outputCount, copy, expand), outputBox);
     grid.append(inputPane, outputPane);
-    host.append(grid, h('footer', { class: 'editor-formatter-footer' }, action, status));
+    host.append(grid, h('footer', { class: 'editor-formatter-footer' }, status));
     let input, output, work, disposed = false, revision = 0, busy = false;
     function sourceChanged() {
       revision++;

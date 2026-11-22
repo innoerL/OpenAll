@@ -5,11 +5,11 @@
 }
 .translation-state[hidden], .translation-state [hidden] { display: none; }
 .translation-card {
-  display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 18px;
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 18px;
   align-items: start; width: min(440px, calc(100% - 48px));
 }
 .translation-symbol { display: grid; justify-items: center; padding-top: 2px; }
-.translation-offline svg { display: block; width: 40px; height: 33px; color: var(--accent-text); }
+.translation-offline svg { display: block; width: 28px; height: 24px; color: var(--accent-text); }
 .translation-spinner {
   width: 28px; height: 28px; border: 2px solid var(--rule);
   border-top-color: var(--accent-text); border-radius: 50%; animation: translation-spin .8s linear infinite;
@@ -24,6 +24,6 @@
 @keyframes translation-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .translation-spinner { animation: none; } }
 
-.translation-message .translation-original { color: var(--ink); font-size: 12px; margin-top: 10px; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.translation-message .translation-original { color: var(--ink); font-size: 13px; padding-left: 10px; border-left: 2px solid var(--rule); margin-top: 10px; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
 .translation-source-label { display:block; color:var(--muted); font-size:11px; line-height:1.5; }

@@ -177,10 +177,23 @@ function formatDate(date,pattern='yyyy-MM-dd') {
   const values={yyyy:String(date.getFullYear()),yy:String(date.getFullYear()).slice(-2),MM:n(date.getMonth()+1),dd:n(date.getDate()),HH:n(date.getHours()),hh:n(date.getHours()%12||12),mm:n(date.getMinutes()),ss:n(date.getSeconds()),SSS:String(date.getMilliseconds()).padStart(3,'0'),M:String(date.getMonth()+1),d:String(date.getDate()),H:String(date.getHours()),m:String(date.getMinutes()),s:String(date.getSeconds()),a:date.getHours()<12?'上午':'下午'};
   return pattern.replace(/'([^']*)'|yyyy|SSS|yy|MM|dd|HH|hh|mm|ss|[MdHmsa]/g,(m,quoted)=>quoted??values[m]??m);
 }
-function expandSnippet(body,clipboard,now=new Date()) { return String(body).replace(/\{\{(date|time)(?::([^{}]{1,128}))?\}\}/g,(_m,kind,pattern)=>formatDate(now,pattern||(kind==='date'?'yyyy-MM-dd':'HH:mm'))).replaceAll('{{clipboard}}',clipboard); }
+function snippetExpansionParts(body,clipboard,now=new Date()) {
+  const template = String(body);
+  const parts = [];
+  let end = 0;
+  for (const match of template.matchAll(/\{\{(?:(date|time)(?::([^{}]{1,128}))?|(clipboard))\}\}/g)) {
+    if (match.index > end) parts.push({text:template.slice(end,match.index),variable:false});
+    const text = match[3] ? String(clipboard ?? '') : formatDate(now,match[2] || (match[1] === 'date' ? 'yyyy-MM-dd' : 'HH:mm'));
+    parts.push({text,variable:true});
+    end = match.index + match[0].length;
+  }
+  if (end < template.length) parts.push({text:template.slice(end),variable:false});
+  return parts;
+}
+function expandSnippet(body,clipboard,now) { return snippetExpansionParts(body,clipboard,now).map(part=>part.text).join(''); }
 class SnippetStore {
   constructor(store){this.store=store;this.items=store.read('snippets',[]);}
   save(item){const key=String(item.keyword||'').trim().toLowerCase();if(!key||/\s/.test(key)||!item.body)throw Error('片段需要不含空格的关键词和内容');if(this.items.some(x=>x.id!==item.id&&x.keyword.toLowerCase()===key))throw Error('关键词已存在');const value={id:item.id||crypto.randomUUID(),keyword:key,name:String(item.name||key).trim(),body:String(item.body),createdAt:item.createdAt||Date.now()};const i=this.items.findIndex(x=>x.id===value.id);if(i<0)this.items.push(value);else this.items[i]=value;this.store.write('snippets',this.items);return value;}
   remove(id){this.items=this.items.filter(x=>x.id!==id);this.store.write('snippets',this.items);return this.items;}
 }
-module.exports={JSONStore,ClipboardStore,SnippetStore,defaults,normalizeSettings,classify,formatDate,expandSnippet};
+module.exports={JSONStore,ClipboardStore,SnippetStore,defaults,normalizeSettings,classify,formatDate,expandSnippet,snippetExpansionParts};

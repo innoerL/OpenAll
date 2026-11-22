@@ -37,6 +37,7 @@ async function capture(name){
   if(['configDiff','explain','logTimeline'].includes(name))assert.equal(await js('const report=document.querySelector(".aux-report");return report.scrollWidth<=report.clientWidth+1;'),true,name+' 结果表格不应横向溢出');
   if(name==='converter-duration')assert.equal(await js('const body=document.querySelector(".aux-converter-body"),last=document.querySelector(".aux-conversion-row:last-child");return last.getBoundingClientRect().bottom<=body.getBoundingClientRect().bottom;'),true,'默认窗口应展示纳秒行');
   if(name==='unicode')assert.equal(await js('const tab=document.querySelector(".aux-tabs .active");return getComputedStyle(tab).backgroundColor==="rgba(0, 0, 0, 0)"&&getComputedStyle(tab,"::after").height==="2px";'),true,'Unicode 使用文字下划线标签');
+  if(name==='id'||name==='id-age25')assert.ok(await js(`const area=document.querySelector('.aux-id-results').getBoundingClientRect(),rows=document.querySelectorAll('.aux-id-row');return rows.length===5 && rows[4].getBoundingClientRect().bottom<=Math.min(innerHeight,area.bottom)+1;`),'默认窗口应完整显示第 5 条号码');
   if(name.startsWith('id'))assert.equal(await js('return [...document.querySelectorAll(".aux-id-top,.aux-id-date,.aux-id-options")].every(row=>row.scrollWidth<=row.clientWidth+1&&[...row.children].every(field=>field.getBoundingClientRect().right<=row.getBoundingClientRect().right+1));'),true,'省市区与日期行不应横向溢出');
   fs.writeFileSync(path.join(destination,name+'.png'),(await win.webContents.capturePage()).toPNG());
 }
@@ -78,6 +79,12 @@ app.whenReady().then(async()=>{
   // 年龄按浏览器本地今天推算，验证回填、生成前复核及手动日期优先。
   const birthdayReference=await js('const today=new Date(),year=today.getFullYear(),month=today.getMonth()+1,day=today.getDate();return {today:[year,month,day],age25:[year-25,month,Math.min(day,new Date(year-25,month,0).getDate())],tooOld:String(year-1899)};');
   assert.equal(await js('return document.querySelector("[aria-label=年龄]").placeholder;'),'周岁');
+  async function birthdayMode(mode) {
+    return js(`const toggle=document.querySelector('select[aria-label="生日输入方式"]');toggle.value=${JSON.stringify(mode)};toggle.dispatchEvent(new Event('change'));
+      const year=document.querySelector('[data-id-part=year]'),age=document.querySelector('[data-id-part=age]');
+      return Boolean(age.getClientRects().length)===(toggle.value==='age') && Boolean(year.getClientRects().length)===(toggle.value==='date');`);
+  }
+  assert.ok(await birthdayMode('age'),'按周岁只显示年龄输入');
   await fill('[data-id-part=age]','25');assert.match(await js('return document.querySelector(".aux-status").textContent;'),/回填/);await expectIDBirthday(birthdayReference.age25);await capture('id-age25');
   await fill('[data-id-part=age]','0');await expectIDBirthday(birthdayReference.today);
   await fill('[data-id-part=age]','25');await js('document.querySelector("[data-id-part=age]").value="0";');await click('生成测试号');assert.deepEqual(await idBirthday(),birthdayReference.today.map(String),'生成前应再次处理有效年龄');
@@ -89,6 +96,7 @@ app.whenReady().then(async()=>{
   }
   await fill('[data-id-part=age]','');assert.deepEqual(await idBirthday(),retainedBirthday,'清空年龄应保留生日');assert.equal(await js('return document.querySelector("[data-id-part=age]").hasAttribute("aria-invalid")||document.querySelector(".aux-status").classList.contains("error");'),false);await expectIDBirthday(birthdayReference.today);
   for(const [part,value]of [['year','2000'],['month','1'],['day','2']]){await fill('[data-id-part=age]','25');await fill('[data-id-part='+part+']',value);assert.equal(await js('return document.querySelector("[data-id-part=age]").value;'),'','手动修改 '+part+' 应清空年龄');}
+  assert.ok(await birthdayMode('date'),'填写生日只显示年月日输入');
   for(const [part,value]of [['year','2000'],['month','1'],['day','2']])await fill('[data-id-part='+part+']',value);await expectIDBirthday([2000,1,2]);await capture('id-age-manual');
 
   await mount('converter');assert.equal(await js('return document.querySelectorAll(".aux-conversion-row").length'),10);await capture('converter-duration');
@@ -99,7 +107,12 @@ app.whenReady().then(async()=>{
   await fill('.aux-duration-fields input','xxx');assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'换算结果');
   assert.equal(await js('return document.querySelectorAll(".aux-conversion-row").length'),0);
   await click('Cron 表达式');await until('document.querySelectorAll(".aux-cron-row").length===5','Cron 时间');await capture('converter-cron');
+  assert.equal(await js('return [...document.querySelectorAll(".aux-cron-day > span")].map(node=>node.textContent).length===new Set([...document.querySelectorAll(".aux-cron-day > span")].map(node=>node.textContent)).size'),true,'每个北京时间日期只显示一次');
+  await js('document.querySelector(".aux-cron-row").click()');
+  assert.match(await js('return window.copied'),/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/,'分组后仍复制完整执行日期与时间');
   await click('ASCII 码表');await until('document.querySelectorAll("tbody tr").length===95','ASCII 行');await capture('converter-ascii');
+  await js('const row=document.querySelector(".aux-report tbody tr");row.focus();row.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowDown",bubbles:true}));document.activeElement.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}));');
+  assert.equal(await js('return window.copied'),'!','方向键选择下一字符并回车复制');
   for (const [query,expected] of [['A',65],['a',97],['65',65],['0x41',65],['TAB',9]]) {
     await fill('.aux-ascii-lookup input',query);
     assert.match(await js('return document.querySelector(".aux-ascii-match").textContent'),new RegExp('十进制 '+expected+'  ·  0x','u'));
@@ -142,7 +155,7 @@ app.whenReady().then(async()=>{
   await mount('sqlRestore',"SELECT * FROM users WHERE id = ? AND name = ?;");await js('document.querySelectorAll("textarea,.aux-editor-frame")[1].value="Parameters: 42(Integer), OpenAll(String)";');await click('还原 SQL');await until('document.querySelectorAll("textarea,.aux-editor-frame")[2].value.includes("id = 42")','SQL 还原');await capture('sqlRestore');
   assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'已还原 2 个占位符');
   assert.equal(await js('return [...document.querySelectorAll(".editor-bound-parameter")].map(node=>node.textContent).join("|")'),"42|'OpenAll'");
-  assert.equal(await js('return document.querySelector(".aux-backend-body > .aux-pane").offsetHeight'),80,'短 SQL 使用紧凑结果区');
+  assert.equal(await js('return document.querySelector(".aux-backend-body > .aux-pane").offsetHeight'),54,'短 SQL 使用紧凑结果区');
   assert.equal(await js('return getComputedStyle(document.querySelector(".aux-report-heading button:not(.aux-locate)")).borderTopWidth'),'1px');
   assert.equal(await js('const result=document.querySelector(".aux-backend-body > .aux-pane .cm-content");result.focus();return result===document.activeElement;'),true,'SQL 结果可通过键盘切入');
   const longSQL=Array.from({length:80},(_,i)=>'SELECT '+i+';').join('\n');

@@ -62,7 +62,7 @@ final class TextCompareV2Window: NSObject, WKNavigationDelegate, NSWindowDelegat
         w.isReleasedWhenClosed = false
         w.delegate = self
         WindowChrome.apply(w, title: "文本对比")
-        w.minSize = NSSize(width: 840, height: 460)
+        w.minSize = NSSize(width: 480, height: 460)
         w.center()
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -217,6 +217,30 @@ final class TextCompareV2Window: NSObject, WKNavigationDelegate, NSWindowDelegat
         return report["passed"] as? Bool == true
     }
 
+    @MainActor private func captureSearchLayouts(_ window: NSWindow, webView: WKWebView) async throws {
+        _ = try await webView.evaluateJavaScript("window.compareV2.previewSearch(true)")
+        try await DesignPreview.captureWeb(window, name: "08-comparison-search")
+        let original = window.frame
+        defer { window.setFrame(original, display: true) }
+        window.setContentSize(NSSize(width: 480, height: window.contentView?.bounds.height ?? 600))
+        let measurement = """
+        (() => {
+          const [top,bottom] = [...document.querySelectorAll('.pane')].map(p => p.getBoundingClientRect());
+          return innerWidth <= 480 && top.width > 440 && top.bottom <= bottom.top + 1 &&
+            /[上下]栏/.test(document.querySelector('#find-count').textContent) &&
+            document.querySelector('.navigation').getBoundingClientRect().height > 0;
+        })()
+        """
+        var stacked = false
+        for _ in 0..<30 {
+            if try await webView.evaluateJavaScript(measurement) as? Bool == true { stacked = true; break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        guard stacked else { throw NSError(domain: "ComparisonNarrowLayout", code: 1) }
+        try await DesignPreview.captureWeb(window, name: "08-comparison-search-narrow")
+        _ = try await webView.evaluateJavaScript("window.compareV2.previewSearch(false)")
+    }
+
     @MainActor func verifyForDesign() async throws -> Bool {
         guard DesignPreview.enabled, let webView else { return false }
         for _ in 0..<100 {
@@ -233,9 +257,7 @@ final class TextCompareV2Window: NSObject, WKNavigationDelegate, NSWindowDelegat
         }
         defer { wake.cancel() }
         if ProcessInfo.processInfo.environment["OPENALL_DESIGN_LAYOUT_ONLY"] == "1", let window {
-            _ = try await webView.evaluateJavaScript("window.compareV2.previewSearch(true)")
-            try await DesignPreview.captureWeb(window, name: "08-comparison-search")
-            _ = try await webView.evaluateJavaScript("window.compareV2.previewSearch(false)")
+            try await captureSearchLayouts(window, webView: webView)
             return true
         }
         let value = try await webView.callAsyncJavaScript("return await window.compareV2.verify();", arguments: [:],
@@ -259,9 +281,7 @@ final class TextCompareV2Window: NSObject, WKNavigationDelegate, NSWindowDelegat
             guard left == ["左侧插入左侧", "右侧插入右侧"] else { return false }
             _ = try await webView.callAsyncJavaScript("window.setTexts(...texts)", arguments: ["texts": saved], in: nil, contentWorld: .page)
             print("内部剪贴板：文本对比左右焦点投递通过")
-            _ = try await webView.evaluateJavaScript("window.compareV2.previewSearch(true)")
-            try await DesignPreview.captureWeb(window, name: "08-comparison-search")
-            _ = try await webView.evaluateJavaScript("window.compareV2.previewSearch(false)")
+            try await captureSearchLayouts(window, webView: webView)
         }
         return true
     }

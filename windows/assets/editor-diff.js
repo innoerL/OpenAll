@@ -32,12 +32,14 @@
   let pending = false;
   const panes = [...document.querySelectorAll('.pane')];
   const pasteTarget = document.getElementById('paste-target');
+  const stacked = window.matchMedia('(max-width:690px)');
+  const sideName = side => stacked.matches ? ['上栏','下栏'][side] : ['左侧','右侧'][side];
   let activeSide = 0;
   function setActiveSide(side) {
     if (activeSide === side) return;
     activeSide = side;
     panes.forEach((pane, index) => pane.toggleAttribute('data-target', index === side));
-    pasteTarget.textContent = side === 0 ? '粘贴到左侧' : '粘贴到右侧';
+    pasteTarget.textContent = '粘贴到' + sideName(side);
   }
   let current = -1;
   let generation = 0;
@@ -151,7 +153,7 @@
     const unchanged = inputs[side].value === text;
     if (!unchanged && !inputs[side].replaceDocument(text)) return false;
     compareNow();
-    footerStatus.textContent = (side === 0 ? '左侧' : '右侧') + (unchanged ? '已是自然顺序' : '自然排序完成 · 可撤销');
+    footerStatus.textContent = sideName(side) + (unchanged ? '已是自然顺序' : '自然排序完成 · 可撤销');
     return true;
   }
   function naturalSort(side) {
@@ -165,7 +167,7 @@
     }
     return new Promise(resolve => {
       const job = { resolve, worker: null, timeout: null }; sortJobs[side] = job; updateSortControls();
-      footerStatus.textContent = (side === 0 ? '左侧' : '右侧') + '正在后台自然排序…';
+      footerStatus.textContent = sideName(side) + '正在后台自然排序…';
       const url = URL.createObjectURL(new Blob([DiffCore.workerSource], { type: 'text/javascript' }));
       function finish(result, error) {
         if (sortJobs[side] !== job) return;
@@ -461,13 +463,32 @@
   const compactOptions = document.querySelector('.compact-options');
   const optionsPanel = document.getElementById('options-panel');
   const optionsButton = document.getElementById('options-toggle');
-  const comparisonFilters = document.getElementById('comparison-filters');
   const findFilters = document.getElementById('find-filters');
 
   const paneMenus = [...document.querySelectorAll('.pane-menu')];
   function placePaneActions() {
     for (const menu of paneMenus) menu.open = !compactLayout.matches;
   }
+  function placePaneNames() {
+    panes.forEach((pane,i) => {
+      const name = sideName(i);
+      pane.querySelector('.pane-title strong').textContent = name;
+      const summary = pane.querySelector('.pane-menu summary');
+      summary.title = name + '操作';
+      summary.setAttribute('aria-label',summary.title);
+      for (const button of pane.querySelectorAll('.pane-actions button')) {
+        const replaceSide = text => text.replace(/左侧|右侧|上栏|下栏/,name);
+        button.title = replaceSide(button.title);
+        button.setAttribute('aria-label',replaceSide(button.getAttribute('aria-label')));
+      }
+      findScope.options[i+1].textContent = '仅' + name;
+    });
+    findScope.options[0].textContent = stacked.matches ? '上下两栏' : '左右两侧';
+    pasteTarget.textContent = '粘贴到' + sideName(activeSide);
+    updateSearchCount();
+  }
+  stacked.addEventListener('change',placePaneNames);
+  placePaneNames();
   compactLayout.addEventListener('change',placePaneActions);
   placePaneActions();
   for (const menu of paneMenus) {
@@ -493,23 +514,6 @@
     optionsButton.setAttribute('aria-expanded', String(open));
   }
 
-  function placeOptions() {
-    const focused = document.activeElement;
-    const filterFocused = comparisonFilters.contains(focused) || findFilters.contains(focused);
-    // 仅在跨越断点时移动原来的控件，保留选项值、监听器和编辑区状态。
-    const grouped = compactLayout.matches || !findBar.hidden;
-    if (grouped) {
-      compactOptions.hidden = false;
-      optionsPanel.append(comparisonFilters, findFilters);
-    } else {
-      document.getElementById('comparison-filter-slot').append(comparisonFilters);
-      document.getElementById('find-filter-slot').append(findFilters);
-      compactOptions.hidden = true;
-    }
-    showOptions(grouped && filterFocused);
-    if (filterFocused) focused.focus();
-    else if (focused === optionsButton && !grouped) syncScroll.focus();
-  }
   optionsButton.addEventListener('click', () => showOptions(optionsPanel.hidden));
   document.addEventListener('pointerdown', event => {
     if (!optionsPanel.hidden && !compactOptions.contains(event.target)) showOptions(false);
@@ -518,15 +522,12 @@
   compactOptions.addEventListener('focusout', event => {
     if (event.relatedTarget && !compactOptions.contains(event.relatedTarget)) showOptions(false);
   });
-  compactLayout.addEventListener('change', placeOptions);
-  placeOptions();
 
   function openSearch() {
     if (composing.size || inputs.some(input => input.composing)) return;
     showOptions(false);
     findFilters.hidden = false;
     findBar.hidden = false;
-    placeOptions();
     searchButton.setAttribute('aria-expanded', 'true');
     if (!findQuery.value) {
       const input = inputs[activeSide];
@@ -544,7 +545,6 @@
     showOptions(false);
     findFilters.hidden = true;
     findBar.hidden = true;
-    placeOptions();
     searchButton.setAttribute('aria-expanded', 'false');
     findMatches = [[], []]; findResults = []; findIndex = -1;
     paintSearch();
@@ -587,7 +587,7 @@
     const current = findResults[findIndex];
     matchNavigation.hidden = !findQuery.value;
     findCount.textContent = !findQuery.value ? '' : !current ? '无匹配结果' :
-      '匹配 ' + (findIndex + 1) + ' / ' + findResults.length + (findLimited ? '+' : '') + ' · ' + (current.side === 0 ? '左侧' : '右侧');
+      '匹配 ' + (findIndex + 1) + ' / ' + findResults.length + (findLimited ? '+' : '') + ' · ' + sideName(current.side);
     findCount.title = findLimited ? '每侧显示前 10,000 处匹配，请增加搜索词以缩小范围' : findCount.textContent;
     findPrevious.disabled = findNext.disabled = !findResults.length;
   }
@@ -689,7 +689,7 @@
     },
     texts: () => inputs.map(input => input.value),
     focus: side => inputs[side === 1 ? 1 : 0].focus(),
-    copied: side => { footerStatus.textContent = (side === 0 ? '左侧' : '右侧') + '全文已复制'; },
+    copied: side => { footerStatus.textContent = sideName(side) + '全文已复制'; },
     previewSearch: visible => {
       if (!visible) { closeSearch(); return; }
       openSearch(); findQuery.value = '文本对比'; refreshSearch(true);

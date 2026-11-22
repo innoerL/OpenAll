@@ -99,9 +99,7 @@ function updateQuote(id, card, item, snapshot) {
   const time = $('.quote-time', card);
   time.textContent = priceTime + fxLabel + retryLabel;
   time.title = detail ?? (quote ? `实际取价 ${displayTime.format(new Date(quote.fetchedAt))}` : '');
-  const source = $('.quote-source', card);
-  source.textContent = `报价 ${quote?.source ?? (id === 'gold' ? 'Gold API' : '周大福官方商城')}`;
-  if (id === 'ctf') source.dataset.source = quote?.source === '金价网 · 金子银子' ? 'ctfFallback' : 'ctf';
+
 }
 
 function groupQuoteStatus() {
@@ -205,7 +203,7 @@ function render(snapshot) {
   $('#date').textContent = snapshot.today;
   $('#currency').value = currency;
   $('#gold-title span').textContent = `XAU/${currency}`;
-  $('#fx-source').hidden = currency === 'USD';
+  $('#fx-source').hidden = $('#fx-source-label').hidden = currency === 'USD';
   const network = $('#network');
   network.dataset.offline = !snapshot.online;
   $('b', network).textContent = snapshot.online ? '网络可用' : '等待网络恢复';
@@ -217,6 +215,10 @@ function render(snapshot) {
   const gold = { id: 'gold', rows: instruments.gold.history, unit: leftUnit };
   const ctf = { id: 'ctf', rows: instruments.ctf.history, unit: '元/克' };
   for (const { id } of [gold, ctf]) {
+    const quote = instruments[id].quote;
+    const source = $(`#source-${id}`);
+    source.textContent = `报价 ${quote?.source ?? (id === 'gold' ? 'Gold API' : '周大福官方商城')}`;
+    if (id === 'ctf') source.dataset.source = quote?.source === '金价网 · 金子银子' ? 'ctfFallback' : 'ctf';
     updateQuote(id, cards[id], instruments[id], snapshot);
     updateQuote(id, $(`#summary-${id}`), instruments[id], snapshot);
   }
@@ -232,6 +234,7 @@ function render(snapshot) {
   $('#chart-amount').setAttribute('aria-pressed', String(!relative));
   $('#chart-change').setAttribute('aria-pressed', String(relative));
   $('.chart-legend').classList.toggle('dual-axis', separateAxes);
+  $('.chart-legend').hidden = relative;
   $('#legend-gold').textContent = relative ? '国际现货' : (separateAxes ? '左轴 ' : '') + '国际现货 · ' + leftUnit;
   $('#legend-ctf').textContent = relative ? '周大福' : (separateAxes ? '右轴 周大福 · 人民币/克' : '周大福 · 元/克');
   $('#combined-axis-note').hidden = !separateAxes;
@@ -348,10 +351,10 @@ function renderForecastDays(data, today, number, unit, todayQuote) {
       const chance = element('span', '概率 ', 'chance');
       chance.setAttribute('aria-label', '方向概率 ' + day.confidence + '%，未校准');
       chance.append(element('strong', day.confidence + '%'), '（未校准）');
+      if (Number.isFinite(day.sample)) chance.append(' · ' + day.sample + ' 个历史情景');
       headline.append(element('b', FORECAST_LABELS[day.direction] || '方向待定'), chance);
       panel.append(headline);
       const evidence = element('p', day.model);
-      if (Number.isFinite(day.sample)) evidence.append(' · ' + day.sample + ' 个历史情景');
       panel.append(evidence);
       if (day.pointMethod === 'persistence') panel.append(element('p', '此档参考价沿用基准牌价。'));
     } else if (hasPrice || (Number.isFinite(day.low) && Number.isFinite(day.high))) {

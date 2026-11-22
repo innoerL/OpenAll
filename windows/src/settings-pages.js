@@ -66,7 +66,13 @@
       },'shortcut-button');return b;
     }
     async function render(next=tab) {
-      const revision=++renderRevision;recording?.cancel();tab=next;content.dataset.tab=tab;
+      const revision=++renderRevision;
+      recording?.cancel();
+      const updated = await api.settings();
+      if (disposed || revision !== renderRevision) return;
+      prefs = updated;
+      tab = next;
+      content.dataset.tab = tab;
       for (const [id, link] of navigationButtons) {
         link.classList.toggle('selected', id === tab);
         if (id === tab) link.setAttribute('aria-current', 'page');
@@ -74,9 +80,6 @@
       }
       content.replaceChildren();
       body.scrollTop = 0;
-      const updated = await api.settings();
-      if (disposed || revision !== renderRevision) return;
-      prefs = updated;
       if(tab==='general') {
         heading('快捷键','点击快捷键重新录制 · Esc 取消');
         const modes = h('div', {class:'settings-segmented', role:'group', 'aria-label':'搜索唤起方式'});
@@ -112,7 +115,7 @@
         content.append(h('div',{class:'settings-footer'},'再次按同一快捷键，可关闭对应窗口。',button('查看诊断 →',()=>render('diagnostics'),'ghost')));
       } else if(tab==='search') {
         heading('搜索');
-        content.append(h('div',{class:'search-behavior'},checkbox('中文支持拼音和首字母匹配',prefs.pinyinEnabled,value=>save({pinyinEnabled:value},true)),button('管理置顶与隐藏结果 →',searchRules,'ghost')));
+        content.append(h('div',{class:'search-management'},button('管理置顶与隐藏结果 →',searchRules,'ghost')),checkbox('中文支持拼音和首字母匹配',prefs.pinyinEnabled,value=>save({pinyinEnabled:value},true)));
         const bookmarks = checkbox('书签',prefs.chromeBookmarks,value=>updateSource('chromeBookmarks',value));
         const history = checkbox('浏览历史',prefs.chromeHistory,value=>updateSource('chromeHistory',value));
         const detect = button('重新检测',async()=>{await api.windowAction('rescan');notify('已开始重新检测');});
@@ -164,11 +167,11 @@
           await saveClip({enabled:value});showRecording(value,prefs.clipboardPreferences.pausedUntil);
         });
         content.append(h('div',{class:'recording-settings'},enabled,recording,row('记录安排',pause)),h('hr'),
-          checkbox('默认粘贴为纯文本（关闭则保留原样式）',!!p.plainTextByDefault,value=>saveClip({plainTextByDefault:value})),h('hr'));
+          checkbox('默认粘贴为纯文本',!!p.plainTextByDefault,value=>saveClip({plainTextByDefault:value})),h('p',{class:'hint small recording-hint'},'关闭时保留复制内容的原有格式。'),h('hr'));
         content.append(row('保留时间',select([[7,'一周'],[30,'一月'],[90,'三月'],[365,'一年']],p.retentionDays||30,value=>saveClip({retentionDays:Number(value)}))),row('单条内容大小上限',select([5,10,20,50].map(n=>[n,n+' MB']),(p.maxItemBytes||20000000)/1000000,value=>saveClip({maxItemBytes:Number(value)*1000000}))));
         const exclusions = button('编辑排除列表', () => {
           const draft = [...(prefs.clipboardPreferences.ignoreApplications || [])];
-          const filename = input('', '例如 1Password.exe');
+          const filename = input('', '输入应用的 .exe 文件名');
           filename.setAttribute('aria-label','应用名称或 exe 文件名');
           const count = h('span',{class:'exclusion-count'});
           const list = h('ul',{class:'exclusion-items','aria-label':'已排除应用'});
@@ -201,7 +204,7 @@
           });
           const editor = h('div',{class:'exclusion-editor'},h('p',{},'这些应用复制的内容会跳过历史记录。'),
             h('div',{class:'exclusion-heading'},h('strong',{},'已排除应用'),count),list,empty,
-            labelFor('添加应用',filename),h('div',{class:'row'},filename,addButton),state);
+            labelFor('添加到待保存的列表',filename),h('div',{class:'row'},filename,addButton),state);
           const cancel = button('取消',() => panel.close());
           const apply = button('保存',async () => {
             if (filename.value.trim() && !add()) return;
@@ -236,7 +239,7 @@
           example.title = example.textContent;
         }
         for (const control of [name,keywords,url]) control.addEventListener('input', () => {updateExample();notice.textContent='尚未保存';});
-        const form=h('div',{class:'editor-form alias-form'},field('显示名称',name),field('别名 · 最多三个，用逗号分隔',keywords),field('网址模板 · {query} 代表搜索词',url),example);
+        const form=h('div',{class:'editor-form alias-form'},field('显示名称',name),field('别名 · 最多三个，用逗号分隔',keywords),h('div',{class:'alias-template'},field('网址模板 · {query} 代表搜索词',url),example));
         function choose(i){selected=i;notice.textContent='';const item=prefs.aliases?.[i];name.value=item?.name||'';keywords.value=(item?.keywords||[]).join(', ');url.value=item?.url||'';paint();}
         function paint(){updateExample();submit.textContent=selected<0?'添加网址':'保存更改';count.textContent=(prefs.aliases||[]).length+' 个网站';remove.disabled=selected<0;list.replaceChildren(...(prefs.aliases||[]).map((item,i)=>{const b=button('',()=>choose(i),i===selected?'selected':'');b.title=item.keywords.join(' · ');b.append(h('strong',{},item.name),h('span',{class:'muted'},item.keywords[0]||''));return b;}));}
         const remove=button('删除',async()=>{if(selected<0)return;if(await confirm('删除网址别名','删除后将无法通过这些别名打开此网址。')){await save({aliases:prefs.aliases.filter((_,i)=>i!==selected)});choose(prefs.aliases.length?Math.min(selected,prefs.aliases.length-1):-1);}});
@@ -303,7 +306,7 @@
             choice.append(h('strong', {}, command.title), h('span', {class:'muted'}, words[0] || command.title));
             return choice;
           }));
-          if (!matches.length) list.append(h('p', {class:'settings-empty-list',role:'status'}, '没有匹配的功能'));
+          if (!matches.length) list.append(h('p', {class:'settings-empty-list',role:'status'}, query ? '没有匹配的功能' : '暂无可配置的功能'));
           const current = matches.find(command => command.id === chosen?.id);
           if (current) markSelection();
           else selectCommand(matches[0]);
@@ -385,9 +388,9 @@
         },'primary');
         async function updateExpansion() {
           const request = ++expansionRequest;
-          const result = await api.snippets('expand',{body:text.value});
+          const parts = await api.snippets('expand',{body:text.value,parts:true});
           if (request === expansionRequest && revision === renderRevision && !resultPanel.hidden) {
-            expanded.textContent = typeof result === 'string' ? result : result.text || '';
+            expanded.replaceChildren(...parts.map(part => part.variable ? h('mark',{},part.text) : document.createTextNode(part.text)));
           }
         }
         const preview = button('预览展开',async () => {
@@ -412,26 +415,29 @@
         }
         text.placeholder='例如：已于 {{date}} 收到，稍后回复。';
         content.append(h('div',{class:'row snippet-picker'},all.length ? picker : h('h2',{},'新建片段'),all.length ? create : null),
-          h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词 · 用 ; 调用',key)),field('内容',text),h('div',{class:'snippet-template-actions'},variables,preview),resultPanel,
+          h('div',{class:'editor-form'},h('div',{class:'grid'},field('名称',name),field('关键词 · 用 ; 调用',key)),h('div',{class:'field snippet-body-field'},h('div',{class:'snippet-body-heading'},labelFor('内容',text),variables),text),h('div',{class:'snippet-template-actions'},preview),resultPanel,
             h('div',{class:'row'},remove,h('span',{class:'spacer'}),apply)));
       } else if(tab==='permissions') {
         heading('权限与隐私','本地运行，内容保存在当前 Windows 用户目录。');const d=await api.diagnostics();
         if (disposed || revision !== renderRevision) return;
+        const extraActions = [];
         function capability(title,state,description,actions) {
+          extraActions.push(...actions.slice(1));
           return h('section',{class:'permission-row'},h('div',{},h('h2',{},title),h('p',{},description)),
-            h('div',{class:'permission-actions'},h('strong',{},state),actions[0],actions.length>1 ? h('details',{class:'permission-more'},h('summary',{},'更多操作'),...actions.slice(1)) : null));
+            h('div',{class:'permission-actions'},h('strong',{},state),actions[0]));
         }
         const shortcuts = ['search','clipboard','stack','selection'].map(key=>d.shortcuts?.[key]);
         const active = shortcuts.filter(value=>value===true).length;
         content.append(
           capability('快捷键与自动粘贴',d.shortcutRecording?'录制中':shortcuts.every(value=>typeof value==='boolean')?active+' / 4 项快捷键已启用':'快捷键状态待确认',
-            '粘贴到以管理员身份运行的应用时，OpenAll 需要相同权限。',[button('查看快捷键 →',()=>render('general'),'ghost'),button('检查状态',()=>render(),'ghost')]),
+            '粘贴到以管理员身份运行的应用时，OpenAll 需要相同权限。',[button('查看快捷键 →',()=>render('general'),'ghost'),button('重新检查快捷键',()=>render(),'ghost')]),
           capability('文件访问',prefs.searchFiles?'文件搜索已开启':'文件搜索已关闭','只读取可访问目录的文件名。',
             [button('打开搜索设置 →',()=>render('search'),'ghost'),...(prefs.searchFiles?[button('重新扫描',()=>api.windowAction('rescan'),'ghost')]:[])]),
           capability('图片文字识别',d.ocrAvailable===false?'需要 OCR 语言包':'使用本机 OCR','识别使用 Windows 语言包，图片与结果保存在本机。',
             [button('打开 Windows 语言设置 ↗',()=>api.fileAction('openSystemSettings',{uri:'ms-settings:regionlanguage'}),'ghost')]),
           capability('本地数据','当前 Windows 账户','查看 OpenAll 的设置与历史文件。',
-            [button('打开数据目录 ↗',()=>api.fileAction('dataDirectory'),'ghost')]));
+            [button('打开数据目录 ↗',()=>api.fileAction('dataDirectory'),'ghost')]),
+          h('details',{class:'permission-more'},h('summary',{},'其他操作'),h('div',{class:'row'},...extraActions)));
       } else if(tab==='diagnostics') {
         heading('状态与诊断');const d=await api.diagnostics();
         if (disposed || revision !== renderRevision) return;
@@ -453,7 +459,7 @@
         const rows=[['版本',d.version||'—'],['平台',d.platform==='win32'?'Windows':d.platform||'Windows'],['应用索引',d.index?.apps??0],['文件索引',d.index?.files??0],['Chrome 配置',d.index?.profiles??0],['剪贴板记录',d.clipboard??d.clipboardCount??0],['内存',d.memoryMB?d.memoryMB+' MB':'—'],['索引状态',d.index?.indexing?'正在更新':'就绪'],['系统文件索引',d.index?.systemIndex?.available?'已连接 Windows Search':d.index?.systemIndex?.reason||'搜索文件时自动连接']];
         const stats=entries=>h('dl',{class:'status-grid'},entries.flatMap(([name,value])=>[h('dt',{},name),h('dd',{},String(value))]));
         const environment=new Set(['版本','平台','内存']);
-        content.append(stats(rows.filter(([name])=>!environment.has(name))),h('details',{class:'diagnostic-environment'},h('summary',{},'系统与版本信息'),stats(rows.filter(([name])=>environment.has(name)))),h('div',{class:'row'},button('刷新状态',()=>render()),button('重新建立索引',()=>api.windowAction('rescan')),button('复制诊断',async()=>{await api.copyText(JSON.stringify(d,null,2));notify('诊断信息已复制');})),h('section',{class:'settings-section'},h('h2',{},'更新'),h('div',{class:'row'},bind(input(prefs.updateFeedURL,'更新源地址（HTTPS）'),value=>save({updateFeedURL:value})),button('检查更新',async()=>{const result=await api.windowAction('checkUpdates');notify(result?.message||'已完成更新检查');render();})),h('div',{class:'row',style:{marginTop:'12px'}},button('安装更新',async()=>{if(await confirm('安装更新','将下载并校验安装包，然后关闭 OpenAll 启动安装器。'))await api.windowAction('installUpdate');},'primary'),button('回退上一版',async()=>{if(await confirm('回退上一版','将关闭 OpenAll，重新安装上次保留的版本。'))await api.windowAction('rollbackUpdate');})),h('p',{class:'hint small'},d.updates?.message||'填写可信的 HTTPS 更新源后检查更新。')));
+        content.append(stats(rows.filter(([name])=>!environment.has(name))),h('details',{class:'diagnostic-environment'},h('summary',{},'系统与版本信息'),stats(rows.filter(([name])=>environment.has(name)))),h('div',{class:'row'},button('刷新状态',()=>render()),button('重新建立索引',()=>api.windowAction('rescan')),button('复制诊断',async()=>{await api.copyText(JSON.stringify(d,null,2));notify('诊断信息已复制');})),h('details',{class:'diagnostic-updates'},h('summary',{},'应用更新'),h('div',{class:'row'},bind(input(prefs.updateFeedURL,'更新源地址（HTTPS）'),value=>save({updateFeedURL:value})),button('检查更新',async()=>{const result=await api.windowAction('checkUpdates');notify(result?.message||'已完成更新检查');render();})),h('div',{class:'row',style:{marginTop:'12px'}},button('安装更新',async()=>{if(await confirm('安装更新','将下载并校验安装包，然后关闭 OpenAll 启动安装器。'))await api.windowAction('installUpdate');},'primary'),button('回退上一版',async()=>{if(await confirm('回退上一版','将关闭 OpenAll，重新安装上次保留的版本。'))await api.windowAction('rollbackUpdate');})),h('p',{class:'hint small'},d.updates?.message||'填写可信的 HTTPS 更新源后检查更新。')));
       } else if(tab==='appearance') {
         heading('外观','调整背景和强调色，所有窗口同步生效。');
         const backgrounds=[['石墨','#242626'],['深蓝','#172838'],['暖棕','#30251F'],['雾白','#F2F1ED'],['跟随系统','system']],accents=[['香槟','#d8c19e'],['海蓝','#5e9ccd'],['青绿','#63b8a4'],['珊瑚','#d9917b']];
@@ -513,7 +519,7 @@
     async function searchRules() {
       const revision = ++renderRevision;
       const back = button('← 返回搜索设置', () => render('search'), 'ghost');
-      content.replaceChildren(h('div',{class:'settings-rule-heading'},h('h1',{},'搜索排序管理'),back));
+      content.replaceChildren(h('div',{class:'settings-rule-heading'},back,h('h1',{},'搜索排序管理')));
       const data = await api.windowAction('searchRules',{includeUsage:true});
       if (disposed || revision !== renderRevision) return;
       const rules = Array.isArray(data) ? data : data?.rules || [];

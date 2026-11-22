@@ -54,6 +54,15 @@ module.exports = async function verifyGold(searchWindow, output) {
     await until(async () => !(await read()).edgeEnabled, '关闭贴边');
     await execute(gold, () => { const canvas = document.querySelector('#gold canvas'); canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })); });
     check(await execute(gold, () => !document.querySelector('#gold .hover').hidden), '走势图支持键盘查看历史点');
+    check(await execute(gold, () => {
+      const sources = document.querySelector('#quote-sources');
+      if (!sources || sources.open) return false;
+      sources.querySelector('summary').click();
+      const links = [...sources.querySelectorAll('button')].filter(button => button.offsetHeight > 0);
+      const valid = links.length >= 4 && links.every(button => button.dataset.source && button.textContent.trim());
+      sources.querySelector('summary').click();
+      return valid && !sources.open;
+    }), '数据来源可就地展开查看两种报价及两种历史曲线出处');
     await capture('quotes');
     await click('layout');
     await until(() => execute(gold, () => !document.querySelector('#combined').hidden), '合并图表');
@@ -117,7 +126,7 @@ module.exports = async function verifyGold(searchWindow, output) {
     gold.show();
     gold.focus();
     gold.webContents.focus();
-    const disclosureIds = ['verification-breakdown', 'method-details'];
+    const disclosureIds = ['verification-breakdown', 'market-breakdown', 'method-details'];
     for (const id of disclosureIds) {
       check(await execute(gold, id => {
         const details = document.getElementById(id);
@@ -247,7 +256,7 @@ module.exports = async function verifyGold(searchWindow, output) {
       gold.setContentSize(...normalSize);
     }
     check(await execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true' && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7), '两品种七日展望切换');
-    check(await execute(gold, () => !!document.querySelector('#verification-note').textContent && document.querySelector('#drivers').children.length > 0 && document.querySelector('#events').children.length > 0 && document.querySelector('#calendar').children.length > 0 && ['#drivers','#events','#calendar'].every(selector => document.querySelector(selector).getClientRects().length > 0)), '报价验证、市场因素、国际事件与财经日历直接可见');
+    check(await execute(gold, () => !!document.querySelector('#verification-note').textContent && document.querySelector('#drivers').children.length > 0 && document.querySelector('#events').children.length > 0 && document.querySelector('#calendar').children.length > 0 && ['#market-breakdown > summary','#events','#calendar'].every(selector => document.querySelector(selector).getClientRects().length > 0)), '报价验证与市场因素可展开，国际事件与财经日历可直接阅读');
     check(await execute(gold, () => ['gold', 'goldHistory', 'ctf', 'ctfHistory', 'fx', 'news'].every(key => !!document.querySelector('[data-source="' + key + '"]'))), '报价与新闻来源链接保留');
     await execute(gold, () => { window.__goldDocument = document.documentElement; window.__goldForecast = document.querySelector('#forecast-ctf'); });
     await execute(searchWindow, () => openall.saveSettings({ theme: 'custom', backgroundHex: '#203448', accentHex: '#f5ad52' }));

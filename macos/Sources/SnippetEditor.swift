@@ -104,14 +104,15 @@ final class SnippetEditorView: NSView, NSTableViewDataSource, NSTableViewDelegat
         keywordField.placeholderString = "例如 reply"
         addSubview(keywordField)
         addSubview(label("内容", frame: NSRect(x: 260, y: 311, width: 80, height: 20)))
-        let variableLabel = label("插入变量", frame: NSRect(x: 514, y: 311, width: 68, height: 20))
+        let variableLabel = label("插入变量", frame: NSRect(x: 440, y: 306, width: 65, height: 20))
         variableLabel.font = .systemFont(ofSize: 12)
         addSubview(variableLabel)
         let variables = [("日期", "{{date}}"), ("时间", "{{time}}"), ("剪贴板", "{{clipboard}}")]
         for (index, item) in variables.enumerated() {
             let button = NSButton(title: item.0, target: self, action: #selector(insertVariable(_:)))
-            button.frame = NSRect(x: 575 + CGFloat(index) * 62, y: 309, width: 62, height: 25)
+            button.frame = NSRect(x: 502 + CGFloat(index) * 64, y: 305, width: 62, height: 25)
             WindowChrome.styleOutputAction(button)
+            button.contentTintColor = OpenAllTheme.accentText
             button.identifier = NSUserInterfaceItemIdentifier(item.1)
             button.toolTip = item.1
             addSubview(button)
@@ -138,7 +139,7 @@ final class SnippetEditorView: NSView, NSTableViewDataSource, NSTableViewDelegat
         newButton = add
         add.isHidden = store.items.isEmpty
         let remove = NSButton(title: "删除", target: self, action: #selector(removeSnippet))
-        remove.frame = NSRect(x: 398, y: 102, width: 74, height: 30)
+        remove.frame = NSRect(x: 694, y: 102, width: 74, height: 30)
         WindowChrome.styleAction(remove)
         addSubview(remove)
         removeButton = remove

@@ -226,14 +226,26 @@
     }
     shelf.addEventListener('focusin', e => updateHints(e.target));
     shelf.addEventListener('focusout', e => updateHints(e.relatedTarget));
-    function boards(){tabs.replaceChildren();const names=['历史',...(settings.clipboardPreferences?.pinboards||p.pinboards||['收藏'])];for(const name of names){const b=button('',()=>{activeBoard=name;selected.clear();current=0;boards();paint();},'clipboard-tab'+(activeBoard===name?' selected':''));const color=({blue:'#6e9bb5',purple:'#a08cb4',green:'#79a58a',red:'#cb8980',yellow:'#c5af78'})[(settings.clipboardPreferences?.pinboardColors||p.pinboardColors||{})[name]]||'#bbbdb9';b.setAttribute('aria-pressed', String(name === activeBoard));b.append(h('span',{class:'tab-dot',style:{'--dot':color}}),name);if(name!=='历史')b.addEventListener('contextmenu',e=>{e.preventDefault();menu([{label:'重命名标签',action:async()=>{const value=await prompt('标签名称',name);if(value?.trim()&&value.trim()!==name){await api.clipboardAction('renameTag',{tag:name,name:value.trim()});settings=await api.settings();activeBoard=value.trim();boards();refresh();}}},{label:'标签颜色',action:()=>menu(['blue','purple','green','red','yellow'].map((color,i)=>({label:['蓝色','紫色','绿色','红色','黄色'][i],action:async()=>{await api.clipboardAction('tagColor',{tag:name,color});settings=await api.settings();boards();}})),b)},{label:'删除标签',danger:true,action:async()=>{if(await confirm('删除标签','仅删除标签，记录会保留在历史中。')){await api.clipboardAction('deleteTag',{tag:name});settings=await api.settings();activeBoard='历史';boards();refresh();}}}],b);});tabs.append(b);}const add = button('', async () => {
-        const value = await prompt('新建标签');
-        if (!value?.trim()) return;
-        await api.clipboardAction('newTag', {tag:value.trim()});
-        settings = await api.settings();
-        activeBoard = value.trim();
-        boards();
-        paint();
+    function boards(){tabs.replaceChildren();const names=['历史',...(settings.clipboardPreferences?.pinboards||p.pinboards||['收藏'])];for(const name of names){const b=button('',()=>{activeBoard=name;selected.clear();current=0;boards();paint();},'clipboard-tab'+(activeBoard===name?' selected':''));const color=({blue:'#6e9bb5',purple:'#a08cb4',green:'#79a58a',red:'#cb8980',yellow:'#c5af78'})[(settings.clipboardPreferences?.pinboardColors||p.pinboardColors||{})[name]]||'#bbbdb9';b.setAttribute('aria-pressed', String(name === activeBoard));b.append(h('span',{class:'tab-dot',style:{'--dot':color}}),name);if(name!=='历史')b.addEventListener('contextmenu',e=>{e.preventDefault();menu([{label:'重命名标签',action:async()=>{const value=await prompt('标签名称',name);if(value?.trim()&&value.trim()!==name){await api.clipboardAction('renameTag',{tag:name,name:value.trim()});settings=await api.settings();activeBoard=value.trim();boards();refresh();}}},{label:'标签颜色',action:()=>menu(['blue','purple','green','red','yellow'].map((color,i)=>({label:['蓝色','紫色','绿色','红色','黄色'][i],action:async()=>{await api.clipboardAction('tagColor',{tag:name,color});settings=await api.settings();boards();}})),b)},{label:'删除标签',danger:true,action:async()=>{if(await confirm('删除标签','仅删除标签，记录会保留在历史中。')){await api.clipboardAction('deleteTag',{tag:name});settings=await api.settings();activeBoard='历史';boards();refresh();}}}],b);});tabs.append(b);}const add = button('', () => {
+        const field=h('input',{type:'text',placeholder:'新标签名称','aria-label':'新标签名称',maxLength:30});
+        const create=button('创建',()=>{},'clip-tag-submit');
+        create.type='submit';
+        const cancel=iconButton('close','取消新建标签',finish);
+        const form=h('form',{class:'clip-tag-create','aria-label':'新建标签'},field,create,cancel);
+        function finish(){form.replaceWith(add);add.focus();}
+        form.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing){e.preventDefault();e.stopPropagation();finish();}});
+        form.addEventListener('submit',async e=>{
+          e.preventDefault();
+          const value=field.value.trim();
+          if (!value || create.disabled){field.focus();return;}
+          create.disabled=true;
+          try {
+            await api.clipboardAction('newTag',{tag:value});
+            settings=await api.settings();activeBoard=value;boards();paint();
+            tabs.querySelector('[aria-pressed=true]')?.focus();
+          } catch(error){notify(error.message,true);create.disabled=false;field.focus();}
+        });
+        add.replaceWith(form);field.focus();form.scrollIntoView({block:'nearest',inline:'nearest'});
       }, 'clipboard-tab clipboard-add-tab');
       add.title = '新建标签';
       add.setAttribute('aria-label', '新建标签');
@@ -288,7 +300,7 @@
         }
         const card=h('article',{draggable:true,onpointerdown:()=>{if(r.truncated&&!dragContent.has(id(r)))api.clipboardAction('read',{ids:[id(r)]}).then(full=>dragContent.set(id(r),Array.isArray(full)?full[0]:full)).catch(()=>{});},ondragstart:e=>{if(['files','image'].includes(r.kind)){e.preventDefault();api.clipboardAction('drag',{ids:selected.has(id(r))?[...selected]:[id(r)]}).catch(error=>notify(error.message,true));return;}const data=dragContent.get(id(r))||r;if(data.truncated){e.preventDefault();notify('正在读取全文，请稍后重新拖动');return;}e.dataTransfer.setData('text/plain',data.text||data.value||'');if(data.html)e.dataTransfer.setData('text/html',data.html);e.dataTransfer.effectAllowed='copy';},class:'clip-card'+(selected.has(id(r))?' selected':''),tabIndex:index === current ? 0 : -1,'data-index':index,role:'option','aria-selected':String(selected.has(id(r))),onclick:e=>{if(e.shiftKey){const low=Math.min(current,index),high=Math.max(current,index);for(let n=low;n<=high;n++)selected.add(id(filtered[n]));}else if(e.ctrlKey||e.metaKey){if(selected.has(id(r)))selected.delete(id(r));else selected.add(id(r));}else selected=new Set([id(r)]);current=index;syncSelection(true);},ondblclick:e=>{if(!e.target.closest('button'))paste();},oncontextmenu:e=>{e.preventDefault();if(!selected.has(id(r)))selected=new Set([id(r)]);current=index;syncSelection(true);cardMenu(e);}},content);
         if((r.text||r.value||'').length>110&&r.kind!=='image')card.append(button('查看全文 ↗',e=>{e.stopPropagation();current=index;selected=new Set([id(r)]);syncSelection(true);preview();},'clip-preview-link'));
-        const source=r.icon?h('img',{src:r.icon,class:'clip-source',alt:r.sourceName||''}):h('span',{class:'clip-source',title:r.sourceName||r.source||''},icon(r.kind==='files'?'file':'application',16));card.append(h('div',{class:'clip-type-bar','data-format':r.kind==='files'?'文件':format},h('strong',{},format),h('time',{},UI.relativeTime(r.time||r.date)),source));fragment.append(card);});
+        const source=r.icon?h('img',{src:r.icon,class:'clip-source',alt:r.sourceName||''}):h('span',{class:'clip-source',title:r.sourceName||r.source||''},icon(r.kind==='files'?'file':'application',16));card.append(h('div',{class:'clip-type-bar','data-format':r.kind==='files'?'文件':format},h('strong',{},format),h('time',{},UI.relativeTime(r.time||r.date)),h('span',{class:'clip-origin',title:r.sourceName||r.source||''},source,h('span',{class:'clip-origin-name'},r.sourceName||r.source||''))));fragment.append(card);});
       const empty = hasFilter() ? '没有匹配的记录' : activeBoard === '历史' ? '复制内容后会出现在这里' : '这个标签还没有记录';
       track.replaceChildren(filtered.length ? fragment : h('div', {class:'empty'}, empty));
       finishSelection(focus || hadCardFocus);
@@ -302,7 +314,7 @@
       if (item.favorite || item.pinned || item.tags?.length) { notify('固定卡片不能直接删除，请先取消固定'); return; }
       await action('delete', {ids:[id(item)]});
     }
-    function cardMenu(anchor){const r=filtered[current];if(!r)return;const text=r.text||r.value||'';const rows=[{label:'对内容操作…',action:()=>api.clipboardAction('selection',{ids:[id(r)]})},null,{label:'粘贴',action:paste},{label:'粘贴为纯文本',action:()=>action('paste',{plain:true})},{label:'复制',action:()=>action('copy')},{label:'预览全文',action:preview},null,{label:r.favorite?'取消收藏':'收藏',action:()=>action('favorite')},{label:'添加到标签',action:()=>menu((settings.clipboardPreferences?.pinboards||['收藏']).map(tag=>({label:tag,action:()=>action('tag',{tag})})),anchor)},{label:'两条卡片对比',disabled:selected.size!==2,action:()=>action('compare')},{label:'合并为新文本卡片',disabled:selected.size<2||filtered.filter(x=>selected.has(id(x))).some(x=>['image','files'].includes(x.kind)),action:async()=>{await action('merge');await refresh();}},{label:'编辑后粘贴…',disabled:['image','files'].includes(r.kind),action:async()=>{const full=await api.clipboardAction('read',{ids:[id(r)]}),record=Array.isArray(full)?full[0]:full;const editor=h('textarea',{value:record.text||record.value,'aria-label':'编辑后粘贴'});const d=UI.dialog('编辑后粘贴',editor,[button('取消',()=>d.close()),button('粘贴',async()=>{await api.clipboardAction('editPaste',{ids:[id(r)],text:editor.value});d.close();},'primary')]);d.classList.add('clip-edit-dialog');editor.focus();}},{label:'加入复制堆栈',action:()=>api.stack('add',{ids:[...selected]})},null,...[['json','JSON 工具'],['comparison','文本对比'],['markdown','Markdown'],['translate','翻译'],['snippets','保存为常用片段']].map(([tool,label])=>({label,disabled:r.kind==='image'&&tool!=='translate',action:async()=>{if(tool==='snippets'){await api.clipboardAction('snippet',{ids:[id(r)]});notify('已保存常用片段');}else await api.clipboardAction('openTool',{ids:[id(r)],page:tool});}}))];
+    function cardMenu(anchor){const r=filtered[current];if(!r)return;const text=r.text||r.value||'';const rows=[{label:'对内容操作…',action:()=>api.clipboardAction('selection',{ids:[id(r)]})},null,{label:'粘贴',action:paste},{label:'粘贴为纯文本',action:()=>action('paste',{plain:true})},{label:'复制',action:()=>action('copy')},{label:'预览全文',action:preview},null,{label:r.favorite?'取消收藏':'收藏',action:()=>action('favorite')},{label:'添加到标签',action:()=>menu((settings.clipboardPreferences?.pinboards||['收藏']).map(tag=>({label:tag,action:()=>action('tag',{tag})})),anchor)},{label:'两条卡片对比',disabled:selected.size!==2,action:()=>action('compare')},{label:'合并为新文本卡片',disabled:selected.size<2||filtered.filter(x=>selected.has(id(x))).some(x=>['image','files'].includes(x.kind)),action:async()=>{await action('merge');await refresh();}},{label:'编辑后粘贴…',disabled:['image','files'].includes(r.kind),action:async()=>{const full=await api.clipboardAction('read',{ids:[id(r)]}),record=Array.isArray(full)?full[0]:full;const editor=h('textarea',{value:record.text||record.value,'aria-label':'编辑后粘贴'});const d=UI.dialog('编辑本次粘贴内容',editor,[button('取消',()=>d.close()),button('粘贴',async()=>{await api.clipboardAction('editPaste',{ids:[id(r)],text:editor.value});d.close();},'primary')]);d.classList.add('clip-edit-dialog');editor.focus();}},{label:'加入复制堆栈',action:()=>api.stack('add',{ids:[...selected]})},null,...[['json','JSON 工具'],['comparison','文本对比'],['markdown','Markdown'],['translate','翻译'],['snippets','保存为常用片段']].map(([tool,label])=>({label,disabled:r.kind==='image'&&tool!=='translate',action:async()=>{if(tool==='snippets'){await api.clipboardAction('snippet',{ids:[id(r)]});notify('已保存常用片段');}else await api.clipboardAction('openTool',{ids:[id(r)],page:tool});}}))];
       if(r.kind==='image')rows.push({label:'识别图片文字',action:async()=>{const v=await api.clipboardAction('ocr',{ids:[id(r)]});notify(v.text?'文字识别完成':'未识别到文字');await refresh();}},{label:'图片处理',action:async()=>{const full=await api.clipboardAction('read',{ids:[id(r)]}),record=Array.isArray(full)?full[0]:full;await openTool('image',{dataUrl:record.dataUrl||'data:image/png;base64,'+record.value});}});
       if(r.kind==='link'||/^https?:\/\/\S+$/.test(text))rows.push({label:'打开链接',action:()=>api.open({type:'url',value:text.trim()})});
       if(r.kind==='files')rows.push({label:'指定应用打开…',action:()=>api.fileAction('openWith',{path:r.files?.[0]})},{label:'在文件夹中显示',action:()=>api.fileAction('reveal',{path:r.files?.[0]})});rows.push(null,{label:'删除未固定记录',danger:true,disabled:[...selected].every(key=>all.find(x=>id(x)===key)?.favorite),action:remove});menu(rows,anchor);
@@ -377,7 +389,17 @@
     }, 'primary');
     host.append(h('section', {class:'preview-page clip-preview'},
       h('header', {class:'clip-preview-heading'}, title, source), content,
-      h('footer', {class:'clip-preview-footer'}, tools, h('div', {class:'clip-preview-action'}, status, copyButton, pasteButton))));
+      h('footer', {class:'clip-preview-footer'}, status, h('div', {class:'clip-preview-action'}, tools, copyButton, pasteButton))));
+    let desiredContent = 325;
+    if (!image) {
+      content.style.flex = 'none';
+      content.style.height = 'auto';
+      desiredContent = Math.min(500, Math.max(49, content.offsetHeight));
+      content.style.removeProperty('height');
+      content.style.removeProperty('flex');
+    }
+    const chromeHeight = innerHeight - content.offsetHeight;
+    await call('fitClipboardPreview', {height:chromeHeight + desiredContent});
     return {focus:() => content.focus()};
   };
   (async()=>{if(!api)throw Error('应用桥接未加载');settings=await api.settings();applyTheme(settings);const initial=await call('context').catch(()=>null);const params=new URLSearchParams(location.search);await render(initial?.page||params.get('page')||'search',initial?.initialValue||'');window.OpenAllApp.ready=true;})();

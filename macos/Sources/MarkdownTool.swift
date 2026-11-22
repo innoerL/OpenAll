@@ -138,6 +138,9 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
         markdownEditor.placeholderText = "输入 Markdown，右侧实时预览 · ⌘/ 查看语法"
         editor = markdownEditor
         editor.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        let sourceParagraph = NSMutableParagraphStyle()
+        sourceParagraph.lineSpacing = 3
+        editor.defaultParagraphStyle = sourceParagraph
         markdownEditor.highlightsMarkdown = true
         editor.textContainerInset = NSSize(width: 16, height: 18)
         WindowChrome.styleEditor(left, text: editor)
@@ -194,7 +197,7 @@ final class MarkdownToolWindow: NSObject, NSTextViewDelegate, WKNavigationDelega
         card.shadow = NSShadow()
         card.shadow?.shadowBlurRadius = 0
         card.shadow?.shadowColor = NSColor.clear
-        let heading = NSTextField(labelWithString: "语法速查")
+        let heading = NSTextField(labelWithString: "插入 Markdown 语法")
         heading.font = .systemFont(ofSize: 16, weight: .medium)
         heading.textColor = OpenAllTheme.ink
         heading.frame = NSRect(x: 22, y: card.bounds.height - 43, width: width - 74, height: 26)

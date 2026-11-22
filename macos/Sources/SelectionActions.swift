@@ -238,6 +238,8 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
     private var actionHeading: NSTextField!
     private var actionScroll: NSScrollView!
     private var cancelButton: NSButton!
+    private var moreButton: NSPopUpButton!
+    private var otherRecognizedActions: [SelectionAction] = []
     private var actions: [SelectionAction] = []
     private var content: SelectedContent?
     private let orderStore = ActionOrderStore()
@@ -263,9 +265,23 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         displayToken += 1
         self.content = content
         actions = content.map { orderStore.sorted(Self.availableActions(for: $0), category: $0.category) } ?? []
+        otherRecognizedActions = recognized ? actions.filter { $0.kind != .copy && $0.kind != .translate } : []
+        if !otherRecognizedActions.isEmpty {
+            actions = actions.filter { $0.kind == .copy || $0.kind == .translate }
+            moreButton.removeAllItems()
+            moreButton.addItem(withTitle: "更多操作")
+            for (index, action) in otherRecognizedActions.enumerated() {
+                let item = NSMenuItem(title: action.title, action: #selector(runRecognizedAction(_:)), keyEquivalent: "")
+                item.tag = index
+                item.target = self
+                moreButton.menu?.addItem(item)
+            }
+        }
+        moreButton.isHidden = otherRecognizedActions.isEmpty
         let loading = message?.hasPrefix("正在识别") == true
         let hasImage = image != nil || content?.category == "image"
-        let height: CGFloat = loading ? 292 : hasImage && actions.count <= 3 ? 410 : max(360, 204 + CGFloat(min(7, actions.count)) * 34)
+        let imageHeight: CGFloat = image.map { min(220, $0.size.height, ceil(600 * $0.size.height / max(1, $0.size.width))) } ?? 120
+        let height: CGFloat = loading ? max(180, imageHeight + 106) : recognized ? 304 : hasImage && actions.count <= 3 ? 410 : max(360, 204 + CGFloat(min(7, actions.count)) * 34)
         panel?.setContentSize(NSSize(width: 640, height: height))
         panel?.contentView?.viewWithTag(301)?.frame.origin.y = height - 43
         contextLabel.frame.origin.y = height - 35
@@ -285,19 +301,20 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
                 contextLabel.stringValue = content?.summary ?? (loading ? "图片文字识别" : "当前状态")
             }
         }
+        preview.font = .systemFont(ofSize: recognized ? 16 : 13)
         preview.string = content?.preview ?? (loading ? "" : "暂未读取到选中内容")
         preview.textColor = content != nil || loading ? OpenAllTheme.ink : OpenAllTheme.muted
         imagePreview.image = selectedImage
         imagePreview.isHidden = imagePreview.image == nil
         previewScroll.isHidden = !imagePreview.isHidden
         if loading {
-            imagePreview.frame = NSRect(x: 20, y: 100, width: 600, height: 140)
+            imagePreview.frame = NSRect(x: 20, y: 53, width: 600, height: imageHeight)
             actionHeading.isHidden = true
             actionScroll.isHidden = true
-            progress.frame = NSRect(x: 24, y: 59, width: 20, height: 20)
-            emptyState.frame = NSRect(x: 54, y: 56, width: 430, height: 22)
+            progress.frame = NSRect(x: 24, y: 20, width: 20, height: 20)
+            emptyState.frame = NSRect(x: 54, y: 17, width: 430, height: 22)
             emptyState.alignment = .left
-            cancelButton.frame = NSRect(x: 520, y: 52, width: 96, height: 30)
+            cancelButton.frame = NSRect(x: 520, y: 14, width: 96, height: 30)
         } else if imagePreview.image != nil {
             emptyState.alignment = .center
             imagePreview.frame = NSRect(x: 20, y: height - 196, width: 600, height: 140)
@@ -319,6 +336,8 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
             imagePreview.frame.origin.x = (640 - width) / 2
             imagePreview.frame.size.width = width
         }
+        moreButton.frame.origin.y = height - 161
+        status.isHidden = loading
         status.stringValue = loading ? "Esc 取消 · 识别完成后自动显示文字与可用操作" :
             (message ?? (actions.isEmpty ? "Esc 关闭" : "↑↓ 选择　双击或回车执行　Esc 关闭"))
         table.deselectAll(nil)
@@ -408,6 +427,10 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         actionHeading.textColor = OpenAllTheme.muted
         actionHeading.frame = NSRect(x: 24, y: 304, width: 365, height: 18)
         root.addSubview(actionHeading)
+        moreButton = NSPopUpButton(frame: NSRect(x: 522, y: 0, width: 94, height: 25), pullsDown: true)
+        moreButton.setAccessibilityLabel("更多识别结果操作")
+        moreButton.isHidden = true
+        root.addSubview(moreButton)
         let scroll = NSScrollView(frame: NSRect(x: 14, y: 42, width: 612, height: 257))
         actionScroll = scroll
         scroll.drawsBackground = false
@@ -504,7 +527,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
     @objc private func moveActionDown() { moveAction(1) }
 
     private func moveAction(_ delta: Int) {
-        guard let content else { return }
+        guard let content, otherRecognizedActions.isEmpty else { return }
         let index = table.clickedRow >= 0 ? table.clickedRow : table.selectedRow
         guard actions.indices.contains(index) else { return }
         let selected = actions[index].kind
@@ -537,15 +560,22 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         let title = NSTextField(labelWithString: action.title)
         title.font = .systemFont(ofSize: 13, weight: .medium)
         title.textColor = OpenAllTheme.ink
-        title.frame = NSRect(x: 43, y: 9, width: 200, height: 21)
+        title.frame = NSRect(x: 43, y: 9, width: 144, height: 21)
         let detail = NSTextField(labelWithString: action.detail)
         detail.font = .systemFont(ofSize: 12)
         detail.textColor = OpenAllTheme.muted
         detail.alignment = .left
-        detail.frame = NSRect(x: 240, y: 9, width: 291, height: 21)
+        detail.frame = NSRect(x: 194, y: 9, width: 337, height: 21)
         cell.addSubview(title)
         cell.addSubview(detail)
         return cell
+    }
+
+    @objc private func runRecognizedAction(_ item: NSMenuItem) {
+        guard otherRecognizedActions.indices.contains(item.tag), let content else { return }
+        let kind = otherRecognizedActions[item.tag].kind
+        hide()
+        onChoose?(kind, content)
     }
 
     @objc private func activate() {

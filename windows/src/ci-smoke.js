@@ -195,9 +195,20 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       const input = document.querySelector('.clipboard-search'); input.value = ''; input.dispatchEvent(new Event('input'));
     });
     await evaluate(() => document.querySelector('[aria-label="新建标签"]').click());
-    await until(() => evaluate(() => !!document.querySelector('dialog[open] input')), '剪贴板标签命名');
+    await until(() => evaluate(() => document.activeElement===document.querySelector('.clip-tag-create input')), '剪贴板标签就地命名');
     await capture('tool-clipboard-new-tag');
-    await evaluate(() => document.querySelector('dialog[open] button').click());
+    await evaluate(() => document.querySelector('.clip-tag-create input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    check(await evaluate(() => !document.querySelector('.clip-tag-create') && document.activeElement.matches('.clipboard-add-tab')), '取消建标签后焦点回到入口');
+    await evaluate(() => {
+      document.querySelector('.clipboard-add-tab').click();
+      const field=document.querySelector('.clip-tag-create input');
+      field.value='就地验收';field.form.requestSubmit();
+    });
+    await until(() => evaluate(() => document.querySelector('.clipboard-tab[aria-pressed=true]')?.textContent.includes('就地验收')), '就地创建的标签直接成为当前标签');
+    await evaluate(async () => {
+      await openall.clipboardAction('deleteTag',{tag:'就地验收'});
+      await OpenAllApp.render('clipboard');
+    });
     await evaluate(() => document.querySelector('.clip-card').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:80,clientY:80})));
     await evaluate(() => [...document.querySelectorAll('.context-menu button')].find(item=>item.textContent === '编辑后粘贴…').click());
     await until(() => evaluate(() => !!document.querySelector('dialog[open] textarea')), '剪贴板编辑后粘贴');
@@ -217,6 +228,7 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
     await focusPage('clipboardPreview');
     check(await evaluate(expected => document.querySelector('.clip-preview .preview-content')?.textContent === expected
       && !!document.querySelector('.clip-preview-action button.primary:not(:disabled)'), previewText), '剪贴板预览显示全文和直接粘贴操作');
+    check(await evaluate(() => innerWidth<=740 && innerHeight<320 && document.querySelector('.preview-content').scrollHeight<=document.querySelector('.preview-content').clientHeight+2),'短文本全文预览按实际字数收紧且正文完整');
     await click('用工具打开 ▾');
     check(await evaluate(() => document.querySelectorAll('.context-menu [role=menuitem]:not(:disabled)').length === 4), '预览提供四个可用工具入口');
     await evaluate(() => document.querySelector('.context-menu button').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
@@ -389,12 +401,16 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       await open('selection', {kind:'image', dataUrl:sample});
       await until(() => evaluate(() => OpenAllApp.controller.getContent().kind === 'image'), '选中 OCR 样本图片');
       await evaluate(() => { void OpenAllApp.controller.activate({id:'recognizeText'}); });
-      await until(() => evaluate(() => !document.querySelector('.selection-loading').hidden), '进入 OCR 识别中状态');
+      await until(() => evaluate(() => document.querySelector('.context-selection')?.dataset.ocrReady==='true' && innerHeight<=330), '进入 OCR 识别中状态');
       await capture('tool-selection-ocr-loading');
       await until(() => evaluate(() => /12345/.test(document.querySelector('.selection-preview')?.innerText || '')), '系统 OCR 识别结果');
       check(await evaluate(() => /OPENALL/i.test(OpenAllApp.controller.getContent().text)
         && !!document.querySelector('[data-action="translate"]')), 'Windows OCR 结果显示在可继续操作的文本窗口');
       await capture('tool-selection-ocr-result');
+      check(await evaluate(() => document.querySelectorAll('.selection-action').length===2 && !document.querySelector('.selection-more').hidden), '识别结果优先呈现复制和翻译');
+      await evaluate(() => document.querySelector('.selection-more').click());
+      check(await evaluate(() => document.querySelectorAll('.context-menu [role=menuitem]').length>=3 && document.activeElement.closest('.context-menu')!==null), '更多文字处理操作可通过键盘访问');
+      await evaluate(() => document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
     }
     await open('translate', 'OpenAll'); await capture('tool-translate');
     await open('settings');
@@ -409,7 +425,45 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
         await until(() => evaluate(async () => (await openall.settings()).aliases[0].name === '小红书'), '网址别名还原');
         check(true, '网址别名编辑与持久化');
       }
-      await capture('settings-' + tab);
+      if (tab === 'commandAliases') {
+        const targets = await evaluate(() => {
+          const list = document.querySelector('.command-list');
+          const box = document.querySelector('.command-detail');
+          const filter = document.querySelector('.command-layout input[type=search]');
+          const options = [...list.querySelectorAll('button')];
+          if (!options.length || options.length !== window.OpenAllCatalog.length || box.hidden) return [];
+          options[1].click();
+          if (box.querySelector('h2').textContent !== options[1].querySelector('strong').textContent) return [];
+          filter.value = '__OpenAll_no_matching_tool__';
+          filter.dispatchEvent(new Event('input'));
+          if (!list.querySelector('.settings-empty-list') || !box.hidden) return [];
+          filter.value = '';
+          filter.dispatchEvent(new Event('input'));
+          const labels = [list.querySelector('.selected strong'),box.querySelector('h2'),box.querySelector('label')];
+          return labels.map(label => {
+            const range=document.createRange(); range.selectNodeContents(label);
+            const rect=range.getBoundingClientRect();
+            return [rect.left/innerWidth, rect.top/innerHeight, rect.right/innerWidth, rect.bottom/innerHeight];
+          });
+        });
+        check(targets.length === 3,'功能别名列出完整目录，切换详情和空搜索后恢复');
+        // 原生合成有时晚于 DOM。只有选项名、详情标题和输入标签均真正绘出，才保存画面。
+        await capture('settings-commandAliases',image => {
+          const width=640, height=400;
+          const data=image.resize({width,height}).toBitmap({scaleFactor:1});
+          if (data.length !== width*height*4) return false;
+          return targets.every(([x0,y0,x1,y1]) => {
+            let low=255, high=0;
+            for(let y=Math.floor(y0*height); y<Math.ceil(y1*height); y++)
+              for(let x=Math.floor(x0*width); x<Math.ceil(x1*width); x++) {
+                const i=(y*width+x)*4;
+                const value=(data[i]+2*data[i+1]+data[i+2])/4;
+                low=Math.min(low,value); high=Math.max(high,value);
+              }
+            return high-low>28;
+          });
+        });
+      } else await capture('settings-' + tab);
       if (tab === 'search') {
         await click('管理置顶与隐藏结果 →');
         await until(() => evaluate(() => !!document.querySelector('.rules-empty, .settings-content .data-table')), '搜索排序管理内容');
@@ -424,7 +478,7 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
         await until(() => evaluate(() => /会议日期 \d{4}-\d{2}-\d{2}/.test(document.querySelector('.snippet-expanded-text')?.textContent)), '查看片段展开结果');
         check(await evaluate(() => {
           const panel=document.querySelector('.snippet-expansion'), text=document.querySelector('.editor-form textarea');
-          return !document.querySelector('dialog[open]') && !panel.hidden && text.value.includes('{{date:') &&
+          return !document.querySelector('dialog[open]') && !panel.hidden && text.value.includes('{{date:') && /^\d{4}-\d{2}-\d{2}$/.test(panel.querySelector('mark')?.textContent) &&
             panel.getBoundingClientRect().top >= text.getBoundingClientRect().bottom;
         }), '片段模板与就地展开结果同时可读');
         await capture('settings-snippet-expansion');

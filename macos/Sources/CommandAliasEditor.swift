@@ -113,7 +113,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         let customLabel = label("自定义别名", x: 20, y: 213, width: 88, size: 12)
         customLabel.textColor = OpenAllTheme.ink
         detail.addSubview(customLabel)
-        aliasField = NSTextField(frame: NSRect(x: 110, y: 210, width: 175, height: 32))
+        aliasField = NSTextField(frame: NSRect(x: 110, y: 210, width: 261, height: 32))
         aliasField.placeholderString = "输入此功能的其他叫法"
         aliasField.delegate = self
         aliasField.target = self
@@ -124,10 +124,10 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         format.textColor = OpenAllTheme.muted
         detail.addSubview(format)
         let save = NSButton(title: "保存别名", target: self, action: #selector(saveAliases))
-        save.frame = NSRect(x: 292, y: 210, width: 80, height: 32)
+        save.frame = NSRect(x: 110, y: 145, width: 90, height: 32)
         WindowChrome.styleAction(save, primary: true)
         detail.addSubview(save)
-        notice = label("", x: 110, y: 151, width: 260, size: 11)
+        notice = label("", x: 209, y: 149, width: 165, size: 11)
         notice.textColor = OpenAllTheme.muted
         detail.addSubview(notice)
         refreshSelection()

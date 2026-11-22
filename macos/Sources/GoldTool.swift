@@ -446,7 +446,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("document.querySelector('#forecast-ctf').click(); return true;")
             try check(try await tool.execute("return document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7 && !!document.querySelector('#verification-note').textContent;") as? Bool == true,
                 "七日表格与实际报价验证展示")
-            try check(try await tool.execute("return ['#drivers','#events','#calendar'].every(selector=>document.querySelector(selector).children.length>0 && document.querySelector(selector).getClientRects().length>0);") as? Bool == true, "市场因素、近期国际事件与未来七日财经日历直接可见")
+            try check(try await tool.execute("return ['#market-breakdown > summary','#events','#calendar'].every(selector=>document.querySelector(selector).textContent.trim().length>0 && document.querySelector(selector).getClientRects().length>0);") as? Bool == true, "市场因素入口、近期国际事件与未来七日财经日历直接可见")
             let checkPrices = """
             const state = await openallGold.read();
             const quote = state.instruments.ctf.quote;
@@ -483,7 +483,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
                     if type == .keyDown { browser.keyDown(with: event) } else { browser.keyUp(with: event) }
                 }
             }
-            for id in ["verification-breakdown", "method-details"] {
+            for id in ["verification-breakdown", "market-breakdown", "method-details"] {
                 let focused = try await tool.execute("const details=document.getElementById('\(id)'), summary=details.querySelector('summary'); summary.focus(); return !details.open && document.activeElement===summary;")
                 try check(focused as? Bool == true, "键盘可聚焦详情摘要：\(id)")
                 for opened in [true, false] {

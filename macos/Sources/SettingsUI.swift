@@ -131,6 +131,7 @@ final class SettingsNavItem: NSButton, WindowThemeRefreshing {
 final class AppearancePresetButton: NSButton {
     var swatchColor: NSColor = .clear
     var swatchTitle = ""
+    var followsSystem = false
     var chosen = false {
         didSet {
             setAccessibilityValue(chosen ? 1 : 0)
@@ -142,6 +143,15 @@ final class AppearancePresetButton: NSButton {
         let swatch = NSBezierPath(roundedRect: box, xRadius: 6, yRadius: 6)
         swatchColor.setFill()
         swatch.fill()
+        if followsSystem {
+            NSGraphicsContext.saveGraphicsState()
+            swatch.addClip()
+            NSColor(white: 0.92, alpha: 1).setFill()
+            box.fill()
+            NSColor(white: 0.14, alpha: 1).setFill()
+            NSRect(x: box.midX, y: box.minY, width: box.width / 2, height: box.height).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
         OpenAllTheme.rule.setStroke()
         swatch.lineWidth = 1
         swatch.stroke()
@@ -254,7 +264,7 @@ final class PermissionsView: NSView {
         addSubview(retry)
         downloadsButton = retry
         let fileButton = NSButton(title: "打开文件权限设置 ↗", target: self, action: #selector(openFiles))
-        fileButton.frame = NSRect(x: 385, y: 215, width: 180, height: 26)
+        fileButton.frame = NSRect(x: 385, y: 20, width: 180, height: 24)
         WindowChrome.styleOutputAction(fileButton)
         addSubview(fileButton)
         filesPermissionButton = fileButton

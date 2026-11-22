@@ -23,6 +23,7 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
     private let header = NSView()
     private let scroll = NSScrollView()
     private var rows: [Row] = []
+    var preferredReportHeight: CGFloat { 32 + CGFloat(max(1, min(10, rows.count))) * 35 }
     private var markedRow: Int?
     private let numericColumns: Set<Int>
     private let empty = NSTextField(labelWithString: "粘贴内容并运行分析，结果会显示在这里")
@@ -190,6 +191,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
     private var manualRuleExpanded = false
     private var planCollapsed = false
     private var shortSQL = false
+    private var userResized = false
     private var baseFrames: [(NSView, NSRect)] = []
     private var reportSummary: NSTextField?
     private var reportDetail: NSTextField?
@@ -254,7 +256,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
                              backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
-        panel.minSize = NSSize(width: 940, height: 495)
+        panel.minSize = NSSize(width: 940, height: 350)
         panel.delegate = self
         WindowChrome.apply(panel, title: "后端工具")
         panel.center()
@@ -343,8 +345,9 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         mode = selected
         baseFrames = []
         planCollapsed = false
+        userResized = false
         shortSQL = false
-        if selected == .sql { window?.setContentSize(NSSize(width: root.bounds.width, height: 530)) }
+        if selected == .sql { window?.setContentSize(NSSize(width: root.bounds.width, height: 475)) }
         else if previousMode == .sql, root.bounds.height < 680 { window?.setContentSize(NSSize(width: root.bounds.width, height: 680)) }
         rebuild()
         if let saved = savedInputs[selected] {
@@ -434,17 +437,17 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
             for view in body.subviews {
                 if let button = view as? NSButton, button.action == #selector(analyze) { button.frame.origin = NSPoint(x: 4, y: 312); button.title = "识别字段" }
                 if let button = view as? NSButton, button.action == #selector(copyResult) { button.frame.origin = NSPoint(x: 834, y: 270) }
-                if let label = view as? NSTextField, label.stringValue == "2 聚合字段" { label.stringValue = "聚合字段"; label.frame = NSRect(x: 4, y: 276, width: 68, height: 22) }
-                if let label = view as? NSTextField, label.stringValue == "时间字段" { label.frame = NSRect(x: 410, y: 276, width: 70, height: 22) }
+                if let label = view as? NSTextField, label.stringValue == "2 聚合字段" { label.stringValue = "聚合字段"; label.frame = NSRect(x: 130, y: 317, width: 60, height: 22) }
+                if let label = view as? NSTextField, label.stringValue == "时间字段" { label.frame = NSRect(x: 419, y: 317, width: 60, height: 22) }
             }
-            groupField?.frame = NSRect(x: 78, y: 270, width: 296, height: 32)
-            timeField?.frame = NSRect(x: 486, y: 270, width: 226, height: 32)
-            manualRule?.frame = NSRect(x: 250, y: 312, width: 702, height: 30)
+            groupField?.frame = NSRect(x: 190, y: 311, width: 212, height: 32)
+            timeField?.frame = NSRect(x: 480, y: 311, width: 215, height: 32)
+            manualRule?.frame = NSRect(x: 130, y: 269, width: 700, height: 30)
             manualRule?.placeholderString = "字段名=正则表达式（取第 1 个捕获组，回车应用）"
             manualRule?.target = self
             manualRule?.action = #selector(analyze)
             manualRule?.isHidden = !manualRuleExpanded
-            let advanced = button(manualRuleExpanded ? "⌄ 自定义字段" : "› 自定义字段", x: 130, y: 312, w: 110, action: #selector(toggleLogRule))
+            let advanced = button(manualRuleExpanded ? "⌄ 自定义字段" : "› 自定义字段", x: 722, y: 312, w: 110, action: #selector(toggleLogRule))
             WindowChrome.styleOutputAction(advanced)
             output.frame = NSRect(x: 4, y: 4, width: 948, height: 254)
         }
@@ -525,7 +528,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         if mode != .sql, let output = result?.enclosingScrollView {
             let columns: [(String, CGFloat)]
             switch mode {
-            case .config: columns = [("变更", 78), ("字段路径", 330), ("原值", 270), ("新值", 270)]
+            case .config: columns = [("变更", 78), ("字段路径", 275), ("原值", 200), ("新值", 395)]
             case .explain: columns = [("计划节点", 170), ("对象 / 索引", 170), ("估算行", 90), ("实际行", 90), ("耗时 ms", 90), ("观察项", 338)]
             case .logs: columns = [("时间 / 聚合项", 320), ("级别", 96), ("消息", 532)]
             case .sql: columns = []
@@ -543,12 +546,14 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
             locateButton = locate
         }
         if mode == .explain {
-            let toggle = button("收起原文", x: 836, y: 486, w: 116, action: #selector(togglePlan(_:)))
+            let toggle = button("收起原文", x: 128, y: 328, w: 104, action: #selector(togglePlan(_:)))
             WindowChrome.styleOutputAction(toggle)
         }
         baseFrames = body.subviews.map { ($0, $0.frame) }
         layoutWorkbench()
     }
+
+    func windowWillStartLiveResize(_ notification: Notification) { userResized = true }
 
     func windowDidResize(_ notification: Notification) { if root != nil { layoutWorkbench() } }
 
@@ -556,27 +561,35 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         planCollapsed.toggle()
         sender.title = planCollapsed ? "展开原文" : "收起原文"
         left?.enclosingScrollView?.isHidden = planCollapsed
-        layoutWorkbench()
+        fitReportWindow()
     }
 
     private func layoutWorkbench() {
         guard let root, let body, !baseFrames.isEmpty else { return }
         let dx = root.bounds.width - 1000, dy = root.bounds.height - 680
         body.frame.size = NSSize(width: 952 + dx, height: 520 + dy)
-        let extra: CGFloat = mode == .explain && planCollapsed ? 116 : 0
+        let extra = savedVerticalSpace
         for (view, original) in baseFrames {
             var frame = original
+            if mode == .explain, let caption = view as? NSTextField, caption.stringValue.hasPrefix("粘贴 PostgreSQL") {
+                caption.isHidden = planCollapsed
+            }
             let output = view === reportView || view === result?.enclosingScrollView
             if output {
                 frame.size.width += dx
-                frame.size.height = max(56, original.height + dy + extra)
-                if mode == .sql && shortSQL {
+                frame.size.height = max(56, original.height + dy + extra + resultHeadingSpace)
+                if let preferred = resolvedReportHeight {
                     let top = frame.maxY
-                    frame.size.height = min(104, frame.height)
+                    frame.size.height = min(preferred, frame.height)
                     frame.origin.y = top - frame.height
                 }
             } else {
-                frame.origin.y += dy + (original.minY < 370 ? extra : 0)
+                let threshold: CGFloat = mode == .logs ? 260 : 370
+                frame.origin.y += dy + (original.minY < threshold ? extra : 0)
+                if mode == .sql && shortSQL && (view === left?.enclosingScrollView || view === right?.enclosingScrollView) {
+                    frame.size.height -= 40
+                    frame.origin.y += 40
+                }
                 if (mode == .config || mode == .sql) && (view === left?.enclosingScrollView || view === right?.enclosingScrollView) {
                     frame.size.width += dx / 2
                     if original.minX > 400 { frame.origin.x += dx / 2 }
@@ -591,10 +604,47 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         }
     }
 
+    private var savedVerticalSpace: CGFloat {
+        if mode == .explain && planCollapsed { return 144 }
+        if mode == .sql && shortSQL { return 40 }
+        if mode == .logs && !manualRuleExpanded { return 36 }
+        return 0
+    }
+
+    private var resultHeadingSpace: CGFloat { mode == .sql && reportDetail?.stringValue.isEmpty == true ? 14 : 0 }
+
+    private var resolvedReportHeight: CGFloat? {
+        guard !(result?.string.isEmpty ?? true) else { return nil }
+        if let reportView { return reportView.preferredReportHeight }
+        if shortSQL { return 54 }
+        var rows = 1
+        for c in (result?.string ?? "").utf8 where c == 10 {
+            rows += 1
+            if rows >= 15 { break }
+        }
+        return min(354, max(116, CGFloat(rows * 21 + 26)))
+    }
+
+    private func fitReportWindow() {
+        guard !userResized, let window, !window.styleMask.contains(.fullScreen), let desired = resolvedReportHeight,
+              let output = (reportView as NSView?) ?? result?.enclosingScrollView,
+              let base = baseFrames.first(where: { $0.0 === output })?.1 else { layoutWorkbench(); return }
+        let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+        let height = min(visible.height, max(window.minSize.height, 680 + desired - base.height - savedVerticalSpace - resultHeadingSpace))
+        if abs(window.frame.height - height) > 1 {
+            var frame = window.frame
+            frame.origin.y = max(visible.minY, min(visible.maxY, frame.maxY) - height)
+            frame.size.height = height
+            window.setFrame(frame, display: true)
+        }
+        layoutWorkbench()
+    }
+
     @objc private func toggleLogRule(_ sender: NSButton) {
         manualRuleExpanded.toggle()
         manualRule?.isHidden = !manualRuleExpanded
         sender.title = manualRuleExpanded ? "⌄ 自定义字段" : "› 自定义字段"
+        fitReportWindow()
         if manualRuleExpanded { window?.makeFirstResponder(manualRule) }
     }
 
@@ -630,6 +680,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         }
         reportDetail?.stringValue = detail
         reportDetail?.toolTip = detail
+        if title != defaultHeadline { fitReportWindow() }
     }
 
     private var defaultHeadline: String {
@@ -717,7 +768,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                         let ratio = max(estimate, count) / min(estimate, count)
                         if ratio.isFinite && ratio >= 10 {
                             let label = "估算偏\(estimate > count ? "高" : "低") \(String(format: "%.0f", ratio)) 倍"
-                            signals.append(label)
+                            signals.append("行数偏差")
                             deviation = true
                             if ratio > (largest?.ratio ?? 0) { largest = (ratio, label, name, index, "估算 \(estimated) 行 · 实际 \(actual) 行") }
                         }
@@ -822,7 +873,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
             let firstTime = rows.first?.fields[time] ?? ""
             let groupDate = firstTime.range(of: #"^\d{4}-\d{2}-\d{2}"#, options: .regularExpression).map { String(firstTime[$0]) } ?? ""
             let firstInstant = LogTimeline.timestamp(firstTime)
-            reportRows.append(.init(values: ["\(group) · \(key)", "\(rows.count) 条", groupDate], tone: "group"))
+            reportRows.append(.init(values: ["\(key)  \(groupDate)", "\(rows.count) 条", ""], tone: "group"))
             for entry in rows {
                 let level = entry.fields["level"] ?? entry.fields["severity"] ?? entry.fields["loglevel"] ?? "—"
                 let normalized = level.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()

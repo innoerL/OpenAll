@@ -39,7 +39,6 @@
         <div class="hover" hidden></div>
       </div>
       <div class="chart-dates"><span></span><span></span></div>
-      <div class="source-line"><button data-source="gold" class="quote-source">报价 Gold API</button><button data-source="goldHistory">曲线 goldprice.dev</button></div>
     </section>
 
     <section class="quote-card ctf" id="ctf" aria-labelledby="ctf-title">
@@ -58,7 +57,6 @@
         <div class="hover" hidden></div>
       </div>
       <div class="chart-dates"><span></span><span></span></div>
-      <div class="source-line"><button data-source="ctf" class="quote-source">报价 周大福官方商城</button><button data-source="ctfHistory">曲线 搜金价</button></div>
     </section>
 
     <section class="quote-card combined" id="combined" aria-label="国际金价与周大福金价" hidden>
@@ -68,14 +66,12 @@
           <span class="state"><i></i><span>等待取价</span></span>
           <div class="price-line"><span class="quote-price">—</span><span class="unit">美元 / 克</span></div>
           <p class="quote-time"></p>
-          <div class="source-line"><button data-source="gold" class="quote-source">报价 Gold API</button></div>
         </article>
         <article id="summary-ctf" class="summary ctf">
           <h2>周大福足金饰品 <span>内地</span></h2>
           <span class="state"><i></i><span>等待取价</span></span>
           <div class="price-line"><span class="quote-price">—</span><span class="unit">元 / 克</span></div>
           <p class="quote-time"></p>
-          <div class="source-line"><button data-source="ctf" class="quote-source">报价 周大福官方商城</button></div>
         </article>
       </div>
       <div class="history-head combined-chart-head"><strong>近一年走势</strong>
@@ -90,12 +86,16 @@
       </div>
       <div class="chart-dates"><span></span><span></span></div>
       <p id="combined-axis-note" hidden>曲线高度分别对应左右轴的价格，涨跌幅见上方报价。</p>
-      <div class="source-line"><button data-source="goldHistory">现货日收盘 goldprice.dev</button><button data-source="ctfHistory">挂牌价 搜金价</button></div>
     </section>
 
 </div>
     <footer><span id="network" class="online"><i></i><b>读取状态</b></span><span id="next">每日 10:00 取价</span></footer>
-    <div id="fx-source" class="source-line fx-source" hidden><button data-source="fx">参考汇率 Frankfurter / ECB</button></div>
+    <details id="quote-sources" class="quote-sources">
+      <summary>数据来源</summary>
+      <dl><dt>国际现货</dt><dd><button data-source="gold" id="source-gold">报价 Gold API</button><button data-source="goldHistory">日线 goldprice.dev</button></dd>
+        <dt>周大福</dt><dd><button data-source="ctf" id="source-ctf">报价 周大福官方商城</button><button data-source="ctfHistory">挂牌价 搜金价</button></dd>
+        <dt id="fx-source-label" hidden>参考汇率</dt><dd id="fx-source" hidden><button data-source="fx">Frankfurter / ECB</button></dd></dl>
+    </details>
   </div>
   <section id="outlook" class="quote-card outlook" aria-labelledby="forecast-title" hidden>
     <div class="outlook-heading"><h2 id="forecast-title">国际现货基准价</h2><nav class="view-switch" aria-label="展望品种"><button id="forecast-gold" aria-pressed="true">国际现货</button><button id="forecast-ctf" aria-pressed="false">周大福</button></nav></div>
@@ -116,14 +116,14 @@
       <tbody id="forecast-rows"></tbody>
     </table>
     <details id="verification-breakdown" class="outlook-block forecast-disclosure">
-      <summary><span>实际报价验证</span><span id="verification-note"></span></summary>
-      <div class="validation-body">
+      <summary>实际报价验证</summary>
+      <div class="validation-body"><p id="verification-note"></p>
         <span id="verification-status">北京时间 10:00–10:15</span>
         <p id="verification-details" class="outlook-meta"></p>
         <p id="verification-recent" class="outlook-meta" hidden></p>
       </div>
     </details>
-    <section class="outlook-block"><div class="outlook-heading"><h3>市场因素</h3><span id="market-status"></span></div><div id="drivers"></div></section>
+    <details id="market-breakdown" class="outlook-block forecast-disclosure"><summary>市场因素</summary><div class="market-reading"><span id="market-status"></span><div id="drivers"></div></div></details>
     <section class="outlook-block"><div class="outlook-heading"><h3>近期国际事件</h3><button class="text-button" data-source="news">联合国新闻 ↗</button></div><p id="event-note" class="outlook-meta"></p><ul id="events"></ul></section>
     <section class="outlook-block"><div class="outlook-heading"><h3>未来 7 日财经日历</h3><span id="calendar-status"></span></div><ul id="calendar"></ul></section>
     <details id="method-details" class="outlook-block forecast-disclosure">

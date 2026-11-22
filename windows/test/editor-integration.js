@@ -120,9 +120,15 @@ app.whenReady().then(async () => {
       await until(async () => {
         const state = await execute(comparison, measureNavigation);
         return state.width > 0 && state.width <= 480 && state.compact &&
-          state.difference === '1 / 2' && state.match === '匹配 1 / 2 · 左侧';
+          state.difference === '1 / 2' && state.match === '匹配 1 / 2 · 上栏';
       }, 5000);
       const state = await execute(comparison, measureNavigation);
+      check(await execute(comparison, () => {
+        const doc=OpenAllApp.controller.frame.contentDocument;
+        const panes=[...doc.querySelectorAll('.pane')], [top,bottom]=panes.map(p=>p.getBoundingClientRect());
+        return top.bottom <= bottom.top+1 && top.width >= 440 && Math.abs(top.left-bottom.left)<1 &&
+          panes.map(p=>p.querySelector('.pane-title strong').textContent).join('/')==='上栏/下栏';
+      }),'窄窗上下叠放并随栏位标记当前搜索匹配');
       check(state.geometryCorrect, '480 像素宽时差异和搜索匹配各占一排，计数与箭头完整可见');
     } finally {
       report.narrowNavigation = await execute(comparison, measureNavigation);
@@ -175,7 +181,9 @@ app.whenReady().then(async () => {
       const doc = OpenAllApp.controller.frame.contentDocument;
       const range = id => doc.querySelector(id).getBoundingClientRect();
       const difference = range('.navigation'), find = range('#findbar'), query = range('#find-query');
-      return difference.right <= find.left && find.top < difference.bottom && query.width >= 100 &&
+      const panes=[...doc.querySelectorAll('.pane')].map(p=>p.getBoundingClientRect());
+      return panes[0].right<=panes[1].left+1 && Math.abs(panes[0].top-panes[1].top)<1 &&
+        difference.right <= find.left && find.top < difference.bottom && query.width >= 100 &&
         doc.querySelector('.pane-menu').open && range('.natural-sort').width > 0;
     }), '宽窗的差异与查找同排独立显示，两栏操作直接可见');
     fs.writeFileSync(path.join(output, 'json-light.png'), (await json.webContents.capturePage()).toPNG());

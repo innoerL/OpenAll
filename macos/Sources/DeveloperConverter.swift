@@ -70,6 +70,29 @@ private final class ConversionCopyButton: NSButton {
 
 private final class ConversionHoverRow: NSView {
     weak var copyButton: ConversionCopyButton?
+    var copiesOnActivation = false
+    override var acceptsFirstResponder: Bool { copiesOnActivation }
+    override func becomeFirstResponder() -> Bool {
+        guard copiesOnActivation else { return super.becomeFirstResponder() }
+        copyButton?.rowHovered = true
+        wantsLayer = true; layer?.borderWidth = 1; layer?.borderColor = OpenAllTheme.accent.cgColor
+        return true
+    }
+    override func resignFirstResponder() -> Bool {
+        if copiesOnActivation { copyButton?.rowHovered = false; layer?.borderWidth = 0 }
+        return true
+    }
+    override func keyDown(with event: NSEvent) {
+        guard copiesOnActivation else { super.keyDown(with: event); return }
+        if [36, 49, 76].contains(event.keyCode) { copyButton?.performClick(nil); return }
+        if [125,126].contains(event.keyCode), let rows = superview?.subviews.compactMap({ $0 as? ConversionHoverRow }),
+           let index = rows.firstIndex(where: { $0 === self }) {
+            let next = index + (event.keyCode == 125 ? 1 : -1)
+            if rows.indices.contains(next) { window?.makeFirstResponder(rows[next]); rows[next].scrollToVisible(rows[next].bounds) }
+            return
+        }
+        super.keyDown(with: event)
+    }
     private var hoverTracking: NSTrackingArea?
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -79,7 +102,7 @@ private final class ConversionHoverRow: NSView {
         hoverTracking = area
     }
     override func mouseEntered(with event: NSEvent) { copyButton?.rowHovered = true }
-    override func mouseExited(with event: NSEvent) { copyButton?.rowHovered = false }
+    override func mouseExited(with event: NSEvent) { copyButton?.rowHovered = copiesOnActivation && window?.firstResponder === self }
 }
 
 final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
@@ -95,6 +118,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
     private var durationRows: [ConversionRow] = []
     private var cronInput: NSTextField?
     private var cronResults: NSView?
+    private var cronTimestamps: [String] = []
     private var asciiSearch: NSTextField?
     private var asciiScroll: NSScrollView?
     private var cronDescription: NSTextField?
@@ -277,7 +301,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             let name = sourceUnit.name.components(separatedBy: " · ")[0]
             durationSummary?.stringValue = "\(raw) \(name) \(operation) \(targetValue) \(targetUnit.name)"
         } else { durationSummary?.stringValue = "换算超出范围" }
-        let order = [target] + [6, 7, 5, 4, 3, 8, 9, 2, 1, 0].filter { $0 != target }
+        let order = [target] + [9, 8, 7, 6, 5, 4, 3, 2, 1, 0].filter { $0 != target }
         for (position, index) in order.enumerated() {
             let row = durationRows[index]
             let card = ConversionHoverRow(frame: NSRect(x: 0, y: CGFloat(333 - position * 37), width: holder.bounds.width, height: 35))
@@ -389,23 +413,44 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             holder.addSubview(value)
         }
         let zone = TimeZone(identifier: "Asia/Shanghai")!
-        for (index, date) in times.enumerated() {
-            let row = NSView(frame: NSRect(x: 12, y: CGFloat(166 - index * 39), width: 530, height: 34))
-            row.wantsLayer = true
-            row.layer?.backgroundColor = index == 0 ? OpenAllTheme.accent.withAlphaComponent(0.08).cgColor : NSColor.clear.cgColor
-            row.addSubview(label(index == 0 ? "下一次" : "\(index + 1)", frame: NSRect(x: 14, y: 8, width: 64, height: 19),
-                                 size: 12, color: index == 0 ? OpenAllTheme.accentText : OpenAllTheme.muted))
-            var calendar = Calendar(identifier: .gregorian)
-            calendar.timeZone = zone
-            let weekdays = ["", "星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"]
+        var days: [(key: String, times: [(String, String)])] = []
+        cronTimestamps = []
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let weekdays = ["", "星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"]
+        for date in times {
+            let day = TimeResults.format(date, "yyyy-MM-dd", zone)
             let weekday = weekdays[calendar.component(.weekday, from: date)]
-            let timestamp = label("\(TimeResults.format(date, "yyyy-MM-dd HH:mm:ss", zone)) \(weekday)",
-                                  frame: NSRect(x: 100, y: 6, width: 266, height: 23), size: 13)
-            timestamp.font = .monospacedDigitSystemFont(ofSize: 13, weight: index == 0 ? .semibold : .regular)
-            timestamp.isSelectable = true
-            row.addSubview(timestamp)
-            holder.addSubview(row)
+            let key = day + " " + weekday
+            let clock = TimeResults.format(date, "HH:mm:ss", zone)
+            if days.last?.key != key { days.append((key, [])) }
+            days[days.count - 1].times.append((clock, day + " " + clock + " " + weekday))
         }
+        var y: CGFloat = 172
+        for day in days {
+            let heading = label(day.key, frame: NSRect(x: 12, y: y + 2, width: 170, height: 20),
+                                size: 12, color: OpenAllTheme.muted)
+            heading.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            holder.addSubview(heading)
+            for (index, item) in day.times.enumerated() {
+                let slot = NSButton(title: item.0, target: self, action: #selector(copyCron(_:)))
+                slot.frame = NSRect(x: 180 + index % 3 * 114, y: Int(y) - index / 3 * 28, width: 100, height: 25)
+                WindowChrome.styleOutputAction(slot)
+                slot.isBordered = false
+                slot.tag = cronTimestamps.count
+                slot.font = .monospacedSystemFont(ofSize: 13, weight: slot.tag == 0 ? .semibold : .regular)
+                slot.contentTintColor = slot.tag == 0 ? OpenAllTheme.accentText : OpenAllTheme.ink
+                slot.toolTip = "复制 " + item.1
+                slot.setAccessibilityLabel("复制 " + item.1)
+                cronTimestamps.append(item.1)
+                holder.addSubview(slot)
+            }
+            y -= CGFloat((day.times.count + 2) / 3 * 28 + 9)
+        }
+    }
+
+    @objc private func copyCron(_ sender: NSButton) {
+        if cronTimestamps.indices.contains(sender.tag) { copy(cronTimestamps[sender.tag]) }
     }
 
     private func buildASCII() {
@@ -430,7 +475,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         status.alignment = .right
         status.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         asciiStatus = status
-        let header = NSView(frame: NSRect(x: 12, y: 301, width: 904, height: 30))
+        let header = NSView(frame: NSRect(x: 12, y: 301, width: 704, height: 30))
         WindowChrome.styleCard(header, radius: 6)
         for (title, x, width) in [("十进制", 15, 90), ("十六进制", 117, 100),
                                   ("字符", 238, 92), ("说明", 348, 247), ("复制字符", 608, 80)] {
@@ -438,7 +483,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
                                     size: 11, color: OpenAllTheme.muted, weight: .medium))
         }
         content.addSubview(header)
-        let scroll = NSScrollView(frame: NSRect(x: 12, y: 8, width: 904, height: 283))
+        let scroll = NSScrollView(frame: NSRect(x: 12, y: 8, width: 704, height: 283))
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         content.addSubview(scroll)
@@ -469,16 +514,17 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             asciiStatus?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         }
         let height = max(CGFloat(283), CGFloat(rows.count * 29 + 4))
-        let document = NSView(frame: NSRect(x: 0, y: 0, width: 886, height: height))
+        let document = NSView(frame: NSRect(x: 0, y: 0, width: 686, height: height))
         if rows.isEmpty {
             let empty = label("没有匹配的字符，可试试 A、65 或 0x41",
-                              frame: NSRect(x: 12, y: height / 2, width: 862, height: 24), size: 13, color: OpenAllTheme.muted)
+                              frame: NSRect(x: 12, y: height / 2, width: 662, height: 24), size: 13, color: OpenAllTheme.muted)
             empty.alignment = .center
             document.addSubview(empty)
         }
         for (index, item) in rows.enumerated() {
             let y = height - CGFloat((index + 1) * 29)
-            let row = NSView(frame: NSRect(x: 0, y: y, width: 886, height: 28))
+            let row = ConversionHoverRow(frame: NSRect(x: 0, y: y, width: 686, height: 28))
+            row.copiesOnActivation = true
             if index.isMultiple(of: 2) {
                 row.wantsLayer = true
                 row.layer?.backgroundColor = OpenAllTheme.surface.withAlphaComponent(0.35).cgColor
@@ -490,7 +536,7 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
                 field.isSelectable = true
                 row.addSubview(field)
             }
-            let copy = NSButton(title: "复制", target: self, action: #selector(copyASCII(_:)))
+            let copy = ConversionCopyButton(title: "复制", target: self, action: #selector(copyASCII(_:)))
             copy.tag = item.number
             copy.toolTip = "复制字符：\(item.character)"
             copy.frame = NSRect(x: 596, y: 2, width: 80, height: 25)
@@ -498,6 +544,10 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             copy.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "复制字符")
             copy.imagePosition = .imageOnly
             copy.contentTintColor = OpenAllTheme.muted
+            copy.isBordered = false
+            row.copyButton = copy
+            copy.rowHovered = false
+            row.setAccessibilityLabel("复制字符 " + item.character)
             row.addSubview(copy)
             row.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(copyASCIIRow(_:))))
             document.addSubview(row)

@@ -177,6 +177,7 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
         root.addSubview(split)
         input = makePane(title: "输入", width: 378, editable: true, split: split)
         input.delegate = self
+        input.insertionPointColor = OpenAllTheme.accentText
         input.string = "你好，OpenAll 👋"
         output = makePane(title: "结果", width: 378, editable: false, split: split)
         split.adjustSubviews()

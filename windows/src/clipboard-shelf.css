@@ -148,3 +148,20 @@
 }
 .clip-edit-dialog h2, .clip-edit-dialog .dialog-actions { margin:0; }
 .clip-edit-dialog textarea { width:100%; height:100%; min-height:0; resize:none; overflow:auto; padding:8px 10px; }
+
+.clip-tag-create { display:inline-flex; flex:none; gap:4px; align-items:center; }
+.clip-tag-create input { width:112px; min-width:0; height:28px; padding:3px 8px; }
+.clip-tag-create button { height:28px; min-height:28px; padding:0 7px; }
+.clip-tag-create button:last-child { width:26px; padding:0; }
+.clip-tag-submit { color:var(--accent-text); }
+.clip-origin { display:inline-flex; align-items:center; flex:none; gap:5px; min-width:0; }
+.clip-origin-name { display:none; }
+.clipboard-shelf[data-layout=list] .clip-card { grid-template-columns:76px minmax(0,1fr) 62px 100px 70px; }
+.clipboard-shelf[data-layout=list] .clip-origin { grid-area:1/4; color:var(--muted); }
+.clipboard-shelf[data-layout=list] .clip-origin-name { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11px; }
+.clipboard-shelf[data-layout=list] .clip-type-bar time { grid-area:1/5; }
+.clip-edit-dialog textarea { line-height:1.55; }
+@media(max-width:620px) {
+ .clipboard-shelf[data-layout=list] .clip-card { grid-template-columns:62px minmax(0,1fr) 20px 16px 61px; gap:5px; }
+ .clipboard-shelf[data-layout=list] .clip-origin-name { display:none; }
+}

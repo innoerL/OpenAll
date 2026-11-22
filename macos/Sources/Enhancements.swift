@@ -379,7 +379,7 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate, NSSplitViewDelega
         input = editor(12, "粘贴原文", editable: true)
         output = editor(492, "格式化后可在这里选择或复制结果", editable: false)
         input.delegate = self
-        for rect in [NSRect(x: 0, y: 60, width: 960, height: 0.5)] {
+        for rect in [NSRect(x: 0, y: 27, width: 960, height: 0.5)] {
             let rule = NSView(frame: rect)
             rule.wantsLayer = true
             rule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
@@ -417,6 +417,8 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate, NSSplitViewDelega
         WindowChrome.styleOutputAction(expand)
         expand.frame = NSRect(x: 769, y: 348, width: 74, height: 27)
         outputSummary.frame = NSRect(x: 550, y: 352, width: 208, height: 20)
+        expand.font = .systemFont(ofSize: 11)
+        expand.contentTintColor = OpenAllTheme.muted
         let panes = NSSplitView(frame: NSRect(x: 0, y: 60, width: 960, height: 326))
         panes.isVertical = true
         panes.dividerStyle = .thin
@@ -435,6 +437,8 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate, NSSplitViewDelega
             view.autoresizingMask = resizing
             parent.addSubview(view)
         }
+        action.frame = NSRect(x: 355, y: 346, width: 106, height: 28)
+        move(action, into: source, offset: 0, resizing: [.minXMargin, .minYMargin])
         move(sourceTitle, into: source, offset: 0, resizing: .minYMargin)
         move(inputSummary, into: source, offset: 0, resizing: [.minYMargin, .width])
         move(input.enclosingScrollView!, into: source, offset: 0, resizing: [.width, .height])
@@ -444,6 +448,8 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate, NSSplitViewDelega
         move(output.enclosingScrollView!, into: resultSurface, offset: 480, resizing: [.width, .height])
         move(copy, into: resultSurface, offset: 480, resizing: [.minXMargin, .minYMargin])
         move(expand, into: resultSurface, offset: 480, resizing: [.minXMargin, .minYMargin])
+        panes.frame = NSRect(x: 0, y: 27, width: 960, height: 359)
+        status.frame = NSRect(x: 24, y: 2, width: 900, height: 23)
         split = panes
         sourcePane = source
         WindowChrome.installControls(on: panel, compact: true)

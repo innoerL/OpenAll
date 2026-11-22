@@ -1,5 +1,5 @@
 const RAIL_WIDTH = 16;
-const RAIL_HEIGHT = 68;
+const RAIL_HEIGHT = 78;
 const SNAP_DISTANCE = 18;
 const HOVER_DELAY = 80;
 const HIDE_DELAY = 340;

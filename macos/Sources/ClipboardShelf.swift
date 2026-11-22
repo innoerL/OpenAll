@@ -424,7 +424,10 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         }
         let format = formatLabel
         let type = item.kind == "files" ? "文件" : format
-        let chip = NSRect(x: 9, y: floor(row.midY - 10), width: 101, height: 20)
+        let label = (item.pinned ? "★ " : "") + format
+        let labelFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let chipWidth = min(102, ceil((label as NSString).size(withAttributes: [.font: labelFont]).width) + 14)
+        let chip = NSRect(x: 9, y: floor(row.midY - 10), width: chipWidth, height: 20)
         let background = boardColor ?? ClipTypePalette.background(for: type, light: OpenAllTheme.isLight)
         let chipInk = boardColor == nil ? (OpenAllTheme.isLight ? ClipTypePalette.lightInk : ClipTypePalette.darkInk)
             : OpenAllTheme.readableText(OpenAllTheme.ink, on: [background])
@@ -433,7 +436,6 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         style.alignment = .center
-        let label = (item.pinned ? "★ " : "") + format
         (label as NSString).draw(in: chip.insetBy(dx: 3, dy: 2), withAttributes: [
             .font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: chipInk, .paragraphStyle: style])
         style.alignment = .right
@@ -462,7 +464,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             let match = (preview as NSString).range(of: searchTerm, options: .caseInsensitive)
             if match.location != NSNotFound { content.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match) }
         }
-        let textX = chip.maxX + 12
+        let textX: CGFloat = 122
         content.draw(in: NSRect(x: textX, y: floor(row.midY - 9), width: max(0, source.minX - textX - 12), height: 19))
     }
 
@@ -1353,6 +1355,10 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
 
     private func startAddingBoard() {
         guard newBoardField == nil else { return }
+        if let add = tabs.arrangedSubviews.compactMap({ $0 as? ShelfTab }).first(where: { $0.isAdd }) {
+            tabs.removeArrangedSubview(add)
+            add.removeFromSuperview()
+        }
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 130, height: 28))
         field.placeholderString = "新标签名称"
         field.setAccessibilityLabel("新标签名称")
@@ -1668,7 +1674,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
                               backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         WindowChrome.apply(window, title: "剪贴板卡片预览")
-        window.minSize = NSSize(width: 480, height: 300)
+        window.minSize = NSSize(width: 480, height: 200)
         window.center()
         let root = NSView(frame: window.contentView!.bounds)
         root.wantsLayer = true
@@ -1758,7 +1764,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             } else { text.string = "无法载入这张图片" }
         }
         let estimatedLines = String(text.string.prefix(12_000)).components(separatedBy: "\n").reduce(0) { $0 + max(1, Int(ceil(Double($1.count) / 65))) }
-        window.setContentSize(NSSize(width: 760, height: item.kind == "image" ? 500 : min(720, max(380, 204 + estimatedLines * 22))))
+        window.setContentSize(NSSize(width: 760, height: item.kind == "image" ? 500 : min(690, max(208, 166 + estimatedLines * 22))))
         previewWindow = window
         WindowChrome.present(window)
         WindowChrome.activate()
@@ -2138,7 +2144,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         let controller = NSViewController()
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 290))
         root.appearance = OpenAllTheme.appearance
-        let title = NSTextField(labelWithString: "编辑后粘贴")
+        let title = NSTextField(labelWithString: "编辑卡片后粘贴")
         title.font = .systemFont(ofSize: 16, weight: .semibold)
         title.textColor = OpenAllTheme.ink
         title.frame = NSRect(x: 14, y: 250, width: 392, height: 25)
@@ -2155,6 +2161,10 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         editor.layer?.masksToBounds = true
         let textView = NSTextView(frame: editor.bounds)
         textView.string = item.text
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 3
+        textView.defaultParagraphStyle = paragraph
+        textView.textStorage?.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: textView.string.utf16.count))
         textView.font = .systemFont(ofSize: 14)
         textView.textContainerInset = NSSize(width: 8, height: 8)
         textView.textColor = OpenAllTheme.ink

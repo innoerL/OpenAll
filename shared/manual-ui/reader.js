@@ -70,6 +70,11 @@ window.mountOpenAllManual = function (host, article, actions) {
     });
     toolbar.insertBefore(sectionPicker, toolbar.querySelector('button'));
   }
+  const title = article.querySelector(':scope > h1');
+  if (title && groups.length) {
+    article.setAttribute('aria-label', title.textContent);
+    title.remove();
+  }
   const intro = [...article.children].filter(element => !groups.some(group => group.heading === element || group.blocks.includes(element)));
   const notes = intro.filter(node => node.matches('p,ul,ol,blockquote'));
   if (notes.length && groups.length) {

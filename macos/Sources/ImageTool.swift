@@ -365,13 +365,26 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         root.addSubview(choose)
         choose.isHidden = true
         chooseButton = choose
-        for (title, symbol, x, buttonWidth, action) in [
-            ("裁剪", "crop", 366.0, 68.0, #selector(cropImage)),
-            ("左转", "rotate.left", 438.0, 62.0, #selector(rotateLeft)),
-            ("右转", "rotate.right", 506.0, 62.0, #selector(rotateRight))
+        let transforms = NSView(frame: NSRect(x: 357, y: 460, width: 219, height: 32))
+        transforms.wantsLayer = true
+        transforms.layer?.backgroundColor = OpenAllTheme.raised.withAlphaComponent(0.42).cgColor
+        transforms.layer?.borderColor = OpenAllTheme.rule.cgColor
+        transforms.layer?.borderWidth = 0.5
+        transforms.layer?.cornerRadius = 5
+        root.addSubview(transforms)
+        for boundary in [73,146] {
+            let separator = NSView(frame: NSRect(x: boundary, y: 6, width: 1, height: 20))
+            separator.wantsLayer = true
+            separator.layer?.backgroundColor = OpenAllTheme.rule.cgColor
+            transforms.addSubview(separator)
+        }
+        for (title, symbol, x, action) in [
+            ("裁剪", "crop", 0, #selector(cropImage)),
+            ("左转", "rotate.left", 73, #selector(rotateLeft)),
+            ("右转", "rotate.right", 146, #selector(rotateRight))
         ] {
             let button = NSButton(title: title, target: self, action: action)
-            button.frame = NSRect(x: x, y: 462, width: buttonWidth, height: 28)
+            button.frame = NSRect(x: x + 1, y: 1, width: 71, height: 30)
             WindowChrome.styleAction(button)
             button.layer?.backgroundColor = NSColor.clear.cgColor
             button.layer?.borderWidth = 0
@@ -379,7 +392,7 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
             button.imagePosition = .imageLeading
             if title != "裁剪" { button.toolTip = "向\(title == "左转" ? "左" : "右")旋转 90°" }
-            root.addSubview(button)
+            transforms.addSubview(button)
             transformButtons.append(button)
         }
         let hint = NSTextField(labelWithString: "选择图片或直接打开剪贴板图片")

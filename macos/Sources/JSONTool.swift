@@ -862,8 +862,9 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         guard let root = searchBar?.superview else { return }
         let compact = root.bounds.width < 888
         let start: CGFloat = compact ? 314 : 476
-        let width = min(416, root.bounds.width - 20 - start)
-        searchBar.frame = NSRect(x: root.bounds.width - 20 - width, y: searchButton.frame.midY - 16, width: width, height: 32)
+        let width = min(386, root.bounds.width - 20 - start)
+        let top = editor.enclosingScrollView?.frame.maxY ?? searchButton.frame.minY
+        searchBar.frame = NSRect(x: root.bounds.width - 20 - width, y: top - 1, width: width, height: 32)
         let overflow = searchVisible && compact
         foldButton.isHidden = overflow
         copyButton.isHidden = overflow
@@ -1471,7 +1472,8 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         var labels: [(range: NSRange, start: Int)] = []
         labels.reserveCapacity(projection.visibleRegions.count)
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular), .foregroundColor: OpenAllTheme.accentText
+            .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold), .foregroundColor: OpenAllTheme.ink,
+            .backgroundColor: OpenAllTheme.raised
         ]
         for visible in projection.visibleRegions where visible.isCollapsed {
             let range = NSRange(location: visible.openingOffset + 1, length: (visible.region.placeholder as NSString).length)

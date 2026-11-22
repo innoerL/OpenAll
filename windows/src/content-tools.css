@@ -88,7 +88,7 @@
 .aux-markdown .aux-markdown-preview > p { margin-block:0 .9em; }
 .aux-markdown .aux-help-popover h4 { margin:12px 8px 3px; color:var(--muted); font-size:12px; }
 .aux-id .aux-id-date > :first-child { position:relative; }
-.aux-id .aux-id-date > :first-child::after { content:"→"; position:absolute; left:100%; bottom:.4em; color:var(--muted); }
+.aux-id .aux-id-date [hidden] { display:none; }
 .aux-id > .aux-actions { gap:14px; align-items:center; }
 .aux-id > .aux-actions .muted { font-size:12px; }
 .image-preview-caption { display:flex; align-items:baseline; justify-content:space-between; gap:8px; min-height:18px; }
@@ -101,19 +101,37 @@
 @media (max-width:660px) {
   .aux-markdown .aux-help-popover { left:20px; right:20px; top:50%; width:auto; max-height:calc(50% - 30px); }
 }
-.aux-image .aux-dialog { width:500px; max-height:100%; overflow:auto; gap:10px; }
-.aux-image .aux-dialog > :is(h3,p) { margin:0; }
-.aux-image .aux-dialog .aux-crop-fields { grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-.aux-image .aux-dialog .aux-inline-error:empty { display:none; }
-.aux-image .aux-dialog .image-crop-guide { height:clamp(100px,33vh,210px); margin:2px 0; }
-@media (max-width:420px) {
-  .aux-image .aux-dialog-shade { padding:10px; }
-  .aux-image .aux-dialog { padding:14px; }
-  .aux-image .aux-dialog .aux-crop-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+/* 裁剪沿用主画布与右侧检查器的位置，原图只出现一次。 */
+.aux-image[data-cropping] > :is(.aux-image-main,.aux-image-controls) { display:none; }
+.aux-image[data-cropping] .aux-dialog-shade { position:absolute; inset:0; padding:0; background:var(--canvas); }
+.aux-image[data-cropping] .aux-dialog { display:grid; grid-template-columns:minmax(0,1fr) minmax(220px,28%); width:100%; height:100%; max-width:none; max-height:none; padding:0; gap:0; overflow:hidden; background:var(--canvas); border:0; box-shadow:none; border-radius:0; }
+.image-crop-stage { display:grid; place-items:stretch; min-width:0; min-height:0; padding:20px; background:var(--surface); }
+.aux-image .image-crop-stage > svg { width:100%; height:100%; min-height:0; margin:0; background:transparent; border-radius:0; }
+.image-crop-stage > svg:focus { outline:none; }
+.image-crop-stage:has(svg:focus-visible) { box-shadow:inset 0 -2px var(--accent); }
+.image-crop-inspector { display:flex; flex-direction:column; align-items:stretch; gap:12px; padding:18px 14px; border-inline-start:1px solid var(--rule); overflow:auto; }
+.image-crop-inspector :is(h3,p) { margin:0; }
+.image-crop-inspector .aux-crop-fields { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.image-crop-inspector .aux-inline-error:empty { display:none; }
+.image-crop-inspector .aux-actions { justify-content:flex-end; margin-top:4px; }
+.aux-image-toolbar > .aux-button:nth-last-child(-n+3) { min-height:30px; padding:3px 10px; border:1px solid var(--rule); border-radius:4px; color:var(--ink); }
+@media(max-width:540px) {
+  .aux-image[data-cropping] .aux-dialog { grid-template-columns:1fr; grid-template-rows:minmax(100px,1fr) auto; }
+  .image-crop-inspector { padding:10px 16px; gap:6px; max-height:56vh; border-inline-start:0; border-top:1px solid var(--rule); }
+  .image-crop-inspector .aux-crop-fields { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
-
-.aux-id .aux-id-date { grid-template-columns: minmax(76px,0.65fr) minmax(170px,1.3fr) minmax(116px,1fr); align-items:end; }
+.aux-markdown .aux-help-popover .aux-button { color:var(--ink); }
+.aux-markdown .aux-help-popover .aux-button:is(:hover,:focus-visible) { color:var(--accent-text); background:var(--raised); }
+.aux-unicode .aux-pane .aux-button.accent { color:var(--accent-text); border-color:var(--rule); }
+.aux-id .aux-id-date { grid-template-columns: minmax(112px,.8fr) minmax(165px,1.3fr) minmax(100px,1fr); align-items:end; }
 .aux-id-rule { font-size:12px; line-height:1.45; padding:0 0 5px 6px; }
 .aux-id-options { display:grid; grid-template-columns:minmax(90px,140px) minmax(100px,144px) 1fr; align-items:end; gap:12px; }
 .aux-id-options > button { justify-self:end; }
-@media(max-width:560px) { .aux-id .aux-id-date { grid-template-columns:minmax(62px,.55fr) minmax(150px,1.45fr); } .aux-id-rule { grid-column:1/-1; padding:0; } }
+@media(max-width:560px) { .aux-id .aux-id-date { grid-template-columns:minmax(112px,.8fr) minmax(150px,1.3fr); } .aux-id-rule { grid-column:1/-1; padding:0; } }
+
+.aux-id .aux-id-row { min-height:30px; padding-block:2px; }
+.aux-id .aux-id-row .aux-button { min-height:24px; padding-block:2px; }
+
+.aux-tool.aux-id { gap:10px; padding-block:12px; }
+.aux-id .aux-id-date { margin-top:0; }
+.aux-id .aux-status:empty { display:none; }

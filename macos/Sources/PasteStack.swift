@@ -270,6 +270,7 @@ final class PasteStackWindow: NSObject {
                 .font: NSFont.systemFont(ofSize: 13), .paragraphStyle: paragraph])
             preview.preferredMaxLayoutWidth = 189
             preview.maximumNumberOfLines = 2
+            preview.lineBreakMode = .byTruncatingTail
             preview.textColor = OpenAllTheme.ink
             let previewHeight = min(40, ceil(preview.intrinsicContentSize.height))
             preview.frame = NSRect(x: 76, y: floor(row.bounds.midY - previewHeight / 2), width: 189, height: previewHeight)
@@ -282,7 +283,7 @@ final class PasteStackWindow: NSObject {
             remove.toolTip = "从待粘贴队列中移除此项"
             remove.alphaValue = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0.7
             row.removeButton = remove
-            remove.frame = NSRect(x: 271, y: floor(row.bounds.midY - 13), width: 28, height: 26)
+            remove.frame = NSRect(x: 270, y: floor(row.bounds.midY - 17), width: 34, height: 34)
             row.addSubview(remove)
             list.addSubview(row)
         }

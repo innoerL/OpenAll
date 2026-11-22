@@ -346,15 +346,15 @@ final class SearchResultRowView: NSTableRowView {
             .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: OpenAllTheme.ink
         ])
         let size = label.size()
-        let right = row.maxX - 12
+        let right = row.maxX - 16
         let badge = NSRect(x: right - ceil(size.width) - 14, y: isFlipped ? row.minY + 5 : row.maxY - 26,
                            width: ceil(size.width) + 14, height: 21)
-        label.draw(at: NSPoint(x: right - ceil(size.width), y: round(badge.midY - size.height / 2)))
+        label.draw(at: NSPoint(x: right - 68, y: round(badge.midY - size.height / 2)))
         let context = NSAttributedString(string: Self.contextHint, attributes: [
             .font: NSFont.systemFont(ofSize: 11), .foregroundColor: OpenAllTheme.muted
         ])
         let contextSize = context.size()
-        context.draw(at: NSPoint(x: right - ceil(contextSize.width),
+        context.draw(at: NSPoint(x: right - 68,
                                  y: isFlipped ? badge.maxY + 3 : badge.minY - 3 - ceil(contextSize.height)))
     }
 }
@@ -398,7 +398,7 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             let card = NSView(frame: NSRect(x: (size.width - 440) / 2, y: (view.frame.height - 200) / 2, width: 440, height: 200))
             card.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
             state.addSubview(card)
-            let icon = NSImageView(frame: NSRect(x: 10, y: 114, width: 40, height: 36))
+            let icon = NSImageView(frame: NSRect(x: 26, y: 128, width: 26, height: 23))
             icon.image = NSImage(systemSymbolName: "wifi.exclamationmark", accessibilityDescription: "翻译连接失败")
             icon.contentTintColor = OpenAllTheme.accentText
             icon.imageScaling = .scaleProportionallyUpOrDown
@@ -423,7 +423,7 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             detail.frame = NSRect(x: 68, y: 99, width: 364, height: 22)
             card.addSubview(detail)
             let excerpt = NSTextField(wrappingLabelWithString: "")
-            excerpt.font = .systemFont(ofSize: 12, weight: .medium)
+            excerpt.font = .systemFont(ofSize: 13)
             excerpt.textColor = OpenAllTheme.ink
             excerpt.maximumNumberOfLines = 2
             excerpt.lineBreakMode = .byWordWrapping
@@ -450,7 +450,7 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             webView = view
         }
         let excerpt = text.prefix(96).split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        sourceExcerpt?.stringValue = excerpt.isEmpty ? "" : "待译原文\n" + excerpt
+        sourceExcerpt?.stringValue = excerpt.isEmpty ? "" : "待译原文\n“" + excerpt + "”"
         sourceExcerpt?.isHidden = excerpt.isEmpty
         WindowChrome.present(window)
         WindowChrome.activate()
@@ -2548,7 +2548,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             let title = settingLabel("快捷键", y: 474, width: 500)
             title.font = .systemFont(ofSize: 21, weight: .semibold)
             body.addSubview(title)
-            label("点击快捷键重新录制 · Esc 取消", 28, 445, 600, secondary: true)
+            label(shortcutsChecked ? "点击快捷键重新录制 · Esc 取消" : "点击快捷键重新录制 · Esc 取消 · 注册状态待检测", 28, 445, 600, secondary: true)
             label("搜索唤起方式", 28, 397, 220)
             let groupRight: CGFloat = 644
             let keyWidth: CGFloat = 136
@@ -2575,13 +2575,6 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 button.setAccessibilityValue(selected ? "已选中" : "未选中")
                 body.addSubview(button)
             }
-            let bindings = NSView(frame: NSRect(x: 28, y: 90, width: groupRight - 28, height: 284))
-            bindings.wantsLayer = true
-            bindings.layer?.cornerRadius = 9
-            bindings.layer?.backgroundColor = OpenAllTheme.surface.cgColor
-            bindings.layer?.borderWidth = 0.5
-            bindings.layer?.borderColor = OpenAllTheme.rule.cgColor
-            body.addSubview(bindings)
             let names: [UInt32: String] = [55:"Command ⌘",54:"Command ⌘",58:"Option ⌥",61:"Option ⌥",59:"Control ⌃",62:"Control ⌃",56:"Shift ⇧",60:"Shift ⇧"]
             let doubleTitle = settings.value.doubleTapKeyCode.map { "双击 " + (names[$0] ?? shortcutDescription(code: $0, modifiers: settings.value.doubleTapModifiers, label: settings.value.doubleTapKeyLabel)) } ?? "双击 Option ⌥"
             label("打开搜索", 44, 337, 220)
@@ -2597,11 +2590,11 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             let ready = isDouble ? doubleTapMonitor.isActive : shortcutAvailable
             let warning = OpenAllTheme.isLight ? (NSColor.systemOrange.blended(withFraction: 0.48, of: .black) ?? .systemOrange) : .systemOrange
             let checked = isDouble ? doubleTapChecked : shortcutsChecked
-            let state = NSTextField(labelWithString: !checked ? "未检测" : ready ? "已启用" : isDouble ? "监听未启动" : "已占用 · 点击重录")
+            let state = NSTextField(labelWithString: !checked ? (shortcutsChecked ? "待检测" : "") : ready ? "已启用" : isDouble ? "监听未启动" : "已占用 · 点击重录")
             state.font = .systemFont(ofSize: 12)
             state.textColor = !checked || ready ? OpenAllTheme.muted : warning
-            state.alignment = .left
-            state.frame = NSRect(x: 286, y: 339, width: isDouble && !ready ? 100 : 192, height: 22)
+            state.alignment = .right
+            state.frame = NSRect(x: keyX - (isDouble && checked && !ready ? 246 : 144), y: 339, width: 132, height: 22)
             if checked && !ready { active.layer?.borderColor = warning.withAlphaComponent(0.5).cgColor }
             body.addSubview(state)
             settingsStatus = state
@@ -2617,8 +2610,9 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 body.addSubview(rule)
                 label(item.0, 44, y, 250)
                 label(item.1, 44, y - 20, 234, secondary: true)
-                let registration = settingLabel(!shortcutsChecked ? "未检测" : item.4 ? "已启用" : "已占用 · 点击重录", y: y - 5, width: 190)
-                registration.frame.origin.x = 286
+                let registration = settingLabel(!shortcutsChecked ? "" : item.4 ? "已启用" : "已占用 · 点击重录", y: y - 5, width: 132)
+                registration.frame.origin.x = keyX - 144
+                registration.alignment = .right
                 registration.font = .systemFont(ofSize: 12)
                 registration.textColor = !shortcutsChecked || item.4 ? OpenAllTheme.muted : warning
                 body.addSubview(registration)
@@ -2653,7 +2647,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             text("搜索", 474).font = .systemFont(ofSize: 21, weight: .semibold)
             let pinyin = WindowChrome.checkbox("中文支持拼音和首字母匹配", target: self, action: #selector(pinyinChanged(_:)))
             pinyin.state = settings.value.pinyinEnabled ? .on : .off
-            pinyin.frame = NSRect(x: 28, y: 432, width: 600, height: 30)
+            pinyin.frame = NSRect(x: 28, y: 402, width: 600, height: 30)
             body.addSubview(pinyin)
             let chromeEnabled = settings.value.searchBookmarks || settings.value.searchHistory
             let showDirectory = chromeEnabled && chromeAdvancedExpanded
@@ -2713,7 +2707,8 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             searchFileHint = hint
             refreshFileSearchHint()
             let manage = NSButton(title: "管理置顶与隐藏结果 →", target: self, action: #selector(openSearchManager))
-            manage.frame = NSRect(x: 355, y: 432, width: 209, height: 30)
+            manage.frame = NSRect(x: 28, y: 438, width: 190, height: 28)
+            manage.alignment = .left
             WindowChrome.styleOutputAction(manage)
             body.addSubview(manage)
         case 2:
@@ -2773,11 +2768,16 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             pause.isEnabled = clipboardStore.preferences.enabled
             WindowChrome.stylePopUp(pause)
             body.addSubview(pause)
-            let plain = WindowChrome.checkbox("默认粘贴为纯文本（关闭则保留原样式）", target: self, action: #selector(clipboardPreferenceChanged(_:)))
+            let plain = WindowChrome.checkbox("默认粘贴为纯文本", target: self, action: #selector(clipboardPreferenceChanged(_:)))
             plain.tag = 3
             plain.state = clipboardStore.preferences.plainTextByDefault ? .on : .off
-            plain.frame = NSRect(x: 28, y: 302, width: 536, height: 28)
+            plain.frame = NSRect(x: 28, y: 311, width: 536, height: 26)
             body.addSubview(plain)
+            let formatHint = settingLabel("关闭时保留复制内容的原有格式。", y: 290, width: 420)
+            formatHint.frame.origin.x = 50
+            formatHint.font = .systemFont(ofSize: 11)
+            formatHint.textColor = OpenAllTheme.muted
+            body.addSubview(formatHint)
             body.addSubview(settingLabel("保留时间", y: 226))
             let capacity = NSPopUpButton(frame: NSRect(x: 324, y: 220, width: 240, height: 28))
             for (days, title) in [(7, "一周"), (30, "一月"), (90, "三月"), (365, "一年")] {
@@ -2821,7 +2821,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             WindowChrome.styleAction(open)
             body.addSubview(open)
             let clear = NSButton(title: "清理历史…  ▾", target: self, action: #selector(showClearMenu(_:)))
-            clear.frame = NSRect(x: 422, y: 54, width: 142, height: 28)
+            clear.frame = NSRect(x: 260, y: 54, width: 142, height: 28)
             WindowChrome.styleAction(clear)
             clear.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.07).cgColor
             clear.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.22).cgColor
@@ -2888,6 +2888,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 for (index, value) in values.enumerated() {
                     let button = AppearancePresetButton(frame: NSRect(x: 90 + CGFloat(index) * 108, y: y, width: 106, height: 34))
                     button.swatchTitle = value.0
+                    button.followsSystem = value.1 == "SYSTEM"
                     button.swatchColor = (value.1 == "SYSTEM" ? OpenAllTheme.systemCanvas : OpenAllTheme.color(value.1)) ?? OpenAllTheme.canvas
                     button.isBordered = false
                     button.font = .systemFont(ofSize: 12, weight: .medium)
@@ -3050,20 +3051,21 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     }
 
     private func renderSearchManager(in body: NSView) {
-        let heading = settingLabel("搜索排序管理", y: 449, width: 260)
+        let heading = settingLabel("搜索排序管理", y: 407, width: 260)
         heading.font = .systemFont(ofSize: 18, weight: .medium)
         body.addSubview(heading)
         let back = NSButton(title: "← 返回搜索设置", target: self, action: #selector(closeSearchManager))
-        back.frame = NSRect(x: 174, y: 445, width: 147, height: 32)
+        back.frame = NSRect(x: 28, y: 445, width: 135, height: 28)
+        back.alignment = .left
         WindowChrome.styleOutputAction(back)
         body.addSubview(back)
         let hint = NSTextField(wrappingLabelWithString: "管理置顶与隐藏的搜索结果。")
         hint.font = .systemFont(ofSize: 12)
         hint.textColor = .secondaryLabelColor
-        hint.frame = NSRect(x: 28, y: 395, width: 640, height: 35)
+        hint.frame = NSRect(x: 28, y: 365, width: 640, height: 35)
         body.addSubview(hint)
         let rules = ranking.manualRules
-        let scroll = NSScrollView(frame: NSRect(x: 28, y: 116, width: 640, height: 270))
+        let scroll = NSScrollView(frame: NSRect(x: 28, y: 100, width: 640, height: 260))
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = !rules.isEmpty
         scroll.autohidesScrollers = true
@@ -3075,16 +3077,16 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             let emptyTitle = NSTextField(labelWithString: "暂无置顶或隐藏的结果")
             emptyTitle.font = .systemFont(ofSize: 15, weight: .semibold)
             emptyTitle.textColor = OpenAllTheme.ink
-            emptyTitle.alignment = .center
-            emptyTitle.frame = NSRect(x: 0, y: 175, width: 620, height: 24)
+            emptyTitle.alignment = .left
+            emptyTitle.frame = NSRect(x: 0, y: 226, width: 620, height: 24)
             content.addSubview(emptyTitle)
             let instructions = NSTextField(labelWithString: "在搜索中选中结果，按 ⌘K 即可置顶或隐藏。")
             instructions.textColor = OpenAllTheme.muted
-            instructions.alignment = .center
-            instructions.frame = NSRect(x: 0, y: 147, width: 620, height: 22)
+            instructions.alignment = .left
+            instructions.frame = NSRect(x: 0, y: 198, width: 620, height: 22)
             content.addSubview(instructions)
             let start = NSButton(title: "打开搜索", target: self, action: #selector(show))
-            start.frame = NSRect(x: 251, y: 94, width: 118, height: 32)
+            start.frame = NSRect(x: 0, y: 150, width: 118, height: 32)
             WindowChrome.styleAction(start, primary: true)
             content.addSubview(start)
         }

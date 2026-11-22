@@ -53,7 +53,7 @@ final class GoldEdgeDock {
 
     init(window: NSPanel) {
         self.window = window
-        rail = GoldRailPanel(contentRect: NSRect(x: 0, y: 0, width: 16, height: 68),
+        rail = GoldRailPanel(contentRect: NSRect(x: 0, y: 0, width: 16, height: 78),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         rail.title = "OpenAll 金价贴边条"
         rail.isReleasedWhenClosed = false
@@ -63,7 +63,7 @@ final class GoldEdgeDock {
         rail.hidesOnDeactivate = false
         rail.level = .floating
         rail.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        let view = GoldRailView(frame: NSRect(x: 0, y: 0, width: 16, height: 68))
+        let view = GoldRailView(frame: NSRect(x: 0, y: 0, width: 16, height: 78))
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(.button)
         view.setAccessibilityLabel("展开 OpenAll 金价")
@@ -98,7 +98,7 @@ final class GoldEdgeDock {
     }
 
     static func railBounds(_ panel: NSRect, area: NSRect, side: String) -> NSRect {
-        let height = min(68, area.height)
+        let height = min(78, area.height)
         return NSRect(x: side == "left" ? area.minX : area.maxX - 16,
             y: min(max((panel.midY - height / 2).rounded(), area.minY), area.maxY - height),
             width: 16, height: height)

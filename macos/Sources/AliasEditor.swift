@@ -41,7 +41,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
     }
 
     private func input(_ placeholder: String, y: CGFloat, multiline: Bool = false) {
-        let field = NSTextField(frame: NSRect(x: 260, y: y, width: 418, height: multiline ? 70 : 34))
+        let field = NSTextField(frame: NSRect(x: 236, y: y, width: 442, height: multiline ? 70 : 34))
         field.placeholderString = placeholder
         field.font = .systemFont(ofSize: 12)
         WindowChrome.styleInput(field)
@@ -60,13 +60,13 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
     private func build() {
         label("网址别名", x: 28, y: 472, width: 220, size: 20)
         label("输入别名和关键词，直接打开对应网站。", x: 28, y: 440, width: 600, size: 12)
-        let left = NSView(frame: NSRect(x: 18, y: 82, width: 215, height: 340))
-        let right = NSView(frame: NSRect(x: 246, y: 82, width: 444, height: 340))
+        let left = NSView(frame: NSRect(x: 18, y: 82, width: 191, height: 340))
+        let right = NSView(frame: NSRect(x: 222, y: 82, width: 468, height: 340))
         WindowChrome.styleSettingsSection(left)
         WindowChrome.styleSettingsSection(right)
         left.layer?.backgroundColor = NSColor.clear.cgColor
         right.layer?.backgroundColor = NSColor.clear.cgColor
-        let separator = NSView(frame: NSRect(x: 239, y: 90, width: 1, height: 326))
+        let separator = NSView(frame: NSRect(x: 215, y: 90, width: 1, height: 326))
         separator.wantsLayer = true
         separator.layer?.backgroundColor = OpenAllTheme.rule.cgColor
         addSubview(separator)
@@ -75,10 +75,10 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         label("网站", x: 36, y: 393, width: 150)
         countLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         countLabel.textColor = OpenAllTheme.muted
-        countLabel.frame = NSRect(x: 135, y: 393, width: 80, height: 20)
+        countLabel.frame = NSRect(x: 111, y: 393, width: 80, height: 20)
         countLabel.alignment = .right
         addSubview(countLabel)
-        scroll.frame = NSRect(x: 29, y: 140, width: 193, height: 240)
+        scroll.frame = NSRect(x: 29, y: 140, width: 169, height: 240)
         scroll.hasVerticalScroller = true
         scroll.scrollerStyle = .overlay
         scroll.autohidesScrollers = true
@@ -87,22 +87,22 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         scroll.documentView = list
         addSubview(scroll)
         let add = NSButton(title: "＋  新增网址", target: self, action: #selector(newAlias))
-        add.frame = NSRect(x: 35, y: 101, width: 180, height: 32)
+        add.frame = NSRect(x: 35, y: 101, width: 156, height: 32)
         WindowChrome.styleAction(add)
         addSubview(add)
-        label("显示名称", x: 260, y: 393, width: 180)
+        label("显示名称", x: 236, y: 393, width: 180)
         input("例如 Google", y: 354)
-        label("别名 · 最多三个，用逗号分隔", x: 260, y: 310, width: 350)
+        label("别名 · 最多三个，用逗号分隔", x: 236, y: 310, width: 350)
         input("例如 google, gg", y: 270)
-        label("网址模板 · {query} 代表搜索词", x: 260, y: 229, width: 350)
+        label("网址模板 · {query} 代表搜索词", x: 236, y: 229, width: 350)
         input("https://example.com/search?q={query}", y: 155, multiline: true)
-        example.frame = NSRect(x: 260, y: 126, width: 418, height: 20)
+        example.frame = NSRect(x: 236, y: 132, width: 442, height: 20)
         example.font = .systemFont(ofSize: 12)
         example.textColor = OpenAllTheme.muted
         example.lineBreakMode = .byTruncatingTail
         addSubview(example)
         saveButton = NSButton(title: "保存更改", target: self, action: #selector(saveAlias))
-        saveButton.frame = NSRect(x: 260, y: 86, width: 104, height: 30)
+        saveButton.frame = NSRect(x: 236, y: 86, width: 104, height: 30)
         WindowChrome.styleAction(saveButton, primary: true)
         addSubview(saveButton)
         deleteButton = NSButton(title: "删除", target: self, action: #selector(deleteAlias))
@@ -111,7 +111,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         addSubview(deleteButton)
         notice.font = .systemFont(ofSize: 12)
         notice.textColor = OpenAllTheme.muted
-        notice.frame = NSRect(x: 375, y: 89, width: 221, height: 20)
+        notice.frame = NSRect(x: 351, y: 89, width: 245, height: 20)
         addSubview(notice)
         rebuildList(resetScroll: true)
         fillSelection()
@@ -122,10 +122,10 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         countLabel.stringValue = "\(store.items.count) 个网站"
         list.subviews.forEach { $0.removeFromSuperview() }
         let height = max(CGFloat(store.items.count) * 40, scroll.contentSize.height)
-        list.frame = NSRect(x: 0, y: 0, width: 190, height: height)
+        list.frame = NSRect(x: 0, y: 0, width: scroll.contentSize.width, height: height)
         for (index, alias) in store.items.enumerated() {
             let button = NSButton(title: alias.title, target: self, action: #selector(selectAlias(_:)))
-            button.frame = NSRect(x: 2, y: height - CGFloat(index + 1) * 40, width: 184, height: 38)
+            button.frame = NSRect(x: 2, y: height - CGFloat(index + 1) * 40, width: list.bounds.width - 4, height: 38)
             button.tag = index
             button.alignment = .left
             button.toolTip = alias.allNames.joined(separator: " · ")
@@ -192,7 +192,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
     private func showNotice(_ text: String, error: Bool = false) {
         notice.stringValue = text
         notice.toolTip = text
-        notice.frame = error ? NSRect(x: 260, y: 54, width: 418, height: 22) : NSRect(x: 375, y: 89, width: 221, height: 20)
+        notice.frame = error ? NSRect(x: 236, y: 54, width: 442, height: 22) : NSRect(x: 351, y: 89, width: 245, height: 20)
         notice.textColor = error ? .systemOrange : OpenAllTheme.muted
     }
 

@@ -180,3 +180,26 @@
 .editor-formatter.expanded-result .editor-formatter-pane.output { border:0; }
 .editor-formatter .editor-pane-heading > button { flex:none; white-space:nowrap; }
 .editor-formatter .formatter-count { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+
+.editor-formatter .editor-pane-heading button.primary { background:var(--accent); color:var(--on-accent,#242526); padding:0 10px; font-weight:600; }
+.editor-formatter .editor-pane-heading kbd { font:inherit; font-size:10px; margin-left:4px; }
+.editor-formatter .editor-pane-heading button[aria-pressed] { color:var(--muted); font-size:11px; }
+.editor-formatter .editor-formatter-footer:not(:has(.editor-formatter-status:not(:empty))) { display:none; }
+.aux-backend-body:is([data-mode=configDiff],[data-mode=explain],[data-mode=logTimeline]) > .aux-report { flex:0 1 auto; min-height:0; }
+.aux-backend-body[data-mode=explain] > .aux-pane.source-collapsed { display:none; }
+.aux-backend-body[data-mode=sqlRestore].short-sql > .aux-split.inputs { flex-basis:94px; min-height:82px; }
+.aux-backend-body[data-mode=sqlRestore].short-sql > .aux-pane { flex-basis:54px; min-height:54px; }
+.aux-backend-body[data-mode=sqlRestore].short-sql .aux-report-heading { min-height:32px; }
+.aux-converter .aux-ascii-lookup + .aux-report { width:min(100%,760px); }
+.aux-converter .aux-ascii-lookup + .aux-report tbody tr:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+@media (hover:hover) and (pointer:fine) {
+  .aux-converter .aux-ascii-lookup + .aux-report tr .aux-copy-icon { opacity:0; }
+  .aux-converter .aux-ascii-lookup + .aux-report tr:is(:hover,:focus-within) .aux-copy-icon { opacity:1; }
+}
+
+.aux-converter .aux-cron-day { display:grid; grid-template-columns:minmax(115px,31%) minmax(0,1fr); align-items:start; gap:12px; padding:10px 0; border-bottom:1px solid var(--rule); }
+.aux-cron-day > span { padding-block:4px; font:12px ui-monospace,monospace; color:var(--muted); }
+.aux-cron-day > div { display:flex; flex-wrap:wrap; gap:4px 10px; }
+.aux-converter .aux-cron-day .aux-cron-row { padding:3px 5px; min-width:0; min-height:24px; color:var(--ink); border:none; background:transparent; font:13px ui-monospace,monospace; }
+.aux-converter .aux-cron-day .aux-cron-row.next { color:var(--accent-text); background:color-mix(in srgb,var(--accent) 11%,transparent); font-weight:650; }
+.aux-converter .aux-cron-day .aux-cron-row:hover { background:var(--raised); }

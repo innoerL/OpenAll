@@ -236,6 +236,8 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
     private var city: NSPopUpButton!
     private var region: NSPopUpButton!
     private var gender: NSPopUpButton!
+    private var birthdayMode: NSPopUpButton!
+    private var birthdayHint: NSTextField!
     private var age: NSTextField!
     private var year: NSTextField!
     private var month: NSTextField!
@@ -291,8 +293,7 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
             button.cell?.lineBreakMode = .byTruncatingTail
         }
         provinceChanged()
-        for (title, x, width) in [("按年龄推算", CGFloat(24), CGFloat(78)),
-                                   ("出生日期 · 可手填", 126, 180),
+        for (title, x, width) in [("生日输入方式", CGFloat(24), CGFloat(125)),
                                    ("性别", 24, 140), ("生成数量 · 1–500", 186, 168)] {
             let label = NSTextField(labelWithString: title)
             label.font = .systemFont(ofSize: 11, weight: .medium)
@@ -300,15 +301,18 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
             label.frame = NSRect(x: x, y: title == "性别" || title.hasPrefix("生成数量") ? 274 : 335, width: width, height: 18)
             root.addSubview(label)
         }
-        age = numericField("周岁", x: 24, y: 304, width: 70, root: root)
+        birthdayMode = NSPopUpButton(frame: NSRect(x: 24, y: 304, width: 135, height: 30))
+        birthdayMode.addItems(withTitles: ["填写生日", "按周岁推算"])
+        birthdayMode.setAccessibilityLabel("生日输入方式")
+        WindowChrome.stylePopUp(birthdayMode)
+        birthdayMode.target = self
+        birthdayMode.action = #selector(birthdayModeChanged)
+        root.addSubview(birthdayMode)
+        age = numericField("周岁", x: 180, y: 304, width: 76, root: root)
         age.setAccessibilityLabel("年龄")
-        let arrow = NSImageView(image: NSImage(systemSymbolName: "arrow.right", accessibilityDescription: "年龄自动回填生日") ?? NSImage())
-        arrow.frame = NSRect(x: 100, y: 313, width: 16, height: 14)
-        arrow.contentTintColor = OpenAllTheme.muted
-        root.addSubview(arrow)
-        year = numericField("年", x: 126, y: 304, width: 62, root: root)
-        month = numericField("月", x: 194, y: 304, width: 53, root: root)
-        day = numericField("日", x: 253, y: 304, width: 53, root: root)
+        year = numericField("年", x: 180, y: 304, width: 68, root: root)
+        month = numericField("月", x: 254, y: 304, width: 52, root: root)
+        day = numericField("日", x: 312, y: 304, width: 52, root: root)
         gender = NSPopUpButton(frame: NSRect(x: 24, y: 244, width: 140, height: 30))
         WindowChrome.stylePopUp(gender)
         gender.addItems(withTitles: ["随机性别", "男", "女"])
@@ -320,11 +324,12 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         WindowChrome.styleAction(generate, primary: true)
         generate.keyEquivalent = "\r"
         root.addSubview(generate)
-        let birthdayHint = NSTextField(labelWithString: "按周岁沿用今天的月日，生日留空则随机。")
+        birthdayHint = NSTextField(labelWithString: "留空时随机生成")
         birthdayHint.font = .systemFont(ofSize: 12)
         birthdayHint.textColor = OpenAllTheme.muted
-        birthdayHint.frame = NSRect(x: 325, y: 310, width: 309, height: 18)
+        birthdayHint.frame = NSRect(x: 385, y: 310, width: 250, height: 18)
         root.addSubview(birthdayHint)
+        updateBirthdayMode()
         resultLabel = NSTextField(labelWithString: "生成结果")
         resultLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         resultLabel.textColor = OpenAllTheme.ink
@@ -450,15 +455,36 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         return birthday
     }
 
+    @objc private func birthdayModeChanged() {
+        if birthdayMode.indexOfSelectedItem == 0 {
+            age.stringValue = ""
+            markAgeInvalid(false)
+        }
+        updateBirthdayMode()
+        window?.makeFirstResponder(birthdayMode.indexOfSelectedItem == 0 ? year : age)
+    }
+
+    private func updateBirthdayMode() {
+        let byAge = birthdayMode.indexOfSelectedItem == 1
+        age.isHidden = !byAge
+        for field in [year, month, day] { field?.isHidden = byAge }
+        birthdayHint.stringValue = byAge ? "沿用今天的月日" : "留空时随机生成"
+    }
+
     func controlTextDidChange(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else { return }
         if field === age {
+            birthdayMode.selectItem(at: 1)
+            updateBirthdayMode()
             do {
                 if let birthday = try applyAge() {
+                    birthdayHint.stringValue = birthday.text
                     setStatus("已按 \(Int(age.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) 岁回填 \(birthday.text)" + (birthday.clamped ? " · 非闰年已取 2 月 28 日" : " · 可直接修改出生日期"))
                 } else { setStatus("已清空年龄，保留当前出生日期") }
             } catch { setStatus(error.localizedDescription, error: true) }
         } else if field === year || field === month || field === day {
+            birthdayMode.selectItem(at: 0)
+            updateBirthdayMode()
             age.stringValue = ""
             markAgeInvalid(false)
             setStatus("出生日期已手动修改，年龄联动已清除")
@@ -520,12 +546,15 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         let savedProvince = province.indexOfSelectedItem, savedCity = city.indexOfSelectedItem, savedRegion = region.indexOfSelectedItem
         let fields = [age!, year!, month!, day!, count!]
         let savedValues = fields.map(\.stringValue), savedGender = gender.indexOfSelectedItem
+        let savedMode = birthdayMode.indexOfSelectedItem, savedHint = birthdayHint.stringValue
         let savedResult = result.string, savedHeading = resultLabel.stringValue, savedStatus = status.stringValue, savedStatusColor = status.textColor
         defer {
             province.selectItem(at: savedProvince); provinceChanged()
             city.selectItem(at: savedCity); cityChanged()
             region.selectItem(at: savedRegion); regionChanged()
             gender.selectItem(at: savedGender)
+            birthdayMode.selectItem(at: savedMode); updateBirthdayMode()
+            birthdayHint.stringValue = savedHint
             for (field, value) in zip(fields, savedValues) { field.stringValue = value }
             resultLabel.stringValue = savedHeading
             result.string = savedResult; status.stringValue = savedStatus; status.textColor = savedStatusColor
@@ -551,6 +580,11 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         guard !region.isEnabled, region.indexOfSelectedItem == 0, region.numberOfItems == 1 else { return false }
         province.selectItem(at: 2); provinceChanged()
         guard city.indexOfSelectedItem == 0, !region.isEnabled else { return false }
+        birthdayMode.selectItem(at: 1); birthdayModeChanged()
+        guard !age.isHidden, [year!,month!,day!].allSatisfy(\.isHidden) else { return false }
+        birthdayMode.selectItem(at: 0); birthdayModeChanged()
+        guard age.isHidden, [year!,month!,day!].allSatisfy({ !$0.isHidden }) else { return false }
+        birthdayMode.selectItem(at: 1); birthdayModeChanged()
         changed(age, "25")
         guard let birthday = ChineseIDGenerator.birthdayFromAge(25),
               birthdayFields() == [String(birthday.year), String(birthday.month), String(birthday.day)] else { return false }
