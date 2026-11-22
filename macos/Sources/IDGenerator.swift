@@ -199,6 +199,8 @@ enum ChineseIDGenerator {
 }
 
 private final class IDNumberTextView: NSTextView {
+    var didCopyRow: ((Int) -> Void)?
+
     override func draw(_ dirtyRect: NSRect) {
         NSGraphicsContext.saveGraphicsState()
         super.draw(dirtyRect)
@@ -208,7 +210,8 @@ private final class IDNumberTextView: NSTextView {
             let rect = NSRect(x: min(bounds.width, visibleRect.maxX) - 76, y: textContainerInset.height + 12 + CGFloat(index) * 26, width: 48, height: 23)
             guard rect.intersects(dirtyRect) else { continue }
             ("\(index + 1)" as NSString).draw(in: NSRect(x: 12, y: rect.minY, width: 24, height: 23), withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular), .foregroundColor: OpenAllTheme.muted])
-            ("复制" as NSString).draw(in: rect, withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: OpenAllTheme.muted])
+            ("复制" as NSString).draw(in: rect, withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                                                              .foregroundColor: OpenAllTheme.accentText])
         }
     }
     override func mouseDown(with event: NSEvent) {
@@ -220,6 +223,7 @@ private final class IDNumberTextView: NSTextView {
             NSPasteboard.general.setString(rows[index], forType: .string)
             let offset = rows.prefix(index).reduce(0) { $0 + $1.utf16.count + 1 }
             setSelectedRange(NSRange(location: offset, length: rows[index].utf16.count))
+            didCopyRow?(index + 1)
             return
         }
         super.mouseDown(with: event)
@@ -319,7 +323,12 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         root.addSubview(resultLabel)
         let scroll = NSScrollView(frame: NSRect(x: 24, y: 54, width: 612, height: 156))
         scroll.hasVerticalScroller = true
-        result = IDNumberTextView(frame: scroll.bounds)
+        let numberView = IDNumberTextView(frame: scroll.bounds)
+        numberView.didCopyRow = { [weak self] row in
+            self?.status.stringValue = "已复制第 \(row) 条测试号"
+            self?.status.textColor = OpenAllTheme.ink
+        }
+        result = numberView
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = 26
         paragraph.maximumLineHeight = 26
@@ -479,7 +488,7 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
             status.textColor = .systemRed
             return
         }
-        resultLabel.stringValue = "生成结果 · \(numbers.count) 条"
+        resultLabel.stringValue = "测试号码 · \(numbers.count) 条"
         result.string = numbers.joined(separator: "\n")
         // 仅用字距分隔地区、生日和顺序校验段，选择和复制仍保留完整号码。
         if let storage = result.textStorage {
@@ -492,7 +501,7 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
             }
             storage.endEditing()
         }
-        status.stringValue = "已生成 \(numbers.count) 个格式有效的测试号码" + (birthday.map { " · 出生日期 " + $0.text } ?? "")
+        status.stringValue = birthday.map { "出生日期 " + $0.text } ?? ""
         status.textColor = .secondaryLabelColor
     }
 

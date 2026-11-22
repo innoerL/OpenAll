@@ -17,17 +17,29 @@ window.mountOpenAllManual = function (host, article, actions) {
     element.addEventListener('click', action);
     toolbar.append(element);
   }
-  let feedbackTimer;
+  let feedbackTimer, copiedEntry;
+  let copyRevision = 0;
   let searchSummary = '';
-  async function copyCommand(action) {
+  function clearFeedback() {
     clearTimeout(feedbackTimer);
+    copiedEntry?.classList.remove('manual-copied');
+    copiedEntry = null;
+    copyRevision++;
+  }
+  async function copyCommand(action, entry) {
+    clearFeedback();
+    const revision = copyRevision;
     try {
       await action();
+      if (revision !== copyRevision) return;
+      copiedEntry = entry;
+      entry?.classList.add('manual-copied');
       status.textContent = '已复制';
     } catch {
+      if (revision !== copyRevision) return;
       status.textContent = '复制失败';
     }
-    feedbackTimer = setTimeout(() => { status.textContent = searchSummary; }, 1500);
+    feedbackTimer = setTimeout(() => { clearFeedback(); status.textContent = searchSummary; }, 1500);
   }
   button('复制全文', () => copyCommand(actions.copyAll));
   if (actions.openOriginal) button('用默认应用打开', actions.openOriginal);
@@ -67,10 +79,17 @@ window.mountOpenAllManual = function (host, article, actions) {
   empty.append('没有找到相关命令', reset);
   empty.hidden = true;
   article.append(empty);
+  for (const header of article.querySelectorAll('th')) {
+    if (header.textContent.trim() !== '命令') continue;
+    const hint = document.createElement('small');
+    hint.className = 'manual-copy-hint';
+    hint.textContent = '点按复制';
+    header.append(hint);
+  }
   for (const entry of article.querySelectorAll('td code, pre')) {
     entry.classList.add('aux-copyable'); entry.tabIndex = 0; entry.setAttribute('role', 'button');
     entry.title = '复制命令'; entry.setAttribute('aria-label', '复制命令 ' + entry.textContent);
-    entry.addEventListener('click', () => copyCommand(() => actions.copy(entry.textContent)));
+    entry.addEventListener('click', () => copyCommand(() => actions.copy(entry.textContent), entry));
     entry.addEventListener('keydown', event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); entry.click(); }
     });
@@ -92,7 +111,7 @@ window.mountOpenAllManual = function (host, article, actions) {
     }
     for (const block of intro) block.hidden = !!query;
     empty.hidden = !query || matches > 0;
-    clearTimeout(feedbackTimer);
+    clearFeedback();
     searchSummary = query ? (matches ? `${matches} 项匹配` : '没有匹配项') : '';
     status.textContent = searchSummary;
     article.scrollTop = 0;
@@ -104,5 +123,5 @@ window.mountOpenAllManual = function (host, article, actions) {
     }
   };
   host.addEventListener('keydown', shortcut);
-  return {focus: () => search.focus(), dispose: () => { clearTimeout(feedbackTimer); host.removeEventListener('keydown', shortcut); host.classList.remove('manual-reader'); }};
+  return {focus: () => search.focus(), dispose: () => { clearFeedback(); host.removeEventListener('keydown', shortcut); host.classList.remove('manual-reader'); }};
 };

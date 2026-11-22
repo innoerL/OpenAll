@@ -25,7 +25,13 @@
 .aux-image .aux-image-empty { display:grid; justify-items:center; gap:9px; font-size:12px; }
 .aux-image-empty .aux-button { color:var(--ink); font-size:13px; }
 .aux-image-toolbar [hidden] { display:none; }
-.aux-image .aux-image-summary { gap:4px; }
+.aux-image .aux-image-summary {
+  display:grid; grid-template-columns:auto minmax(0,1fr); align-items:baseline; gap:5px 8px;
+}
+.aux-image-summary .aux-image-size, .aux-original-size, .aux-image-summary p { text-align:right; }
+.aux-image-summary .aux-image-size { font-size:20px; line-height:1.25; white-space:nowrap; }
+.aux-original-size { color:var(--secondary); font-size:13px; font-variant-numeric:tabular-nums; }
+.aux-image-summary p { grid-column:1 / -1; margin:0; }
 .aux-image-summary .aux-image-size { font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
 .aux-image .aux-image-buttons .primary { flex:1.4; }
 
@@ -51,7 +57,9 @@
   color: var(--accent-text,var(--ink));
 }
 .aux-id .aux-id-row code > span + span { margin-inline-start: .4em; }
-.aux-id .aux-id-row:hover { background: var(--surface); }
+.aux-id .aux-id-row:hover, .aux-id .aux-id-row:focus-within { background:var(--surface); }
+.aux-id .aux-id-row .aux-button { color:var(--accent-text); font-weight:500; }
+.aux-id .aux-id-row .aux-button:hover, .aux-id .aux-id-row .aux-button:focus-visible { text-decoration:underline; text-underline-offset:3px; }
 .aux-markdown .aux-help-popover { grid-template-columns: minmax(0,1fr); gap: 0; }
 .aux-help-popover .aux-section-bar { position: sticky; top: -12px; z-index: 1; padding-block: 5px; background: var(--surface); }
 .aux-help-popover .aux-button[data-sample] {

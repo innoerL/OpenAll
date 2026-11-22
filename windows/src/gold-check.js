@@ -61,6 +61,15 @@ module.exports = async function verifyGold(searchWindow, output) {
     for (const currency of ['EUR', 'CNY', 'USD']) {
       await execute(gold, value => { const field = document.querySelector('#currency'); field.value = value; field.dispatchEvent(new Event('change', { bubbles: true })); }, currency);
       await until(async () => (await read()).currency === currency, '切换币种 ' + currency);
+      await until(() => execute(gold, value => {
+        const dual = value !== 'CNY';
+        const left = document.querySelector('#legend-gold');
+        const right = document.querySelector('#legend-ctf');
+        const unit = { USD:'美元', EUR:'欧元', CNY:'元' }[value];
+        return left.textContent.includes(unit + '/克') && left.textContent.includes('左轴') === dual &&
+          right.textContent.includes('右轴') === dual && (!dual || right.textContent.includes('人民币/克')) &&
+          document.querySelector('#combined-axis-note').hidden === !dual;
+      }, currency), '合并图的价格单位与独立、共用坐标轴 ' + currency);
     }
     check(true, '美元、欧元、人民币报价及历史换算');
     await execute(searchWindow, () => openall.saveSettings({ theme: 'light', backgroundHex: '#f2f2ef', accentHex: '#926fad' }));
@@ -85,15 +94,22 @@ module.exports = async function verifyGold(searchWindow, output) {
       const price = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(quote.price);
       const rows = [...document.querySelectorAll('#forecast-rows tr')];
       const header = document.querySelector('.forecast-baseline');
+      const minimum = Math.min(...days.map(day => day.low));
+      const maximum = Math.max(...days.map(day => day.high));
+      const scale = document.querySelector('#forecast-scale');
       return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date &&
         header.querySelector('strong').textContent.trim() === price + ' 人民币/克' &&
+        !scale.hidden && scale.firstElementChild.textContent === format.format(minimum) &&
+        scale.lastElementChild.textContent === format.format(maximum) &&
         document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
         rows.length === 7 && days.length === 7 && rows.every((row, i) => {
           const day = days[i];
           const track = row.querySelector('.range-track');
           if (!track) return false;
           const [low, mid, high] = ['--low', '--mid', '--high'].map(name => Number.parseFloat(track.style.getPropertyValue(name)));
-          return 0 <= low && low <= mid && mid <= high && high <= 100 &&
+          const positions = [day.low, day.mid, day.high].map(value => 100 * (value - minimum) / (maximum - minimum));
+          return [low, mid, high].every((value, index) => Math.abs(value - positions[index]) < .001) &&
+            0 <= low && low <= mid && mid <= high && high <= 100 &&
             day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
             row.querySelector('time').dateTime === day.date &&
             row.cells[1].matches('.forecast-price') && row.cells[1].textContent === format.format(day.mid) &&

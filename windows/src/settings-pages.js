@@ -153,6 +153,12 @@
         const title = h('h2');
         const builtIn = h('p', {class:'command-words'});
         const names = input('', '多个别名用逗号分隔');
+        const draftNotice = h('span', {class:'muted', role:'status'});
+        const drafts = new Map();
+        const savedNames = id => (prefs.commandAliases?.[id] || []).join(', ');
+        function showDraftStatus() {
+          draftNotice.textContent = drafts.has(chosen?.id) ? '尚未保存' : '';
+        }
         let chosen;
         function selectCommand(command) {
           chosen = command;
@@ -160,11 +166,17 @@
           if (chosen) {
             title.textContent = command.title;
             builtIn.textContent = [...new Set([command.title, ...command.keywords])].join(' · ');
-            names.value = (prefs.commandAliases?.[command.id] || []).join(', ');
+            names.value = drafts.get(command.id) ?? savedNames(command.id);
             reset.disabled = !(prefs.commandAliases?.[command.id]?.length);
           }
+          showDraftStatus();
           markSelection();
         }
+        names.addEventListener('input', () => {
+          if (names.value === savedNames(chosen.id)) drafts.delete(chosen.id);
+          else drafts.set(chosen.id, names.value);
+          showDraftStatus();
+        });
         function markSelection() {
           for (const choice of list.querySelectorAll('button')) {
             const selected = choice.dataset.id === chosen?.id;
@@ -191,14 +203,17 @@
         }
         const reset = button('重置', async () => {
           const command = chosen;
+          const previousDraft = drafts.get(command.id);
           const values = {...prefs.commandAliases};
           delete values[command.id];
           await save({commandAliases:values});
+          if (drafts.get(command.id) === previousDraft) drafts.delete(command.id);
           if (chosen === command) selectCommand(command);
           paint();
         });
         const apply = button('保存别名', async () => {
           const command = chosen;
+          const previousDraft = drafts.get(command.id);
           const values = names.value.split(/[,，、;；\n]/).map(word => word.trim()).filter(Boolean);
           for (const c of window.OpenAllCatalog) {
             if (c.id === command.id) continue;
@@ -207,13 +222,14 @@
             }
           }
           await save({commandAliases:{...prefs.commandAliases,[command.id]:values}});
+          if (drafts.get(command.id) === previousDraft) drafts.delete(command.id);
           if (chosen === command) selectCommand(command);
           paint();
         }, 'primary');
         names.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) apply.click(); });
         const detail = h('section', {class:'command-detail'}, title,
           h('div', {class:'field'}, h('span', {class:'muted'}, '已有匹配词'), builtIn),
-          field('自定义别名', names), h('div',{class:'row'},apply,reset));
+          field('自定义别名', names), h('div',{class:'row'},apply,reset,draftNotice));
         const browser = h('div',{class:'alias-navigation'},filter,list);
         content.append(h('div',{class:'alias-layout command-layout'},browser,detail));
         filter.addEventListener('input',paint);
@@ -274,7 +290,15 @@
       } else if(tab==='diagnostics') {
         heading('诊断','查看运行状态、索引与本地存储。');const d=await api.diagnostics();
         if (disposed || revision !== renderRevision) return;
-        const rows=[['版本',d.version||'—'],['平台',d.platform||'Windows'],['应用索引',d.index?.apps??0],['文件索引',d.index?.files??0],['Chrome 配置',d.index?.profiles??0],['剪贴板记录',d.clipboard??d.clipboardCount??0],['内存',d.memoryMB?d.memoryMB+' MB':'—'],['索引状态',d.index?.indexing?'正在更新':'就绪'],['系统文件索引',d.index?.systemIndex?.available?'已连接 Windows Search':d.index?.systemIndex?.reason||'搜索文件时自动连接']];
+        const shortcutNames = [['search','打开搜索'],['clipboard','剪贴板'],['stack','复制堆栈'],['selection','对选中内容操作']];
+        const failed = shortcutNames.filter(([key]) => d.shortcuts?.[key] === false);
+        if (failed.length && !d.shortcutRecording) {
+          content.append(h('section',{class:'shortcut-issue'},
+            h('div',{},h('strong',{},`${failed.length} 项快捷键未启用`),
+              h('p',{},failed.map(([,name])=>name).join('、'))),
+            button('查看快捷键',()=>render('general'))));
+        }
+        const rows=[['版本',d.version||'—'],['平台',d.platform==='win32'?'Windows':d.platform||'Windows'],['应用索引',d.index?.apps??0],['文件索引',d.index?.files??0],['Chrome 配置',d.index?.profiles??0],['剪贴板记录',d.clipboard??d.clipboardCount??0],['内存',d.memoryMB?d.memoryMB+' MB':'—'],['索引状态',d.index?.indexing?'正在更新':'就绪'],['系统文件索引',d.index?.systemIndex?.available?'已连接 Windows Search':d.index?.systemIndex?.reason||'搜索文件时自动连接']];
         content.append(h('dl',{class:'status-grid'},rows.flatMap(([name,value])=>[h('dt',{},name),h('dd',{},String(value))])),h('div',{class:'row'},button('刷新状态',()=>render()),button('重新建立索引',()=>api.windowAction('rescan')),button('复制诊断',async()=>{await api.copyText(JSON.stringify(d,null,2));notify('诊断信息已复制');})),h('section',{class:'settings-section'},h('h2',{},'更新'),h('div',{class:'row'},bind(input(prefs.updateFeedURL,'更新源地址（HTTPS）'),value=>save({updateFeedURL:value})),button('检查更新',async()=>{const result=await api.windowAction('checkUpdates');notify(result?.message||'已完成更新检查');render();})),h('div',{class:'row',style:{marginTop:'12px'}},button('安装更新',async()=>{if(await confirm('安装更新','将下载并校验安装包，然后关闭 OpenAll 启动安装器。'))await api.windowAction('installUpdate');},'primary'),button('回退上一版',async()=>{if(await confirm('回退上一版','将关闭 OpenAll，重新安装上次保留的版本。'))await api.windowAction('rollbackUpdate');})),h('p',{class:'hint small'},d.updates?.message||'填写可信的 HTTPS 更新源后检查更新。')));
       } else if(tab==='appearance') {
         heading('外观','调整背景和强调色，所有窗口同步生效。');

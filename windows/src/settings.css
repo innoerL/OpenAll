@@ -133,3 +133,10 @@
 .rules-empty { padding: 58px 12px; display: grid; justify-items: center; gap: 10px; text-align: center; }
 .rules-empty h2 { margin: 0; font-size: 16px; }
 .rules-empty p { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+
+.shortcut-issue {
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:12px 0; border-block:1px solid var(--rule); margin-bottom:16px;
+}
+.shortcut-issue strong { color:var(--ink); }
+.shortcut-issue p { margin:4px 0 0; color:var(--muted); }

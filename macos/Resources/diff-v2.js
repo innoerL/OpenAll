@@ -407,6 +407,14 @@
       }
     }));
   }
+  const gutterObserver = new ResizeObserver(entries => {
+    for (const entry of entries) {
+      const pane = entry.target.closest('.pane');
+      const width = entry.contentRect.width + 'px';
+      if (pane.style.getPropertyValue('--gutter-width') !== width) pane.style.setProperty('--gutter-width', width);
+    }
+  });
+  panes.forEach(pane => gutterObserver.observe(pane.querySelector('.cm-gutters')));
   copyButtons.forEach(button => button.addEventListener('click', () => {
     const side = Number(button.dataset.side);
     window.webkit?.messageHandlers?.comparisonV2?.postMessage({ action: 'copy', side, text: inputs[side].value });
@@ -437,8 +445,48 @@
     compareNow();
   }
 
+  const compactLayout = window.matchMedia('(max-width:730px)');
+  const compactOptions = document.querySelector('.compact-options');
+  const optionsPanel = document.getElementById('options-panel');
+  const optionsButton = document.getElementById('options-toggle');
+  const comparisonFilters = document.getElementById('comparison-filters');
+  const findFilters = document.getElementById('find-filters');
+
+  function showOptions(open) {
+    optionsPanel.hidden = !open;
+    optionsButton.setAttribute('aria-expanded', String(open));
+  }
+
+  function placeOptions() {
+    const focused = document.activeElement;
+    const filterFocused = comparisonFilters.contains(focused) || findFilters.contains(focused);
+    // 仅在跨越断点时移动原来的控件，保留选项值、监听器和编辑区状态。
+    if (compactLayout.matches) {
+      compactOptions.hidden = false;
+      optionsPanel.append(comparisonFilters, findFilters);
+    } else {
+      document.getElementById('comparison-filter-slot').append(comparisonFilters);
+      document.getElementById('find-filter-slot').append(findFilters);
+      compactOptions.hidden = true;
+    }
+    showOptions(compactLayout.matches && filterFocused);
+    if (filterFocused) focused.focus();
+    else if (focused === optionsButton && !compactLayout.matches) syncScroll.focus();
+  }
+  optionsButton.addEventListener('click', () => showOptions(optionsPanel.hidden));
+  document.addEventListener('pointerdown', event => {
+    if (!optionsPanel.hidden && !compactOptions.contains(event.target)) showOptions(false);
+  });
+  compactOptions.addEventListener('focusout', event => {
+    if (event.relatedTarget && !compactOptions.contains(event.relatedTarget)) showOptions(false);
+  });
+  compactLayout.addEventListener('change', placeOptions);
+  placeOptions();
+
   function openSearch() {
     if (composing.size || inputs.some(input => input.composing)) return;
+    showOptions(false);
+    findFilters.hidden = false;
     findBar.hidden = false;
     searchButton.setAttribute('aria-expanded', 'true');
     if (!findQuery.value) {
@@ -454,6 +502,8 @@
   function closeSearch() {
     if (findComposing) return;
     clearTimeout(findTimer);
+    showOptions(false);
+    findFilters.hidden = true;
     findBar.hidden = true;
     searchButton.setAttribute('aria-expanded', 'false');
     findMatches = [[], []]; findResults = []; findIndex = -1;
@@ -552,6 +602,8 @@
       event.preventDefault(); event.stopPropagation(); openSearch();
     } else if (command && key === 'g' && !findBar.hidden) {
       event.preventDefault(); event.stopPropagation(); moveSearch(event.shiftKey ? -1 : 1);
+    } else if (event.key === 'Escape' && !optionsPanel.hidden) {
+      event.preventDefault(); event.stopPropagation(); showOptions(false); optionsButton.focus();
     } else if (event.key === 'Escape' && !findBar.hidden) {
       event.preventDefault(); event.stopPropagation(); closeSearch();
     } else if (event.key === 'Enter' && document.activeElement === findQuery) {

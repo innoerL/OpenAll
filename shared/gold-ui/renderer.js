@@ -202,8 +202,10 @@ function render(snapshot) {
     updateQuote(id, $(`#summary-${id}`), instruments[id], snapshot);
   }
   const separateAxes = currency !== 'CNY';
-  $('#legend-gold').textContent = `国际现货 · ${separateAxes ? '左轴 ' : ''}${leftUnit}`;
-  $('#legend-ctf').textContent = `周大福 · ${separateAxes ? '右轴 ' : ''}元/克`;
+  $('.chart-legend').classList.toggle('dual-axis', separateAxes);
+  $('#legend-gold').textContent = `${separateAxes ? '左轴 ' : ''}国际现货 · ${leftUnit}`;
+  $('#legend-ctf').textContent = `${separateAxes ? '右轴 ' : ''}周大福 · ${separateAxes ? '人民币' : '元'}/克`;
+  $('#combined-axis-note').hidden = !separateAxes;
   updateChart('gold', [gold], snapshot, '现货日收盘');
   updateChart('ctf', [ctf], snapshot, '每日挂牌价');
   updateChart('combined', [gold, ctf], snapshot, separateAxes ? '左右轴各用独立刻度' : '两条曲线共用刻度', separateAxes);
@@ -254,7 +256,7 @@ function renderOutlook() {
       addPrice(isCTF ? '预测基准' : '基准', data.anchor.price, data.anchor.date, isCTF ? whole : number);
     }
     const method = hasFixed ? '旧版沿用基准价 · ' : '';
-    meta.append(element('span', `${method}模型 ${data.version || verification.version || '—'} · 方向概率未校准${data.provisional ? ' · 数据尚未就绪，暂估' : ''}`));
+    meta.append(element('span', `${method}模型 ${data.version || verification.version || '—'}${data.provisional ? ' · 数据尚未就绪，暂估' : ''}`));
   } else {
     meta.append(element('span', isCTF ? '等待足够的预测数据' : '等待足够的最新历史报价或参考汇率'));
   }
@@ -263,10 +265,18 @@ function renderOutlook() {
   const ranges = data?.days.filter(day => Number.isFinite(day.low) && Number.isFinite(day.high) && Number.isFinite(day.mid)) ?? [];
   const scaleMin = Math.min(...ranges.map(day => day.low));
   const scaleMax = Math.max(...ranges.map(day => day.high));
-  const tomorrow = new Date(Date.parse(today + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
+  const scale = $('#forecast-scale');
+  scale.hidden = !(scaleMax > scaleMin);
+  if (!scale.hidden) {
+    scale.firstElementChild.textContent = number.format(scaleMin);
+    scale.lastElementChild.textContent = number.format(scaleMax);
+    scale.title = `各日共用 ${number.format(scaleMin)} 至 ${number.format(scaleMax)} ${unit}的价格刻度`;
+    scale.setAttribute('aria-label', scale.title);
+  }
+  const tomorrow = Date.parse(today + 'T00:00:00Z') + 86400000;
   for (const item of data?.days ?? []) {
     const row = element('tr');
-    const isTomorrow = item.date === tomorrow;
+    const isTomorrow = Date.parse(item.date + 'T00:00:00Z') === tomorrow;
     if (isTomorrow) row.className = 'next-day';
     const dateCell = element('td');
     const date = element('time', item.date.slice(5).replace('-', '/'));

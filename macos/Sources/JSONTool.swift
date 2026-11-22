@@ -556,6 +556,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
     private var operationButtons: [NSButton] = []
     private let history = UndoManager()
     private var searchBar: NSView!
+    private var searchButton: NSButton!
     private var searchField: NSSearchField!
     private var searchCount: NSTextField!
     private var searchCase: NSButton!
@@ -768,6 +769,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         open.layer?.borderWidth = 0.5
         open.setAccessibilityLabel("搜索 JSON 内容")
         root.addSubview(open)
+        searchButton = open
         searchBar = NSView(frame: NSRect(x: 426, y: 472, width: 514, height: 32))
         searchBar.autoresizingMask = [.minXMargin, .minYMargin]
         searchBar.wantsLayer = true
@@ -849,6 +851,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         if !searchVisible {
             searchVisible = true
             searchBar.isHidden = false
+            searchButton.isHidden = true
             editor.enclosingScrollView?.frame.size.height -= 36
         }
         if searchField.stringValue.isEmpty, let selected = selectedSource(),
@@ -866,6 +869,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         searchNeedsRefresh = false
         searchVisible = false
         searchBar.isHidden = true
+        searchButton.isHidden = false
         editor.enclosingScrollView?.frame.size.height += 36
         searchMatches = []
         searchLimited = false

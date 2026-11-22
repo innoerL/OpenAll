@@ -57,3 +57,6 @@
   cursor: pointer;
 }
 .manual-empty button:hover { background: var(--raised); }
+
+.manual-copy-hint { margin-inline-start:.7em; color:var(--muted); font:inherit; font-weight:400; }
+.manual-article .manual-copied { background:var(--raised); text-decoration:underline; text-underline-offset:.22em; }

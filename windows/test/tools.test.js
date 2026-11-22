@@ -40,6 +40,8 @@ test('Cron 中国时区、名称、范围、周日别名、日期或星期',()=>
   assert.equal(core.cronNext('0 0 29 FEB *',new Date('2026-01-01T00:00:00Z'),1)[0].toISOString(),'2028-02-28T16:00:00.000Z');
   assert.deepEqual(core.cronNext('0 9 1 * MON',new Date('2026-11-27T00:00:00Z'),2).map(x=>x.toISOString()),['2026-11-30T01:00:00.000Z','2026-12-01T01:00:00.000Z']);
   assert.equal(core.cronNext('0 0 30 FEB *',new Date('2026-01-01'),1).length,0);
+  assert.equal(core.cronSummary('*/15 9-18 * * MON-FRI'),'周一至周五 · 9–18 时 · 每 15 分钟');
+  assert.equal(core.cronSummary('0,15,30 9 1 * MON'),'每月 1 日 或 周一 · 9 时 · 第 0、15、30 分钟执行');
   assert.equal(core.cronParse('*/15 9-18 * * 1-5').sets[0].size,4);
   for(const text of ['* * * *','60 * * * *','*/0 * * * *','* 22-2 * * *','* * * 13 *'])assert.throws(()=>core.cronParse(text));
 });

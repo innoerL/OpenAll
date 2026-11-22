@@ -55,7 +55,32 @@
       for(const hour of [...hours].sort((a,b)=>a-b))for(const minute of [...minutes].sort((a,b)=>a-b)){const value=+day+hour*3600000+minute*60000-8*3600000;if(value>+after){result.push(new Date(value));if(result.length>=count)return result;}}
     }return result;
   }
-  function cronSummary(expression){const p=typeof expression==='string'?cronParse(expression):expression;const [m,h,d,mo,w]=p.sets;const range=s=>[...s].sort((a,b)=>a-b).join('、');const week=[...w].sort().map(n=>['周日','周一','周二','周三','周四','周五','周六'][n]).join('、');const day=p.anyDay&&p.anyWeekday?'每天':p.anyDay?week:p.anyWeekday?`每月 ${range(d)} 日`:`每月 ${range(d)} 日 或 ${week}`;return [mo.size===12?'':`${range(mo)} 月`,day,h.size===24?'全天':`${range(h)} 时`,m.size===60?'每分钟':m.size===1&&m.has(0)?'整点执行':`第 ${range(m)} 分钟执行`].filter(Boolean).join(' · ');}
+  function cronSummary(expression) {
+    const parsed = typeof expression === 'string' ? cronParse(expression) : expression;
+    const [minutes, hours, days, months, weekdays] = parsed.sets;
+    const sorted = values => [...values].sort((a, b) => a - b);
+    function range(values) {
+      const numbers = sorted(values);
+      const first = numbers[0], last = numbers.at(-1);
+      if (numbers.length > 2 && last - first + 1 === numbers.length) return `${first}–${last}`;
+      return numbers.join('、');
+    }
+    const names = ['周日','周一','周二','周三','周四','周五','周六'];
+    const week = weekdays.size === 5 && !weekdays.has(0) && !weekdays.has(6)
+      ? '周一至周五' : sorted(weekdays).map(day => names[day]).join('、');
+    const date = `每月 ${range(days)} 日`;
+    const dayRule = parsed.anyDay ? (parsed.anyWeekday ? '每天' : week)
+      : (parsed.anyWeekday ? date : `${date} 或 ${week}`);
+    const ticks = sorted(minutes);
+    const step = ticks[1];
+    let minuteRule = `第 ${range(minutes)} 分钟执行`;
+    if (ticks.length === 60) minuteRule = '每分钟';
+    else if (ticks.length === 1 && ticks[0] === 0) minuteRule = '整点执行';
+    else if (ticks.length > 2 && ticks.length === Math.ceil(60 / step)
+      && ticks.every((v, i) => v === i * step)) minuteRule = `每 ${step} 分钟`;
+    return [months.size === 12 ? '' : `${range(months)} 月`, dayRule,
+      hours.size === 24 ? '全天' : `${range(hours)} 时`, minuteRule].filter(Boolean).join(' · ');
+  }
   const idWeights=[7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2],idChecks='10X98765432';
   const regionData=typeof module!=='undefined'&&module.exports?require('../assets/id-regions.js'):scope.OpenAllIDRegions;
   let provinces=regionData.provinces.map(province=>({...province,regions:province.cities.flatMap(city=>city.regions)}));

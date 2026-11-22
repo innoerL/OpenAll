@@ -7,6 +7,27 @@ struct ParsedLog {
 }
 
 enum LogTimeline {
+    // 摘要只带有限的故障类别和追踪标识，避免把日志正文、凭证或用户输入复制到标题中。
+    static func summaryKind(_ message: String) -> String {
+        let value = String(message.prefix(400)).lowercased()
+        if ["超时", "timeout", "timed out"].contains(where: value.contains) {
+            return ["数据库", "database", "sql", "mysql", "postgres"].contains(where: value.contains) ? "数据库超时" : "请求超时"
+        }
+        if ["权限不足", "permission denied", "access denied", "forbidden"].contains(where: value.contains) { return "访问被拒绝" }
+        if ["连接被拒绝", "connection refused", "econnrefused"].contains(where: value.contains) { return "连接被拒绝" }
+        if ["服务不可用", "service unavailable"].contains(where: value.contains) { return "服务不可用" }
+        return ""
+    }
+
+    static func requestLabel(_ fields: [String: String]) -> String {
+        for key in ["requestId", "request_id", "traceId", "trace_id", "trace.id"] {
+            guard let value = fields[key], value.count <= 64,
+                  value.range(of: #"^[a-zA-Z0-9_.-]+$"#, options: .regularExpression) != nil else { continue }
+            return "请求 " + String(value.prefix(32)) + (value.count > 32 ? "…" : "")
+        }
+        return ""
+    }
+
     static func parse(_ input: String) -> [ParsedLog] {
         let regex = try! NSRegularExpression(pattern: #"([A-Za-z_][\w.-]*)=(?:"([^"]*)"|([^\s,]+))"#)
         return input.components(separatedBy: .newlines).prefix(10_000).enumerated().compactMap { index, raw in

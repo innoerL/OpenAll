@@ -115,6 +115,7 @@
     function paintSearch() { if (!disposed && editor) editor.setSearch(searchBar.hidden ? [] : matches, activeMatch); }
     function setSearchVisible(visible) {
       searchBar.hidden = !visible;
+      searchButton.hidden = visible;
       searchButton.setAttribute('aria-expanded', String(visible));
     }
     function showSearch() { setSearchVisible(true); if (!query.value && editor.selectedText.length < 256) query.value = editor.selectedText; query.focus(); query.select(); if (query.value) refreshSearch(true); else showCount(); }

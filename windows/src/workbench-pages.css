@@ -78,7 +78,7 @@
   box-shadow: inset 0 -1px color-mix(in srgb,var(--accent) 65%,transparent);
   color: var(--accent-text,var(--ink));
 }
-.aux-backend .aux-report tr.group td:first-child { color: var(--accent-text,var(--ink)); }
+.aux-backend .aux-report tr.group td:first-child { color: var(--muted); }
 .aux-backend .aux-report tbody tr:not(.group):hover { background: var(--raised); }
 .aux-backend-body.stale-result > .aux-report tbody,
 .aux-backend-body.stale-result > .aux-report .aux-table-footer,
@@ -108,5 +108,22 @@
 .aux-backend .has-finding .aux-report-title,
 .aux-backend .aux-report tr.estimate-gap td:last-child,
 .aux-backend .aux-report tr.log-warning td:nth-child(2) { color: var(--accent-text); }
-.aux-backend .aux-report tr.log-error td:nth-child(2) { color: var(--ink); font-weight: 700; }
+.aux-backend .aux-report tr.log-error td:nth-child(2) {
+  position: relative;
+  color: light-dark(#9d302a, #ff9e90);
+  font-weight: 700;
+}
+.aux-backend .aux-report tr.log-error td:nth-child(2)::before {
+  content: ''; position: absolute; left: 1px; top: 25%; height: 50%; width: 3px;
+  background: currentColor; border-radius: 2px;
+}
 .aux-backend .aux-report[hidden] { display: none; }
+
+.aux-backend-body[data-mode=sqlRestore] .aux-report-heading { justify-content: flex-start; }
+.aux-backend-body[data-mode=sqlRestore] .aux-report-heading .aux-button:enabled {
+  color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--muted) 48%, transparent);
+  background: var(--raised);
+}
+.aux-backend-body[data-mode=sqlRestore].short-sql > .aux-pane { flex: 0 0 80px; min-height: 80px; }
+.aux-backend-body[data-mode=sqlRestore].short-sql > .aux-pane:has(.aux-findbar:not([hidden])) { flex-basis: 122px; }

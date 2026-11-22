@@ -23,6 +23,10 @@ import Foundation
         let logs = LogTimeline.parse(raw)
         precondition(logs.count == 3 && LogTimeline.fieldCoverage(logs).contains { $0.name == "requestId" && $0.count == 3 })
         precondition(LogTimeline.render(logs, groupField: "requestId", timeField: "time").contains("a · 2 条"))
+        precondition(LogTimeline.summaryKind("database timeout, token=private-value") == "数据库超时")
+        precondition(LogTimeline.summaryKind("user entered private-value") == "")
+        precondition(LogTimeline.requestLabel(["requestId": "req-002"]) == "请求 req-002")
+        precondition(LogTimeline.requestLabel(["requestId": "user@example.com"]) == "")
         let extracted = try LogTimeline.addingField(LogTimeline.parse("trace=abc event=ok"), rule: "traceId=trace=(\\w+)")
         precondition(extracted.first?.fields["traceId"] == "abc")
         let restored = SQLParameterRestorer.restore(sql: "SELECT '?' AS q, * FROM t WHERE id=? AND name=? -- ?",

@@ -259,6 +259,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
 
     func show(_ content: SelectedContent?, message: String? = nil, image: NSImage? = nil) {
         if panel == nil { build() }
+        panel?.appearance = OpenAllTheme.appearance
         displayToken += 1
         self.content = content
         actions = content.map { orderStore.sorted(Self.availableActions(for: $0), category: $0.category) } ?? []
@@ -404,6 +405,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         actionScroll = scroll
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
+        scroll.scrollerStyle = .overlay
         scroll.autohidesScrollers = true
         table = NSTableView(frame: scroll.bounds)
         table.headerView = nil

@@ -19,8 +19,24 @@
     .summary-primary .changed { color:var(--accent); }
     .summary-primary .added { color:var(--added-ink); }
     .summary-primary .removed { color:var(--removed-ink); }
-    .options { display:flex; align-items:center; gap:4px; flex:none; }
-    .options { gap:16px; border-left:1px solid var(--rule); padding-left:18px; }
+    .options,.filters { display:flex; align-items:center; gap:12px; flex:none; }
+    .options { border-left:1px solid var(--rule); padding-left:14px; }
+    .filter-slot { display:contents; }
+    #open-search[aria-expanded=true],.filters[hidden],.compact-options[hidden],.options-panel[hidden] { display:none; }
+    .compact-options { position:relative; }
+    #options-toggle { display:flex; align-items:center; gap:8px; }
+    #options-toggle::after { content:""; width:5px; height:5px; border:solid currentColor; border-width:0 1.5px 1.5px 0; transform:translateY(-1px) rotate(45deg); }
+    #options-toggle[aria-expanded=true] { background:var(--surface); border-color:var(--secondary); }
+    .options-panel {
+      position:absolute; z-index:4; top:calc(100% + 4px); right:0; width:174px; padding:10px 12px;
+      background:var(--raised); border:1px solid var(--rule); border-radius:6px;
+    }
+    .options-panel .filters { display:grid; justify-items:start; gap:8px; }
+    .options-panel .filters[hidden] { display:none; }
+    .options-panel .filters::before { content:attr(aria-label); font-size:11px; font-weight:600; color:var(--secondary); }
+    .options-panel #find-scope { width:100%; }
+    .options-panel label { color:var(--ink); }
+    .options-panel .filters + .filters { margin-top:10px; padding-top:9px; border-top:1px solid var(--rule); }
     label { color:var(--muted); font-size:13px; white-space:nowrap; cursor:pointer; }
     input[type=checkbox] { appearance:none; -webkit-appearance:none; position:relative; width:14px; height:14px; border:1px solid var(--muted); border-radius:3px; background:transparent; vertical-align:-2px; margin:0 6px 0 0; cursor:pointer; }
     input[type=checkbox]:checked { border-color:var(--accent); background:var(--accent); }
@@ -67,7 +83,6 @@
     .pane-actions button:is(:hover,:focus-visible):enabled { background: var(--raised); color: var(--ink); }
     #open-search { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
     #open-search kbd { color: var(--secondary); font: inherit; font-size: 11px; }
-    #open-search[aria-expanded=true] { background: var(--surface); border-color: var(--secondary); }
     .findbar { flex:none; display:flex; align-items:center; gap:10px; margin:0 20px; padding:0 0 7px; }
     .findbar[hidden] { display:none; }
     .query-field {
@@ -134,24 +149,29 @@
     .editor .cm-placeholder { color:var(--muted); }
     footer { flex:none; height:30px; padding:0 20px; display:flex; align-items:center; color:var(--secondary); font-size:12px; }
     #hint { margin-left:auto; text-align:right; }
+    /* 宽窗里栏名对齐首列正文，窄窗保留横向空间。 */
+    @media (min-width:800px) {
+      .heading { padding-inline-start:calc(var(--gutter-width, 54px) + 12px); }
+    }
     @media (max-width:850px) {
       .toolbar,.comparison-status,#summary { gap:8px; }
       .options { gap:12px; }
       #hint { max-width:40%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
     }
     @media (max-width:730px) {
-      .toolbar { height:auto; flex-wrap:wrap; row-gap:5px; padding:6px 12px; }
-      .comparison-status { flex-basis:100%; }
-      .options { padding-left:0; border:0; }
+      .toolbar { height:38px; padding-inline:12px; }
+      .options { gap:6px; padding-left:0; border:0; }
       .editors,.findbar { margin-inline:12px; }
       footer { padding-inline:12px; }
       .heading { padding-inline:8px; }
-      .findbar { gap:6px; }
+      .findbar { gap:6px; padding-bottom:6px; }
     }
+    .diff-symbol { margin-inline-end:4px; font:600 14px/1 ui-monospace,monospace; }
     @media (max-width:620px) {
-      .findbar { display:grid; grid-template-columns:auto 1fr 28px; row-gap:4px; }
-      .query-field { grid-column:1 / -1; }
-      #find-scope { justify-self:start; }
+      .editor .cm-changeGutter { width:14px; }
+      .editor .cm-changeGutter .cm-gutterElement { padding-left:2px; }
+      .editor .cm-lineNumbers .cm-gutterElement { min-width:22px; padding-right:3px; }
+      .editor .cm-line { padding-inline:6px; }
       .heading { gap:2px; }
       .pane-title { gap:5px; }
       .heading button { padding-inline:5px; }
@@ -163,14 +183,26 @@
   <div class="toolbar">
     <div class="comparison-status">
       <div class="navigation" role="group" aria-label="差异组导航" hidden>
-        <span class="nav-label">差异</span>
+        <span class="nav-label"><span class="diff-symbol" aria-hidden="true">±</span>差异</span>
         <span id="navigation-count" role="status" aria-live="polite" aria-atomic="true">0 / 0</span>
         <button id="previous" title="上一个差异组" aria-label="上一个差异组" disabled>↑</button>
         <button id="next" title="下一个差异组" aria-label="下一个差异组" disabled>↓</button>
       </div>
       <div id="summary" role="status" aria-live="polite" aria-atomic="true"><span class="summary-primary notice">在左右两侧输入文本，差异会直接标出</span></div>
     </div>
-    <div class="options"><button id="open-search" title="搜索内容（⌘F）" aria-label="搜索内容" aria-controls="findbar" aria-expanded="false">搜索 <kbd aria-hidden="true">⌘F</kbd></button><label><input id="sync-scroll" type="checkbox" checked>同步滚动</label><label><input id="ignore-space" type="checkbox">忽略行尾空格</label></div>
+    <div class="options">
+    <button id="open-search" title="搜索内容（⌘F）" aria-label="搜索内容" aria-controls="findbar" aria-expanded="false">搜索 <kbd aria-hidden="true">⌘F</kbd></button>
+      <div id="comparison-filter-slot" class="filter-slot">
+        <div id="comparison-filters" class="filters" role="group" aria-label="对比选项">
+          <label><input id="sync-scroll" type="checkbox" checked>同步滚动</label>
+          <label><input id="ignore-space" type="checkbox">忽略行尾空格</label>
+        </div>
+      </div>
+      <div class="compact-options" hidden>
+        <button id="options-toggle" aria-expanded="false" aria-controls="options-panel">选项</button>
+        <div id="options-panel" class="options-panel" role="group" aria-label="文本对比选项" hidden></div>
+      </div>
+    </div>
   </div>
   <div class="findbar" id="findbar" role="search" aria-label="搜索对比内容" hidden>
     <div class="query-field">
@@ -182,8 +214,12 @@
         <button id="find-next" title="下一个匹配（↵ / ⌘G）" aria-label="下一个搜索结果" disabled>↓</button>
       </div>
     </div>
-    <select id="find-scope" aria-label="搜索范围"><option value="both">左右两侧</option><option value="0">仅左侧</option><option value="1">仅右侧</option></select>
-    <label><input id="find-case" type="checkbox">区分大小写</label>
+    <div id="find-filter-slot" class="filter-slot">
+      <div id="find-filters" class="filters" role="group" aria-label="查找选项" hidden>
+        <select id="find-scope" aria-label="搜索范围"><option value="both">左右两侧</option><option value="0">仅左侧</option><option value="1">仅右侧</option></select>
+        <label><input id="find-case" type="checkbox">区分大小写</label>
+      </div>
+    </div>
     <button id="find-close" title="关闭搜索（Esc）" aria-label="关闭搜索">×</button>
   </div>
   <div class="editors">

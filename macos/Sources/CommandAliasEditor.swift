@@ -5,6 +5,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
     private let commands: [OpenAllCommand]
     private let onChange: () -> Void
     private var selectedIndex = 0
+    private var aliasDrafts: [String: String] = [:]
     private var buttons: [NSButton] = []
     private let commandSearch = NSSearchField()
     private let commandScroll = NSScrollView()
@@ -114,6 +115,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         detail.addSubview(customLabel)
         aliasField = NSTextField(frame: NSRect(x: 20, y: 184, width: 348, height: 32))
         aliasField.placeholderString = "输入此功能的其他叫法"
+        aliasField.delegate = self
         aliasField.target = self
         aliasField.action = #selector(saveAliases)
         WindowChrome.styleInput(aliasField)
@@ -159,12 +161,19 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         let command = commands[selectedIndex]
         commandTitle.stringValue = command.title
         builtInNames.stringValue = distinct([command.title] + command.keywords).joined(separator: "  ·  ")
-        aliasField.stringValue = store.names(for: command.id).joined(separator: "、")
+        aliasField.stringValue = aliasDrafts[command.id] ?? store.names(for: command.id).joined(separator: "、")
+        if aliasDrafts[command.id] != nil { notice.stringValue = "尚未保存" }
     }
 
     func controlTextDidChange(_ notification: Notification) {
-        guard notification.object as? NSSearchField === commandSearch else { return }
-        filterCommands()
+        if notification.object as? NSTextField === aliasField {
+            let id = commands[selectedIndex].id
+            let value = aliasField.stringValue
+            aliasDrafts[id] = value == store.names(for: id).joined(separator: "、") ? nil : value
+            notice.stringValue = aliasDrafts[id] == nil ? "" : "尚未保存"
+        } else if notification.object as? NSSearchField === commandSearch {
+            filterCommands()
+        }
     }
 
     private func filterCommands() {
@@ -194,6 +203,12 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
 
     func verifyFilterForDesign() -> Bool {
         guard DesignPreview.enabled else { return false }
+        let originalIndex = selectedIndex
+        let original = aliasField.stringValue
+        let sample = "测试草稿-仅在当前页"
+        aliasField.stringValue = sample
+        let change = Notification(name: NSControl.textDidChangeNotification, object: aliasField)
+        controlTextDidChange(change)
         commandSearch.stringValue = "JSON"
         filterCommands()
         let filtered = buttons.filter { !$0.isHidden }
@@ -203,7 +218,11 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         let empty = buttons.allSatisfy(\.isHidden) && !noMatches.isHidden
         commandSearch.stringValue = ""
         filterCommands()
-        return matched && empty && buttons.allSatisfy { !$0.isHidden }
+        selectCommand(buttons[originalIndex])
+        let restored = aliasField.stringValue == sample && notice.stringValue == "尚未保存"
+        aliasField.stringValue = original
+        controlTextDidChange(change)
+        return matched && empty && restored && notice.stringValue.isEmpty && buttons.allSatisfy { !$0.isHidden }
     }
 
     private func distinct(_ names: [String]) -> [String] {
@@ -232,6 +251,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
             }
         }
         store.update(id: command.id, names: aliases)
+        aliasDrafts.removeValue(forKey: command.id)
         notice.stringValue = "已保存，搜索立即生效"
         refreshSelection()
         onChange()

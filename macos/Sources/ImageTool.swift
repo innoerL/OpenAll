@@ -187,7 +187,10 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
     private var metadata: NSButton!
     private var ratio: NSButton!
     private var status: NSTextField!
-    private var outputLabel: NSTextField!
+    private var summaryFields: [NSTextField] = []
+    private var outputSizeValue: NSTextField!
+    private var originalSizeValue: NSTextField!
+    private var sizeDifference: NSTextField!
     private var targetSize: NSTextField!
     private var targetLabel: NSTextField!
     private var advancedButton: NSPopUpButton!
@@ -370,12 +373,24 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         exportRule.wantsLayer = true
         exportRule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
         root.addSubview(exportRule)
-        outputLabel = NSTextField(labelWithString: "导出结果")
-        outputLabel.frame = NSRect(x: 624, y: 158, width: 252, height: 14)
-        outputLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        outputLabel.textColor = OpenAllTheme.muted
-        outputLabel.isHidden = true
-        root.addSubview(outputLabel)
+        func metric(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat,
+                    size: CGFloat = 12, prominent: Bool = false, right: Bool = false) -> NSTextField {
+            let field = NSTextField(labelWithString: text)
+            field.frame = NSRect(x: x, y: y, width: width, height: height)
+            field.font = .monospacedDigitSystemFont(ofSize: size, weight: prominent ? .semibold : .regular)
+            field.textColor = prominent ? OpenAllTheme.ink : OpenAllTheme.muted
+            field.alignment = right ? .right : .left
+            field.lineBreakMode = .byTruncatingTail
+            field.isHidden = true
+            root.addSubview(field)
+            summaryFields.append(field)
+            return field
+        }
+        _ = metric("导出大小", x: 624, y: 148, width: 70, height: 19)
+        outputSizeValue = metric("", x: 695, y: 143, width: 181, height: 30, size: 19, prominent: true, right: true)
+        _ = metric("原图大小", x: 624, y: 124, width: 70, height: 19)
+        originalSizeValue = metric("", x: 695, y: 124, width: 181, height: 19, size: 13, right: true)
+        sizeDifference = metric("", x: 624, y: 98, width: 252, height: 19, right: true)
         status = NSTextField(wrappingLabelWithString: "处理结果将在此显示")
         status.textColor = OpenAllTheme.muted
         status.font = .systemFont(ofSize: 12)
@@ -630,29 +645,26 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
         previewScale?.stringValue = "适应窗口 · \(Int((ratio * 100).rounded()))%"
         let outputSize = ByteCountFormatter.string(fromByteCount: Int64(finalData.count), countStyle: .file)
         let sourceSize = metadataSourceData?.count
-        let summary = NSMutableAttributedString(string: outputSize,
-            attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 23, weight: .regular),
-                         .foregroundColor: OpenAllTheme.ink])
-        summary.append(NSAttributedString(string: "  \(outputFormat.title)",
-            attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: OpenAllTheme.muted]))
+        outputSizeValue.stringValue = outputSize + "  " + outputFormat.title
+        outputSizeValue.toolTip = "\(finalData.count) 字节"
         var detail = "\(w) × \(h) 像素"
+        originalSizeValue.stringValue = "—"
+        originalSizeValue.toolTip = nil
         if let sourceSize, sourceSize > 0 {
-            let original = ByteCountFormatter.string(fromByteCount: Int64(sourceSize), countStyle: .file)
+            originalSizeValue.stringValue = ByteCountFormatter.string(fromByteCount: Int64(sourceSize), countStyle: .file)
+            originalSizeValue.toolTip = "\(sourceSize) 字节"
             let percent = Int((Double(finalData.count - sourceSize) * 100 / Double(sourceSize)).rounded())
             let change = percent == 0 ? "体积相近" : (percent < 0 ? "减小 " : "增大 ") + "\(abs(percent))%"
-            detail += " · 原图 \(original) · \(change)"
+            detail += " · " + change
         }
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.paragraphSpacingBefore = 8
-        summary.append(NSAttributedString(string: "\n" + detail,
-            attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: OpenAllTheme.muted,
-                         .paragraphStyle: paragraph]))
-        status.attributedStringValue = summary
-        outputLabel.isHidden = false
+        sizeDifference.stringValue = detail
+        summaryFields.forEach { $0.isHidden = false }
+        status.isHidden = true
     }
 
     private func setStatus(_ message: String) {
-        outputLabel.isHidden = true
+        summaryFields.forEach { $0.isHidden = true }
+        status.isHidden = false
         status.attributedStringValue = NSAttributedString(string: message,
             attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: OpenAllTheme.muted])
     }

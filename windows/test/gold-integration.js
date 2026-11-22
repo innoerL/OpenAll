@@ -28,9 +28,9 @@ async function verifyForecastMetrics(search, checks) {
     await execute(gold, () => openallGold.action('view', 'outlook'));
     await execute(gold, () => document.querySelector('#forecast-ctf').click());
     original = await execute(gold, () => openallGold.read());
-    check(await execute(gold, () => document.querySelector('#forecast-table th:nth-child(3)').textContent.includes('概率') &&
+    check(await execute(gold, () => document.querySelector('#forecast-table th:nth-child(3)').textContent === '方向概率未校准' &&
       document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
-      document.querySelector('#forecast-meta').textContent.includes('方向概率未校准') && !document.body.textContent.includes('可信度')),
+      document.querySelector('.forecast-column-note').getClientRects().length > 0 && !document.body.textContent.includes('可信度')),
     '展望区分方向概率与每日参考价');
     check(original.outlook.verification.ctf.byHorizon[1].priceCount === 0 &&
       await execute(gold, () => document.querySelector('#verification-note').textContent.includes('暂无到期的准时报价可验证') &&

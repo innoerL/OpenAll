@@ -31,7 +31,8 @@ class Chart {
     this.canvas = $('canvas', card);
     this.label = $('.hover', card);
     this.label.id = card.id + '-chart-value';
-    this.canvas.setAttribute('aria-describedby', this.label.id);
+    const legend = card.id === 'combined' ? 'legend-gold legend-ctf ' : '';
+    this.canvas.setAttribute('aria-describedby', legend + this.label.id);
     this.label.setAttribute('aria-atomic', 'true');
     this.empty = $('.chart-empty', card);
     this.context = this.canvas.getContext('2d');
@@ -92,8 +93,9 @@ class Chart {
     }
     const shared = this.dualAxis ? null : chartBounds(prices);
     const axes = this.series.map(({ byTime }) => shared || (byTime.size ? chartBounds([...byTime.values()]) : null));
-    draw.font = '10px system-ui, sans-serif';
-    const axisWidth = (axis) => axis ? Math.max(30, draw.measureText(whole.format(axis[1])).width + 7) : 7;
+    draw.font = '11px system-ui, sans-serif';
+    const axisWidth = (axis) => axis ? Math.max(30, ...[axis[0], (axis[0] + axis[1]) / 2, axis[1]]
+      .map(value => draw.measureText(whole.format(value)).width + 7)) : 7;
     this.left = axisWidth(axes[0]);
     const right = width - (this.dualAxis ? axisWidth(axes[1]) : 5);
     this.plotWidth = right - this.left;

@@ -20,6 +20,7 @@
 .editor-view-group { padding-left: 12px; border-left: 1px solid var(--rule); }
 .editor-view-group button, .editor-search-button { color: var(--secondary); }
 .editor-search-button { margin-left: auto; }
+.editor-search-button[hidden] { display:none; }
 .editor-toolbar kbd {
   font-family: inherit; font-size: 11px; line-height: 16px; font-weight: 500;
   padding: 0 4px; border: 1px solid color-mix(in srgb, currentColor 24%, transparent);

@@ -82,14 +82,46 @@ app.whenReady().then(async () => {
       const doc = OpenAllApp.controller.frame.contentDocument;
       const rect = selector => doc.querySelector(selector).getBoundingClientRect();
       const field = rect('.query-field'), query = rect('#find-query'), matches = rect('.match-nav');
-      return doc.querySelector('#navigation-count').textContent === '1 / 2' &&
+      return !rect('#open-search').width && !rect('#find-filters').width && rect('#options-toggle').width > 0 &&
+        rect('.toolbar').height <= 40 && rect('#findbar').height <= 40 &&
+        doc.querySelector('#navigation-count').textContent === '1 / 2' &&
         doc.querySelector('#find-count').textContent === '匹配 1 / 2 · 左侧' &&
         rect('.navigation').right <= rect('#summary').left && query.width >= 66 &&
         query.right <= matches.left && matches.right <= field.right &&
         doc.documentElement.scrollWidth <= doc.defaultView.innerWidth;
-    }), '480 像素宽时两组导航各自紧邻计数，搜索、范围与箭头均可见');
+    }), '480 像素宽时差异和搜索匹配各占一排，计数与箭头完整可见');
     await delay(100);
     fs.writeFileSync(path.join(output, 'comparison-search-narrow.png'), (await comparison.webContents.capturePage()).toPNG());
+    comparison.focus();
+    await until(() => BrowserWindow.getFocusedWindow()?.id === comparison.id);
+    await execute(comparison, () => {
+      const frame = OpenAllApp.controller.frame;
+      frame.contentWindow.focus();
+      frame.contentDocument.getElementById('options-toggle').focus();
+    });
+    function key(keyCode) {
+      comparison.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+      comparison.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+    }
+    key('Space');
+    await until(() => execute(comparison, () => !OpenAllApp.controller.frame.contentDocument.getElementById('options-panel').hidden));
+    key('Tab');
+    await until(() => execute(comparison, () => OpenAllApp.controller.frame.contentDocument.activeElement.id === 'sync-scroll'));
+    check(await execute(comparison, () => {
+      const doc = OpenAllApp.controller.frame.contentDocument, panel = doc.getElementById('options-panel');
+      return ['sync-scroll', 'ignore-space', 'find-scope', 'find-case'].every(id => panel.contains(doc.getElementById(id))) &&
+        !doc.getElementById('find-filters').hidden;
+    }), '窄窗选项可用键盘打开，保留搜索范围、大小写和对比设置');
+    key('Escape');
+    await until(() => execute(comparison, () => OpenAllApp.controller.frame.contentDocument.activeElement.id === 'options-toggle'));
+    key('Escape');
+    await until(() => execute(comparison, () => OpenAllApp.controller.frame.contentDocument.querySelector('#findbar').hidden));
+    check(await execute(comparison, () => {
+      const doc = OpenAllApp.controller.frame.contentDocument;
+      return doc.querySelector('#open-search').getBoundingClientRect().width > 0 &&
+        OpenAllApp.controller.getEditors().some(editor => doc.activeElement === editor.view.contentDOM);
+    }), '退出搜索恢复搜索入口，键盘焦点回到当前编辑栏');
+    await execute(comparison, () => OpenAllApp.controller.search('文本对比'));
     comparison.setContentSize(...normalSize);
     await delay(100);
     fs.writeFileSync(path.join(output, 'json-light.png'), (await json.webContents.capturePage()).toPNG());

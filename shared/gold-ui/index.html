@@ -86,6 +86,7 @@
         <div class="hover" hidden></div>
       </div>
       <div class="chart-dates"><span></span><span></span></div>
+      <p id="combined-axis-note" hidden>曲线高度分别对应左右轴的价格，涨跌幅见上方报价。</p>
       <div class="source-line"><button data-source="goldHistory">现货日收盘 goldprice.dev</button><button data-source="ctfHistory">挂牌价 搜金价</button></div>
     </section>
 
@@ -99,7 +100,8 @@
     <table id="forecast-table" aria-label="各目标日参考价、方向概率和情景区间">
       <thead><tr>
         <th scope="col">北京日期</th><th scope="col" id="forecast-price-heading">参考估计</th>
-        <th scope="col" title="方向概率未经校准">走势 · 概率</th><th scope="col">情景区间</th>
+        <th scope="col">方向概率<span class="forecast-column-note">未校准</span></th>
+        <th scope="col">情景区间<span id="forecast-scale" hidden><span></span><span></span></span></th>
       </tr></thead>
       <tbody id="forecast-rows"></tbody>
     </table>

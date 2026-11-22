@@ -11,6 +11,11 @@ struct ConfigField: Equatable {
 }
 
 enum ConfigDiff {
+    static func isSensitive(_ path: String) -> Bool {
+        path.range(of: #"pass(word|wd)?|secret|token|credential|authorization|api.?key|private.?key|私钥|密码"#,
+                   options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     static func parse(_ input: String) throws -> [String: ConfigField] {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw BackendIssue(message: "请输入配置内容") }
@@ -42,9 +47,7 @@ enum ConfigDiff {
         for key in keys {
             let a = left[key], b = right[key]
             if a == b { continue }
-            let sensitive = !revealSecrets && key.range(
-                of: #"password|passwd|secret|token|api.?key|credential|authorization|private.?key"#,
-                options: [.regularExpression, .caseInsensitive]) != nil
+            let sensitive = !revealSecrets && isSensitive(key)
             let before = a.map { sensitive ? "••••" : $0.value } ?? "∅"
             let after = b.map { sensitive ? "••••" : $0.value } ?? "∅"
             if a == nil { rows.append("+ \(key) = \(after)  [\(b!.type)]") }

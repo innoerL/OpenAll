@@ -40,11 +40,11 @@ async function capture(name){
   if(name.startsWith('id'))assert.equal(await js('return [...document.querySelectorAll(".aux-id-top,.aux-id-date")].every(row=>row.scrollWidth<=row.clientWidth+1&&[...row.children].every(field=>field.getBoundingClientRect().right<=row.getBoundingClientRect().right+1));'),true,'省市区与日期行不应横向溢出');
   fs.writeFileSync(path.join(destination,name+'.png'),(await win.webContents.capturePage()).toPNG());
 }
-async function mount(id,value='',width,height){if(!width)[width,height]=({unicode:[800,380],id:[660,520],converter:[980,610],markdown:[980,540],manual:[980,540],image:[900,540],selection:[640,460],stack:[340,262]})[id]||[1000,680];win.setSize(width,height);await js('window.controller?.dispose?.();document.querySelector("main").replaceChildren();document.querySelector("main").className="";document.body.dataset.page='+JSON.stringify(id)+';document.querySelector("#title").textContent='+JSON.stringify(id)+';window.controller=await window.OpenAllPages['+JSON.stringify(id)+'](document.querySelector("main"),{...window.context,initialValue:'+JSON.stringify(value)+'});');}
+async function mount(id,value='',width,height){if(!width)[width,height]=({unicode:[800,380],id:[660,520],converter:[980,610],markdown:[980,540],manual:[980,540],image:[900,540],selection:[640,460],stack:[340,262]})[id]||[1000,680];win.setSize(width,height);await js('window.controller?.dispose?.();document.querySelector("main").replaceChildren();document.querySelector("main").className="";document.body.dataset.page='+JSON.stringify(id)+';document.querySelector("#title").textContent=(window.OpenAllCatalog.find(command=>command.id==='+JSON.stringify(id)+')?.title||"OpenAll");window.controller=await window.OpenAllPages['+JSON.stringify(id)+'](document.querySelector("main"),{...window.context,initialValue:'+JSON.stringify(value)+'});');}
 app.whenReady().then(async()=>{
   fs.mkdirSync(destination,{recursive:true});
   const base=pathToFileURL(path.join(root,'src/')).href;
-  const html='<!doctype html><html><head><meta charset="utf-8"><base href="'+base+'"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="tool-pages.css"><link rel="stylesheet" href="content-tools.css"><link rel="stylesheet" href="editor-pages.css"><link rel="stylesheet" href="selection-pages.css"><link rel="stylesheet" href="workbench-pages.css"></head><body><div id="chrome" class="window-chrome"><span id="title" class="window-title">OpenAll</span><div class="window-controls"><button class="window-minimize" aria-label="最小化">−</button><button class="window-maximize" aria-label="最大化">□</button><button class="window-close" aria-label="关闭">×</button></div></div><main id="app"></main><script>window.module=undefined;window.exports=undefined;</script><script src="../assets/marked.umd.js"></script><script src="../assets/id-regions.js"></script><script src="tool-core.js"></script><script src="../assets/tool-manual.js"></script><script src="../../shared/manual-ui/reader.js"></script><script src="tool-pages.js"></script><script src="ui.js"></script><script src="selection-pages.js"></script></body></html>';
+  const html='<!doctype html><html><head><meta charset="utf-8"><base href="'+base+'"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="tool-pages.css"><link rel="stylesheet" href="content-tools.css"><link rel="stylesheet" href="editor-pages.css"><link rel="stylesheet" href="selection-pages.css"><link rel="stylesheet" href="workbench-pages.css"></head><body><div id="chrome" class="window-chrome"><span id="title" class="window-title">OpenAll</span><div class="window-controls"><button class="window-minimize" aria-label="最小化">−</button><button class="window-maximize" aria-label="最大化">□</button><button class="window-close" aria-label="关闭">×</button></div></div><main id="app"></main><script>window.module=undefined;window.exports=undefined;</script><script src="../assets/marked.umd.js"></script><script src="../assets/id-regions.js"></script><script src="catalog.js"></script><script src="tool-core.js"></script><script src="../assets/tool-manual.js"></script><script src="../../shared/manual-ui/reader.js"></script><script src="tool-pages.js"></script><script src="ui.js"></script><script src="selection-pages.js"></script></body></html>';
   const file=path.join(temporary,'index.html');fs.writeFileSync(file,html);
   win=new BrowserWindow({show:false,width:1000,height:700,frame:false,webPreferences:{nodeIntegration:true,contextIsolation:false,offscreen:true}});
   win.webContents.on('console-message',event=>{if(event.level==='error'||event.level>=3)errors.push(event.message);});
@@ -99,26 +99,51 @@ app.whenReady().then(async()=>{
 
   await mount('configDiff');
   await js('const fields=document.querySelectorAll("textarea,.aux-editor-frame");fields[0].value="server:\\n  port: 80\\npassword: old";fields[1].value="server:\\n  port: 81\\npassword: new\\nfeature: true";');
-  await click('比较配置');await until('document.querySelector(".aux-status").textContent==="3 项差异"','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-report-title").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');await capture('configDiff');
+  await click('比较配置');await until('document.querySelector(".aux-status").textContent.includes("修改 2")','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-status").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),"server.port · 80 → 81");assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');await capture('configDiff');
   await js('document.querySelector(".aux-editor-frame").value="server: 123";');
   await until('document.querySelector(".aux-status").textContent.includes("重新运行")','配置更改状态');
   assert.equal(await js('return document.querySelector(".aux-report-heading button").disabled'),true,'源配置变更后应禁用旧结果复制');
+  await js('const fields=document.querySelectorAll(".aux-editor-frame");fields[0].value="password: secret-old";fields[1].value="password: secret-new";');
+  await click('比较配置');await until('document.querySelector(".aux-report-title").textContent==="敏感字段已变更"','只含敏感字段的结果');
+  await js('document.querySelector(".aux-actions input[type=checkbox]").click()');
+  await until('document.querySelector("tbody").textContent.includes("secret-new")','显示敏感值');
+  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'敏感字段已变更','打开敏感值展示时摘要仍只概括变更');
+
 
   await mount('explain',JSON.stringify([{Plan:{'Node Type':'Nested Loop','Plan Rows':200,Plans:[{'Node Type':'Index Scan','Relation Name':'users','Index Name':'users_pkey','Plan Rows':1,'Actual Rows':1,'Actual Total Time':0.04},{'Node Type':'Seq Scan','Relation Name':'orders','Plan Rows':200,'Actual Rows':174,'Actual Total Time':1.24}]}}]));await click('分析计划');await until('document.querySelectorAll("tbody tr").length===3','执行计划');assert.match(await js('return document.querySelector("tbody").textContent'),/全表扫描/);await capture('explain');
-  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'1 个节点使用全表扫描');
+  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'orders 使用全表扫描');
+  assert.match(await js('return document.querySelector(".aux-status").textContent'),/实际 174 行 · 耗时 1.24 ms/);
   assert.equal(await js('return document.querySelector(".aux-backend-body").classList.contains("has-finding")'),false,'扫描方式本身不等于行数异常');
   const mismatch=JSON.stringify([{Plan:{'Node Type':'Seq Scan','Relation Name':'orders','Plan Rows':12000,'Actual Rows':3}}]);
   await fill('.aux-editor-frame',mismatch);await click('分析计划');
-  await until('document.querySelector(".aux-report-title").textContent==="估算偏高 4000 倍"','计划关键结果');
+  await until('document.querySelector(".aux-report-title").textContent==="orders · 估算偏高 4000 倍"','计划关键结果');
 
 
   await mount('sqlRestore',"SELECT * FROM users WHERE id = ? AND name = ?;");await js('document.querySelectorAll("textarea,.aux-editor-frame")[1].value="Parameters: 42(Integer), OpenAll(String)";');await click('还原 SQL');await until('document.querySelectorAll("textarea,.aux-editor-frame")[2].value.includes("id = 42")','SQL 还原');await capture('sqlRestore');
   assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'已还原 2 个占位符');
+  assert.equal(await js('return document.querySelector(".aux-backend-body > .aux-pane").offsetHeight'),80,'短 SQL 使用紧凑结果区');
+  assert.equal(await js('return getComputedStyle(document.querySelector(".aux-report-heading button")).borderTopWidth'),'1px');
+  assert.equal(await js('const result=document.querySelector(".aux-backend-body > .aux-pane .cm-content");result.focus();return result===document.activeElement;'),true,'SQL 结果可通过键盘切入');
+  const longSQL=Array.from({length:80},(_,i)=>'SELECT '+i+';').join('\n');
+  await fill('.aux-editor-frame',longSQL);await js('document.querySelectorAll(".aux-editor-frame")[1].value=""');await click('还原 SQL');
+  await until('document.querySelector(".aux-report-title").textContent==="SQL 中没有占位符"','长 SQL 结果');
+  assert.equal(await js('return document.querySelector(".aux-backend-body > .aux-pane").offsetHeight>100 && !document.querySelector(".aux-backend-body").classList.contains("short-sql");'),true,'长 SQL 保留可滚动的完整结果区域');
+
 
 
   await mount('logTimeline','{"time":"2026-11-16T12:01:20Z","traceId":"req-001","level":"INFO","message":"request started"}\n{"time":"2026-11-16T12:01:22Z","traceId":"req-001","level":"INFO","message":"request completed"}\n{"time":"2026-11-16T12:02:10Z","traceId":"req-002","level":"ERROR","message":"database timeout"}');await click('识别字段');await until('document.querySelector(".aux-status").textContent.includes("3 条日志")','日志解析');await js('const select=document.querySelectorAll("select")[0];select.value="traceId";select.dispatchEvent(new Event("change"));');await until('document.querySelector(".aux-status").textContent.includes("2 个分组")','日志分组');await capture('logTimeline');
-  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'1 条错误');
-  assert.match(await js('return document.querySelector(".aux-status").textContent'),/traceId = req-002/);
+  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'请求 req-002 · 数据库超时');
+  assert.match(await js('return document.querySelector(".aux-status").textContent'),/1 条错误/);
+  assert.equal(await js('return document.querySelector(".aux-table-footer span").textContent'),'3 项','分组标题不计入日志条数');
+  const boundaryLogs=Array.from({length:151},(_,index)=>JSON.stringify({requestId:index===0?'a':'b',level:'INFO',message:'检查分页'})).join('\n');
+  await mount('logTimeline',boundaryLogs);await click('识别字段');
+  await until('document.querySelector(".aux-status").textContent.includes("151 条日志")','多页日志');
+  await js('const select=document.querySelectorAll("select")[0];select.value="requestId";select.dispatchEvent(new Event("change"));');
+  await until('document.querySelector(".aux-status").textContent.includes("2 个分组")','分页分组');
+  await click('下一页');
+  assert.equal(await js('return document.querySelector(".aux-table-footer span").textContent'),'151 项 · 第 2 / 2 页');
+  assert.equal(await js('return document.querySelectorAll("tbody tr").length'),2,'跨页保留当前分组标题和最后一条日志');
+
 
 
   await mount('manual');
