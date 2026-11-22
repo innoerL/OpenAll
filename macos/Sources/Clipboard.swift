@@ -4,6 +4,10 @@ import Carbon
 import CryptoKit
 import Vision
 
+enum ClipboardShelfLayout: String, Codable {
+    case cards, list
+}
+
 struct ClipboardPreferences: Codable {
     var enabled = true
     var maxItems = 300
@@ -12,6 +16,7 @@ struct ClipboardPreferences: Codable {
     var directPaste = true
     var ignoreApplications: [String] = []
     var plainTextByDefault = false
+    var shelfLayout: ClipboardShelfLayout = .cards
     var pausedUntil: Date? = nil
     var pinboards: [String] = ["收藏"]
     var pinboardColors: [String: String] = ["收藏": "blue"]
@@ -26,6 +31,7 @@ struct ClipboardPreferences: Codable {
         directPaste = try values.decodeIfPresent(Bool.self, forKey: .directPaste) ?? true
         ignoreApplications = try values.decodeIfPresent([String].self, forKey: .ignoreApplications) ?? []
         plainTextByDefault = try values.decodeIfPresent(Bool.self, forKey: .plainTextByDefault) ?? false
+        shelfLayout = (try? values.decode(ClipboardShelfLayout.self, forKey: .shelfLayout)) ?? .cards
         pausedUntil = try values.decodeIfPresent(Date.self, forKey: .pausedUntil)
         pinboards = try values.decodeIfPresent([String].self, forKey: .pinboards) ?? ["收藏"]
         pinboardColors = try values.decodeIfPresent([String: String].self, forKey: .pinboardColors) ?? ["收藏": "blue"]
@@ -200,6 +206,11 @@ final class ClipboardStore {
         preferences = next
         persist(next, at: preferencesURL)
         trim()
+    }
+
+    func setShelfLayout(_ layout: ClipboardShelfLayout) {
+        preferences.shelfLayout = layout
+        persist(preferences, at: preferencesURL)
     }
 
     func suspendRecording(for seconds: TimeInterval) {

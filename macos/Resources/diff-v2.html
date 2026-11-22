@@ -210,6 +210,11 @@
       .pane-menu .pane-actions button { margin:0; text-align:left; padding-inline:8px; }
       .pane-menu .pane-actions button:enabled:hover { background:var(--surface); }
     }
+    .match-nav button { font:500 20px/1 system-ui,sans-serif; }
+    .navigation { border-inline-start:2px solid var(--accent); }
+    @media (max-width:790px) {
+      .findbar:not([hidden]) .query-field { border-color:var(--match-ink,var(--secondary)); }
+    }
   </style>
 </head>
 <body>
@@ -229,8 +234,8 @@
         <input id="find-query" type="search" placeholder="搜索内容" aria-label="搜索内容" autocomplete="off" spellcheck="false">
         <div class="match-nav" role="group" aria-label="搜索匹配导航" hidden>
           <span id="find-count" role="status" aria-live="polite" aria-atomic="true"></span>
-          <button id="find-previous" title="上一个匹配（⇧↵ / ⇧⌘G）" aria-label="上一个搜索结果" disabled>↑</button>
-          <button id="find-next" title="下一个匹配（↵ / ⌘G）" aria-label="下一个搜索结果" disabled>↓</button>
+          <button id="find-previous" title="上一个匹配（⇧↵ / ⇧⌘G）" aria-label="上一个搜索结果" disabled>‹</button>
+          <button id="find-next" title="下一个匹配（↵ / ⌘G）" aria-label="下一个搜索结果" disabled>›</button>
         </div>
       </div>
       <div id="find-filter-slot" class="filter-slot">

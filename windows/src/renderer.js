@@ -181,19 +181,45 @@
     const previewButton = button('预览卡片', preview);
     const footer = h('div', {class:'clipboard-footer'}, previewButton, info, hint);
     const select=h('select',{class:'clipboard-filter','aria-label':'内容类型'},['全部','文本','链接','图片','文件','JSON','Markdown','HTML','富文本'].map(x=>h('option',{value:x},x)));
-    const close=iconButton('close','关闭剪贴板',()=>call('close'));close.classList.add('clipboard-close');shelf.append(h('div',{class:'clipboard-header'},search,tabs,select,close),track,footer);host.append(shelf);
+    let layout = p.shelfLayout === 'list' ? 'list' : 'cards', pendingLayout = 0;
+    const layoutButton = button('', async () => {
+      const target = layout === 'cards' ? 'list' : 'cards';
+      pendingLayout++;
+      showLayout(target);
+      try { await api.clipboardAction('setLayout', {layout:target}); }
+      catch (error) {
+        if (!disposed && target === layout) showLayout((await api.settings()).clipboardPreferences?.shelfLayout);
+        throw error;
+      } finally { pendingLayout--; }
+    }, 'clipboard-layout');
+    layoutButton.addEventListener('mousedown', event => {
+      if (event.button === 0 && (document.activeElement === search || document.activeElement?.matches('.clip-card'))) event.preventDefault();
+    });
+    const close=iconButton('close','关闭剪贴板',()=>call('close'));close.classList.add('clipboard-close');shelf.append(h('div',{class:'clipboard-header'},search,tabs,layoutButton,select,close),track,footer);host.append(shelf);
+    function showLayout(value) {
+      layout = value === 'list' ? 'list' : 'cards';
+      const list = layout === 'list';
+      shelf.dataset.layout = layout;
+      track.setAttribute('aria-orientation', list ? 'vertical' : 'horizontal');
+      layoutButton.replaceChildren(icon(list ? 'cards' : 'list', 16));
+      layoutButton.title = list ? '切换到大卡片' : '切换到紧凑列表';
+      layoutButton.setAttribute('aria-label', '紧凑列表');
+      layoutButton.setAttribute('aria-pressed', String(list));
+      if (filtered.length) track.children[current]?.scrollIntoView({block:'nearest',inline:'nearest'});
+      updateHints(document.activeElement);
+    }
     const id=r=>r.id||r.hash;
     const type=r=>r.type||({image:'图片',link:'链接',files:'文件'})[r.kind]||(/^[\s]*[\[{]/.test(r.text||r.value||'')&&(()=>{try{JSON.parse(r.text||r.value);return true;}catch{return false;}})()?'JSON':r.html?'HTML':'文本');
     const hasFilter = () => Boolean(search.value.trim()) || filter !== '全部';
     function updateHints(target) {
       const commands = [];
-      if (filtered.length && target === search) commands.push('↓ 选择卡片，再按空格预览');
+      if (filtered.length && target === search) commands.push(layout === 'list' ? '↓ 选择记录，再按空格预览' : '↓ 选择卡片，再按空格预览');
       const card = target?.matches?.('.clip-card') ? filtered[Number(target.dataset.index)] : null;
       if (card) {
         const enterAction = settings.clipboardPreferences?.directPaste === false ? '复制' : '粘贴';
         commands.push(`↵ ${enterAction}${selected.size > 1 ? '所选' : ''}`);
         if (!card.favorite && !card.pinned && !card.tags?.length) commands.push('Backspace 删除此卡');
-        commands.push('← → 浏览', '空格 预览', 'Ctrl 点击多选');
+        commands.push(layout === 'list' ? '↑ ↓ 浏览' : '← → 浏览', '空格 预览', 'Ctrl 点击多选');
       }
       hint.replaceChildren(...commands.map(label => h('span', {}, label)));
       hint.title = commands.join('　');
@@ -215,17 +241,43 @@
       tabs.append(add);
       tabs.querySelector('[aria-pressed=true]')?.scrollIntoView({block:'nearest', inline:'nearest'});
     }
+    function normalizeCursor() {
+      if (!filtered.length) return;
+      if (!selected.size) selected.add(id(filtered[current]));
+      if (!selected.has(id(filtered[current]))) current = filtered.findIndex(item => selected.has(id(item)));
+    }
+    function finishSelection(focus) {
+      const count = `${filtered.length} 条${hasFilter() ? '匹配' : '记录'}`;
+      info.textContent = selected.size ? `${count} · ${selected.size} 项已选` : count;
+      previewButton.disabled = !selected.size;
+      if (focus) (filtered.length ? track.children[current] : search).focus({preventScroll:true});
+      updateHints(document.activeElement);
+    }
+    function syncSelection(focus) {
+      normalizeCursor();
+      for (let index = 0; index < filtered.length; index++) {
+        const item = track.children[index], isSelected = selected.has(id(filtered[index]));
+        if (item.classList.contains('selected') !== isSelected) {
+          item.classList.toggle('selected', isSelected);
+          item.setAttribute('aria-selected', String(isSelected));
+        }
+        const tabIndex = current === index ? 0 : -1;
+        if (item.tabIndex !== tabIndex) item.tabIndex = tabIndex;
+      }
+      finishSelection(focus);
+    }
     function paint(focus=false) {
       const q=search.value.trim().toLowerCase();filtered=all.filter(r=>(activeBoard==='历史'||activeBoard==='收藏'&&(r.favorite||r.pinned)||(r.tags||[]).includes(activeBoard)||r.pinboard===activeBoard)&&(filter==='全部'||type(r)===filter||filter==='文本'&&['文本','JSON','Markdown','HTML','富文本'].includes(type(r)))&&(!q||[r.title,r.kind==='image'?'':(r.text||r.value),r.sourceName,r.ocrText,r.recognizedText,type(r),...(r.files||[])].filter(Boolean).join(' ').toLowerCase().includes(q)));
       const hadCardFocus = document.activeElement?.matches('.clip-card');
-      const available=new Set(filtered.map(id));selected=new Set([...selected].filter(x=>available.has(x)));current=Math.min(current,Math.max(0,filtered.length-1));if(!selected.size&&filtered.length)selected.add(id(filtered[current]));
-      if (selected.size && !selected.has(id(filtered[current]))) current = filtered.findIndex(item => selected.has(id(item)));
+      const available=new Set(filtered.map(id));selected=new Set([...selected].filter(x=>available.has(x)));current=Math.min(current,Math.max(0,filtered.length-1));
+      normalizeCursor();
       const pattern = literalMatcher(search.value.trim());
       const fragment = document.createDocumentFragment();
       filtered.forEach((r, index) => {
         const format = type(r), content = h('div', {class:'clip-content'});
         if (r.kind === 'image') {
           content.append(h('img', {src:r.dataUrl || 'data:image/png;base64,' + (r.thumbnail || r.value), alt:r.title || '剪贴板图片', loading:'lazy'}));
+          content.append(h('span', {class:'clip-list-image-title'}, r.title || '剪贴板图片'));
         } else {
           const body = r.kind === 'files' ? (r.files || []).map(x => x.split(/[\\/]/).pop()).join('\n') : r.text || r.value || r.title || '';
           const shortText = !r.truncated && body.length <= 46 && !/[\r\n]/.test(body) && (body.length <= 24 || /[^!-~]/.test(body));
@@ -234,16 +286,12 @@
           if (format === 'JSON') content.append(h('pre', {}, excerpt));
           else content.append(...excerpt);
         }
-        const card=h('article',{draggable:true,onpointerdown:()=>{if(r.truncated&&!dragContent.has(id(r)))api.clipboardAction('read',{ids:[id(r)]}).then(full=>dragContent.set(id(r),Array.isArray(full)?full[0]:full)).catch(()=>{});},ondragstart:e=>{if(['files','image'].includes(r.kind)){e.preventDefault();api.clipboardAction('drag',{ids:selected.has(id(r))?[...selected]:[id(r)]}).catch(error=>notify(error.message,true));return;}const data=dragContent.get(id(r))||r;if(data.truncated){e.preventDefault();notify('正在读取全文，请稍后重新拖动');return;}e.dataTransfer.setData('text/plain',data.text||data.value||'');if(data.html)e.dataTransfer.setData('text/html',data.html);e.dataTransfer.effectAllowed='copy';},class:'clip-card'+(selected.has(id(r))?' selected':''),tabIndex:index === current ? 0 : -1,'data-index':index,role:'option','aria-selected':String(selected.has(id(r))),onclick:e=>{if(e.shiftKey){const low=Math.min(current,index),high=Math.max(current,index);for(let n=low;n<=high;n++)selected.add(id(filtered[n]));}else if(e.ctrlKey||e.metaKey){if(selected.has(id(r)))selected.delete(id(r));else selected.add(id(r));}else selected=new Set([id(r)]);current=index;paint(true);},ondblclick:()=>paste(),oncontextmenu:e=>{e.preventDefault();if(!selected.has(id(r)))selected=new Set([id(r)]);current=index;paint();cardMenu(e);}},content);
-        if((r.text||r.value||'').length>110&&r.kind!=='image')card.append(button('查看全文 ↗',e=>{e.stopPropagation();current=index;selected=new Set([id(r)]);preview();},'clip-preview-link'));
+        const card=h('article',{draggable:true,onpointerdown:()=>{if(r.truncated&&!dragContent.has(id(r)))api.clipboardAction('read',{ids:[id(r)]}).then(full=>dragContent.set(id(r),Array.isArray(full)?full[0]:full)).catch(()=>{});},ondragstart:e=>{if(['files','image'].includes(r.kind)){e.preventDefault();api.clipboardAction('drag',{ids:selected.has(id(r))?[...selected]:[id(r)]}).catch(error=>notify(error.message,true));return;}const data=dragContent.get(id(r))||r;if(data.truncated){e.preventDefault();notify('正在读取全文，请稍后重新拖动');return;}e.dataTransfer.setData('text/plain',data.text||data.value||'');if(data.html)e.dataTransfer.setData('text/html',data.html);e.dataTransfer.effectAllowed='copy';},class:'clip-card'+(selected.has(id(r))?' selected':''),tabIndex:index === current ? 0 : -1,'data-index':index,role:'option','aria-selected':String(selected.has(id(r))),onclick:e=>{if(e.shiftKey){const low=Math.min(current,index),high=Math.max(current,index);for(let n=low;n<=high;n++)selected.add(id(filtered[n]));}else if(e.ctrlKey||e.metaKey){if(selected.has(id(r)))selected.delete(id(r));else selected.add(id(r));}else selected=new Set([id(r)]);current=index;syncSelection(true);},ondblclick:e=>{if(!e.target.closest('button'))paste();},oncontextmenu:e=>{e.preventDefault();if(!selected.has(id(r)))selected=new Set([id(r)]);current=index;syncSelection(true);cardMenu(e);}},content);
+        if((r.text||r.value||'').length>110&&r.kind!=='image')card.append(button('查看全文 ↗',e=>{e.stopPropagation();current=index;selected=new Set([id(r)]);syncSelection(true);preview();},'clip-preview-link'));
         const source=r.icon?h('img',{src:r.icon,class:'clip-source',alt:r.sourceName||''}):h('span',{class:'clip-source',title:r.sourceName||r.source||''},icon(r.kind==='files'?'file':'application',16));card.append(h('div',{class:'clip-type-bar','data-format':r.kind==='files'?'文件':format},h('strong',{},format),h('time',{},UI.relativeTime(r.time||r.date)),source));fragment.append(card);});
       const empty = hasFilter() ? '没有匹配的记录' : activeBoard === '历史' ? '复制内容后会出现在这里' : '这个标签还没有记录';
       track.replaceChildren(filtered.length ? fragment : h('div', {class:'empty'}, empty));
-      const count = `${filtered.length} 条${hasFilter() ? '匹配' : '记录'}`;
-      info.textContent = selected.size ? `${count} · ${selected.size} 项已选` : count;
-      previewButton.disabled = !selected.size;
-      if (focus || hadCardFocus) (filtered.length ? track.children[current] : search).focus({preventScroll:true});
-      updateHints(document.activeElement);
+      finishSelection(focus || hadCardFocus);
     }
     async function refresh(){all=await api.history();if(!disposed)paint();}
     async function action(name,payload={}){const result=await api.clipboardAction(name,{ids:[...selected],...payload});if(result?.ok===false)throw Error(result.error||'操作失败');if(['delete','favorite','tag','copy','clear'].includes(name))await refresh();return result;}
@@ -263,10 +311,17 @@
     const keydown=e=>{if(e.defaultPrevented||e.isComposing||!e.target.matches?.('.clip-card')||document.querySelector('dialog[open],.context-menu'))return;
       const item = filtered[Number(e.target.dataset.index)];
       if (!item) return;
-      if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();current=Math.max(0,Math.min(filtered.length-1,current+(e.key==='ArrowRight'?1:-1)));if(!e.shiftKey)selected.clear();if(filtered[current])selected.add(id(filtered[current]));paint(true);track.children[current]?.scrollIntoView({inline:'nearest',block:'nearest'});}
-      if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey&&!e.repeat)deleteCard(item).catch(error=>notify(error.message,true));}if(e.key==='Enter'){e.preventDefault();paste();}if(e.key===' '){e.preventDefault();preview();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){e.preventDefault();selected=new Set(filtered.map(id));paint(true);}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){e.preventDefault();action('copy');}
+      const step = {ArrowLeft:-1, ArrowRight:1, ...(layout === 'list' ? {ArrowUp:-1, ArrowDown:1} : {})}[e.key];
+      if (step) {e.preventDefault();current=Math.max(0,Math.min(filtered.length-1,current+step));if(!e.shiftKey)selected.clear();if(filtered[current])selected.add(id(filtered[current]));syncSelection(true);track.children[current]?.scrollIntoView({inline:'nearest',block:'nearest'});}
+      if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey&&!e.repeat)deleteCard(item).catch(error=>notify(error.message,true));}if(e.key==='Enter'){e.preventDefault();paste();}if(e.key===' '){e.preventDefault();preview();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){e.preventDefault();selected=new Set(filtered.map(id));syncSelection(true);}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){e.preventDefault();action('copy');}
     };
-    window.addEventListener('keydown',keydown);const off=api.onClipboard(items=>{all=Array.isArray(items)?items:items?.items||all;if(!disposed)paint();});boards();paint();return {focus:()=>search.focus(),dispose(){disposed=true;window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(){boards();paint();},refresh,paste:text=>{search.value+=text;paint();}};
+    window.addEventListener('keydown',keydown);const off=api.onClipboard(items=>{all=Array.isArray(items)?items:items?.items||all;if(!disposed)paint();});
+    showLayout(layout);boards();paint();
+    return {focus:()=>search.focus(),dispose(){disposed=true;window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(prefs){
+      const next = (prefs || settings).clipboardPreferences?.shelfLayout === 'list' ? 'list' : 'cards';
+      if (!pendingLayout && layout !== next) showLayout(next);
+      boards();paint();
+    },refresh,paste:text=>{search.value+=text;paint();}};
   };
   window.OpenAllPages.clipboardPreview = async (host, ctx) => {
     const record = ctx.initialValue && typeof ctx.initialValue === 'object' ? ctx.initialValue : {text:ctx.initialValue};

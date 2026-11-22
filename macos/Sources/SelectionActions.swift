@@ -257,7 +257,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         return table.selectedRow == 0 && table.selectedRowIndexes.count == 1
     }
 
-    func show(_ content: SelectedContent?, message: String? = nil, image: NSImage? = nil) {
+    func show(_ content: SelectedContent?, message: String? = nil, image: NSImage? = nil, recognized: Bool = false) {
         if panel == nil { build() }
         panel?.appearance = OpenAllTheme.appearance
         displayToken += 1
@@ -279,7 +279,11 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
             let label = loading ? "图片文字识别" : "选中的图片"
             contextLabel.stringValue = width > 0 && height > 0 ? "\(label) · \(width) × \(height)" : label
         } else {
-            contextLabel.stringValue = content?.summary ?? (loading ? "图片文字识别" : "当前状态")
+            if recognized, case .text(let text) = content {
+                contextLabel.stringValue = "已识别 \(text.count) 字"
+            } else {
+                contextLabel.stringValue = content?.summary ?? (loading ? "图片文字识别" : "当前状态")
+            }
         }
         preview.string = content?.preview ?? (loading ? "" : "暂未读取到选中内容")
         preview.textColor = content != nil || loading ? OpenAllTheme.ink : OpenAllTheme.muted
@@ -510,11 +514,6 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         if let next = actions.firstIndex(where: { $0.kind == selected }) {
             table.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
         }
-    }
-
-    func tableViewSelectionDidChange(_ notification: Notification) {
-        let index = table.selectedRow
-        actionHeading.stringValue = actions.indices.contains(index) ? "可用操作　已选第 \(index + 1) 项，共 \(actions.count) 项" : "可用操作"
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { actions.count }

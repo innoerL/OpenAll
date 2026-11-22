@@ -93,7 +93,7 @@ app.whenReady().then(async()=>{
 
   await mount('converter');assert.equal(await js('return document.querySelectorAll(".aux-conversion-row").length'),10);await capture('converter-duration');
   assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'1 秒 = 1000 毫秒');
-  assert.match(await js('return document.querySelector(".aux-conversion-row.target").textContent'),/毫秒.*1000/);
+  assert.match(await js('return document.querySelector(".aux-conversion-row:first-child.target").textContent'),/毫秒.*1000/);
   await js('const unit=document.querySelector(".aux-duration-fields select");unit.value="7";unit.dispatchEvent(new Event("change"));');
   assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'1 毫秒 = 0.001 秒');
   await fill('.aux-duration-fields input','xxx');assert.equal(await js('return document.querySelector(".aux-unit-summary").textContent'),'换算结果');
@@ -111,7 +111,7 @@ app.whenReady().then(async()=>{
 
   await mount('configDiff');
   await js('const fields=document.querySelectorAll("textarea,.aux-editor-frame");fields[0].value="server:\\n  port: 80\\npassword: old";fields[1].value="server:\\n  port: 81\\npassword: new\\nfeature: true";');
-  await click('比较配置');await until('document.querySelector(".aux-status").textContent.includes("修改 2")','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-status").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),"3 项变更 · server.port · 80 → 81");assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');assert.match(await js('return document.querySelector(".summary-row").textContent'),/server.port/);
+  await click('比较配置');await until('document.querySelector(".aux-status").textContent.includes("修改 2")','配置对比');assert.match(await js('return document.querySelector("tbody").textContent'),/••••••/);assert.match(await js('return document.querySelector(".aux-status").textContent'),/新增 1.*修改 2/);assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),"3 项变更");assert.equal(await js('return document.querySelector(".aux-table-footer").textContent'),'3 项','单页结果只显示项数');assert.match(await js('return document.querySelector(".summary-row").textContent'),/server.port/);
   await capture('configDiff');
   await click('定位到行');assert.equal(await js('return document.activeElement.cells[1].textContent'),'server.port','定位到摘要列出的配置键');
   await js('document.querySelector(".aux-editor-frame").value="server: 123";');
@@ -119,13 +119,16 @@ app.whenReady().then(async()=>{
   assert.equal(await js('return document.querySelector(".aux-report-heading button:not(.aux-locate)").disabled'),true,'源配置变更后应禁用旧结果复制');
   assert.equal(await js('return document.querySelector(".aux-locate").hidden'),true,'旧结果不提供行定位');
   await js('const fields=document.querySelectorAll(".aux-editor-frame");fields[0].value="password: secret-old";fields[1].value="password: secret-new";');
-  await click('比较配置');await until('document.querySelector(".aux-report-title").textContent==="敏感字段已变更"','只含敏感字段的结果');
+  await click('比较配置');await until('document.querySelector(".aux-report-title").textContent==="1 项变更"','只含敏感字段的结果');
   await js('document.querySelector(".aux-actions input[type=checkbox]").click()');
   await until('document.querySelector("tbody").textContent.includes("secret-new")','显示敏感值');
-  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'敏感字段已变更','打开敏感值展示时摘要仍只概括变更');
+  assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'1 项变更','打开敏感值展示时摘要仍只概括变更');
 
 
   await mount('explain',JSON.stringify([{Plan:{'Node Type':'Nested Loop','Plan Rows':200,Plans:[{'Node Type':'Index Scan','Relation Name':'users','Index Name':'users_pkey','Plan Rows':1,'Actual Rows':1,'Actual Total Time':0.04},{'Node Type':'Seq Scan','Relation Name':'orders','Plan Rows':200,'Actual Rows':174,'Actual Total Time':1.24}]}}]));await click('分析计划');await until('document.querySelectorAll("tbody tr").length===3','执行计划');assert.match(await js('return document.querySelector("tbody").textContent'),/全表扫描/);await capture('explain');
+  assert.equal(await js('return document.querySelector(".source-collapsed .aux-editor").hidden'),true,'分析完成收起原文');
+  await click('展开原文');assert.equal(await js('return document.querySelector(".aux-backend-body > .aux-pane .aux-editor").hidden'),false,'可重新编辑原始计划');
+
   assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'orders 使用全表扫描');
   await click('定位到行');assert.equal(await js('return document.activeElement.cells[1].textContent'),'orders');
   assert.match(await js('return document.querySelector(".aux-status").textContent'),/实际 174 行 · 耗时 1.24 ms/);
@@ -150,6 +153,9 @@ app.whenReady().then(async()=>{
 
 
   await mount('logTimeline','{"time":"2026-11-16T12:01:20Z","traceId":"req-001","level":"INFO","message":"request started"}\n{"time":"2026-11-16T12:01:22Z","traceId":"req-001","level":"INFO","message":"request completed"}\n{"time":"2026-11-16T12:02:10Z","traceId":"req-002","level":"ERROR","message":"database timeout"}');await click('识别字段');await until('document.querySelector(".aux-status").textContent.includes("3 条日志")','日志解析');await js('const select=document.querySelectorAll("select")[0];select.value="traceId";select.dispatchEvent(new Event("change"));');await until('document.querySelector(".aux-status").textContent.includes("2 个分组")','日志分组');await capture('logTimeline');
+  assert.match(await js('return document.querySelector("tr.group").textContent'),/2026-11-16/);
+  assert.match(await js('return document.querySelector("tbody").textContent'),/\+2s/);
+
   assert.equal(await js('return document.querySelector(".aux-report-title").textContent'),'请求 req-002 · 数据库超时');
   assert.match(await js('return document.querySelector(".aux-status").textContent'),/1 条错误/);
   assert.equal(await js('return document.querySelector(".aux-table-footer span").textContent'),'3 项','分组标题不计入日志条数');
@@ -200,12 +206,28 @@ app.whenReady().then(async()=>{
 
   const image=await js('const canvas=document.createElement("canvas");canvas.width=800;canvas.height=500;const ctx=canvas.getContext("2d"),g=ctx.createLinearGradient(0,0,800,500);g.addColorStop(0,"#d8c19e");g.addColorStop(1,"#49716b");ctx.fillStyle=g;ctx.fillRect(0,0,800,500);ctx.fillStyle="#f8f7ef";ctx.font="42px sans-serif";ctx.fillText("OpenAll",60,100);ctx.strokeStyle="#ffffff90";ctx.lineWidth=3;ctx.strokeRect(60,150,680,290);return canvas.toDataURL();');
   await mount('image',image);await until('document.querySelector(".aux-image-size").textContent.includes("PNG")','图片编码');await capture('image');assert.match(await js('return document.querySelector(".aux-image-summary p").textContent'),/体积相近|减小|增大/);await click('↷ 右转');await until('document.querySelectorAll(".aux-image-dimensions input")[0].value==="500" && ![...document.querySelectorAll("button")].find(x=>x.textContent==="保存文件…").disabled','图片旋转');await click('⌗ 裁剪');
+  assert.ok(await js('return document.activeElement===document.querySelector(".image-crop-guide")'),'裁剪打开时焦点在画布');
   const dragPoints = await js(`const matrix=document.querySelector('.image-crop-guide').getScreenCTM();
     return [[30,50],[320,370]].map(([x,y])=>{const p=new DOMPoint(x,y).matrixTransform(matrix);return {x:Math.round(p.x),y:Math.round(p.y)};});`);
   win.webContents.sendInputEvent({type:'mouseDown',...dragPoints[0],button:'left',clickCount:1});
   win.webContents.sendInputEvent({type:'mouseMove',...dragPoints[1],modifiers:['leftButtonDown']});
   win.webContents.sendInputEvent({type:'mouseUp',...dragPoints[1],button:'left',clickCount:1});
   await until('Number(document.querySelector(".aux-crop-fields input").value)>0','拖动图片更新裁剪坐标');
+  for(let i=0;i<4;i++){
+    const corner=await js(`const handles = [...document.querySelectorAll('.image-crop-guide circle')];
+      const handle=handles[${i}], opposite=handles[3-${i}], matrix=handle.getScreenCTM();
+      const from=new DOMPoint(handle.cx.baseVal.value,handle.cy.baseVal.value).matrixTransform(matrix);
+      const x=handle.cx.baseVal.value+(${i}%2?-27:27), y=handle.cy.baseVal.value+(${i}<2?16:-16);
+      const to=new DOMPoint(x,y).matrixTransform(matrix), fixed=[opposite.cx.baseVal.value,opposite.cy.baseVal.value];
+      return {from:{x:Math.round(from.x),y:Math.round(from.y)},to:{x:Math.round(to.x),y:Math.round(to.y)},fixed,x,y,tolerance:Math.ceil(1/matrix.a)};`);
+    win.webContents.sendInputEvent({type:'mouseDown',...corner.from,button:'left',clickCount:1});
+    win.webContents.sendInputEvent({type:'mouseMove',...corner.to,modifiers:['leftButtonDown']});
+    win.webContents.sendInputEvent({type:'mouseUp',...corner.to,button:'left',clickCount:1});
+    const matches=await js(`const handles=[...document.querySelectorAll('.image-crop-guide circle')], target=handles[${i}], fixed=handles[3-${i}];
+      return Math.abs(target.cx.baseVal.value-${corner.x})<=${corner.tolerance} && Math.abs(target.cy.baseVal.value-${corner.y})<=${corner.tolerance} &&
+      fixed.cx.baseVal.value===${corner.fixed[0]} && fixed.cy.baseVal.value===${corner.fixed[1]};`);
+    assert.ok(matches,'角点 '+i+' 拖动后应保留对角的位置');
+  }
   await js(`const fields=[...document.querySelectorAll(".aux-crop-fields input")];[20,30,100,120].forEach((value,i)=>{fields[i].value=String(value);fields[i].dispatchEvent(new Event('input'));});`);
   assert.equal(await js('return document.querySelector(".image-crop-guide rect").getAttribute("width")'),'100');
   await capture('image-crop-selected');

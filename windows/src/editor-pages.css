@@ -79,3 +79,5 @@
   .editor-json-page .editor-toolbar kbd { display:none; }
   .editor-json-page .editor-findbar { gap:3px; }
 }
+
+.editor-json-page .cm-foldPlaceholder { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--ink); background:var(--selection,var(--raised)); border:1px solid var(--rule); border-radius:4px; padding:1px 7px; }

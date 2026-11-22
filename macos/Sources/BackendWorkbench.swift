@@ -92,7 +92,7 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
     func mark(_ index: Int?) {
         let changed = [markedRow, index].compactMap { $0 }.filter(rows.indices.contains)
         markedRow = index
-        if !changed.isEmpty { table.reloadData(forRowIndexes: IndexSet(changed), columnIndexes: IndexSet(integer: 0)) }
+        if !changed.isEmpty { table.reloadData(forRowIndexes: IndexSet(changed), columnIndexes: IndexSet(integersIn: 0..<table.numberOfColumns)) }
     }
     @discardableResult
     func locate(_ index: Int) -> Bool {
@@ -178,7 +178,7 @@ private final class AnalysisReportView: NSView, NSTableViewDataSource, NSTableVi
     }
 }
 
-final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDelegate {
+final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDelegate, NSWindowDelegate {
     private var window: NSWindow?
     private var root: NSView!
     private var body: NSView!
@@ -188,6 +188,9 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
     private var right: NSTextView?
     private var reportView: AnalysisReportView?
     private var manualRuleExpanded = false
+    private var planCollapsed = false
+    private var shortSQL = false
+    private var baseFrames: [(NSView, NSRect)] = []
     private var reportSummary: NSTextField?
     private var reportDetail: NSTextField?
     private weak var copyResultButton: NSButton?
@@ -248,9 +251,11 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
 
     private func build() {
         let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 680),
-                             styleMask: [.titled, .closable, .miniaturizable],
+                             styleMask: [.titled, .closable, .miniaturizable, .resizable],
                              backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
+        panel.minSize = NSSize(width: 940, height: 495)
+        panel.delegate = self
         WindowChrome.apply(panel, title: "后端工具")
         panel.center()
         let surface = NSView(frame: panel.contentView!.bounds)
@@ -265,6 +270,7 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
             let tab = NSButton(title: selected.title, target: self, action: #selector(selectTab(_:)))
             tab.tag = selected.rawValue
             tab.frame = NSRect(x: 28 + selected.rawValue * 124, y: 583, width: 120, height: 32)
+            tab.autoresizingMask = .minYMargin
             root.addSubview(tab)
             tabs.append(tab)
         }
@@ -333,7 +339,13 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
         if left != nil {
             savedInputs[mode] = (left?.string ?? "", right?.string ?? "", manualRule?.stringValue ?? "")
         }
+        let previousMode = mode
         mode = selected
+        baseFrames = []
+        planCollapsed = false
+        shortSQL = false
+        if selected == .sql { window?.setContentSize(NSSize(width: root.bounds.width, height: 530)) }
+        else if previousMode == .sql, root.bounds.height < 680 { window?.setContentSize(NSSize(width: root.bounds.width, height: 680)) }
         rebuild()
         if let saved = savedInputs[selected] {
             left?.string = saved.left
@@ -530,6 +542,53 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
             locate.isHidden = true
             locateButton = locate
         }
+        if mode == .explain {
+            let toggle = button("收起原文", x: 836, y: 486, w: 116, action: #selector(togglePlan(_:)))
+            WindowChrome.styleOutputAction(toggle)
+        }
+        baseFrames = body.subviews.map { ($0, $0.frame) }
+        layoutWorkbench()
+    }
+
+    func windowDidResize(_ notification: Notification) { if root != nil { layoutWorkbench() } }
+
+    @objc private func togglePlan(_ sender: NSButton) {
+        planCollapsed.toggle()
+        sender.title = planCollapsed ? "展开原文" : "收起原文"
+        left?.enclosingScrollView?.isHidden = planCollapsed
+        layoutWorkbench()
+    }
+
+    private func layoutWorkbench() {
+        guard let root, let body, !baseFrames.isEmpty else { return }
+        let dx = root.bounds.width - 1000, dy = root.bounds.height - 680
+        body.frame.size = NSSize(width: 952 + dx, height: 520 + dy)
+        let extra: CGFloat = mode == .explain && planCollapsed ? 116 : 0
+        for (view, original) in baseFrames {
+            var frame = original
+            let output = view === reportView || view === result?.enclosingScrollView
+            if output {
+                frame.size.width += dx
+                frame.size.height = max(56, original.height + dy + extra)
+                if mode == .sql && shortSQL {
+                    let top = frame.maxY
+                    frame.size.height = min(104, frame.height)
+                    frame.origin.y = top - frame.height
+                }
+            } else {
+                frame.origin.y += dy + (original.minY < 370 ? extra : 0)
+                if (mode == .config || mode == .sql) && (view === left?.enclosingScrollView || view === right?.enclosingScrollView) {
+                    frame.size.width += dx / 2
+                    if original.minX > 400 { frame.origin.x += dx / 2 }
+                } else if (mode == .config || mode == .sql) && original.minY >= 480 && original.minX > 400 { frame.origin.x += dx / 2 }
+                else if original.minX >= 730 { frame.origin.x += dx }
+                else if original.width > 750 { frame.size.width += dx }
+            }
+            view.frame = frame
+        }
+        if mode == .sql, let heading = reportSummary, let copy = copyResultButton {
+            copy.frame.origin.x = min(heading.frame.minX + heading.intrinsicContentSize.width + 16, body.bounds.width - copy.frame.width)
+        }
     }
 
     @objc private func toggleLogRule(_ sender: NSButton) {
@@ -619,19 +678,10 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                 }, emptyText: "两份配置相同")
                 let breakdown = [("新增", added), ("修改", differences.count - added - removed), ("删除", removed)]
                     .filter { $0.1 > 0 }.map { "\($0.0) \($0.1)" }.joined(separator: "　")
-                let visibleKeys = differences.filter { !ConfigDiff.isSensitive($0) }
-                if let key = visibleKeys.first(where: { a[$0] != nil && b[$0] != nil }) ?? visibleKeys.first {
-                    func brief(_ field: ConfigField?) -> String {
-                        guard let field else { return "∅" }
-                        let value = field.value.replacingOccurrences(of: "\n", with: " ")
-                        return value.isEmpty ? "空字符串" : String(value.prefix(26)) + (value.count > 26 ? "…" : "")
-                    }
-                    let example = differences.count > 1 ? "\(differences.count) 项变更 · " : ""
-                    setHeadline(example + "\(String(key.prefix(52))) · \(brief(a[key])) → \(brief(b[key]))",
-                                detail: breakdown, target: differences.firstIndex(of: key))
-                } else {
-                    setHeadline(differences.isEmpty ? "两份配置相同" : "敏感字段已变更", detail: breakdown)
-                }
+                let first = differences.first { !ConfigDiff.isSensitive($0) && a[$0] != nil && b[$0] != nil }
+                    ?? differences.first { !ConfigDiff.isSensitive($0) }
+                setHeadline(differences.isEmpty ? "两份配置相同" : "\(differences.count) 项变更", detail: breakdown,
+                            target: first.flatMap { differences.firstIndex(of: $0) })
                 status.stringValue = "左侧 \(a.count) 项 · 右侧 \(b.count) 项"
             } catch let issue as BackendIssue {
                 result.string = ""; status.stringValue = issue.message
@@ -680,6 +730,10 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                     ?? (scans == 1 ? "\(String(firstScan.prefix(48))) 使用全表扫描" : scans > 1 ? "\(scans) 个节点使用全表扫描" : "\(report.lines.count) 个计划节点")
                 let detail = [largest?.measurement ?? (scans == 1 ? measurement : ""), report.engine, largest != nil || scans > 0 ? "共 \(report.lines.count) 个计划节点" : ""]
                     .filter { !$0.isEmpty }.joined(separator: " · ")
+                if !planCollapsed, !report.lines.isEmpty,
+                   let toggle = body.subviews.compactMap({ $0 as? NSButton }).first(where: { $0.action == #selector(togglePlan(_:)) }) {
+                    togglePlan(toggle)
+                }
                 setHeadline(title, detail: detail, attention: largest != nil, target: largest?.index ?? (scans == 1 ? firstScanIndex : nil))
                 status.stringValue = report.warning ?? ""
             } else {
@@ -721,12 +775,8 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                 }
                 storage.endEditing()
             }
-            if let output = result.enclosingScrollView, let detail = reportDetail {
-                let top = detail.frame.minY - 8
-                let short = restored.sql.utf16.count <= 180 && restored.sql.split(separator: "\n", omittingEmptySubsequences: false).count <= 2
-                let height: CGFloat = short ? 80 : max(80, top - 4)
-                output.frame = NSRect(x: 4, y: top - height, width: 948, height: height)
-            }
+            shortSQL = restored.sql.utf16.count <= 180 && !restored.sql.contains("\n")
+            layoutWorkbench()
             guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 result.string = ""
                 setHeadline("还原结果", detail: "请输入带占位符的 SQL")
@@ -769,8 +819,10 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                 if let a, let b, a != b { return a < b }
                 return $0.position < $1.position
             }
-            reportRows.append(.init(values: ["\(group) · \(key)", "\(rows.count) 条", ""], tone: "group"))
-            var previousDate: String?
+            let firstTime = rows.first?.fields[time] ?? ""
+            let groupDate = firstTime.range(of: #"^\d{4}-\d{2}-\d{2}"#, options: .regularExpression).map { String(firstTime[$0]) } ?? ""
+            let firstInstant = LogTimeline.timestamp(firstTime)
+            reportRows.append(.init(values: ["\(group) · \(key)", "\(rows.count) 条", groupDate], tone: "group"))
             for entry in rows {
                 let level = entry.fields["level"] ?? entry.fields["severity"] ?? entry.fields["loglevel"] ?? "—"
                 let normalized = level.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -788,12 +840,15 @@ final class BackendWorkbenchWindow: NSObject, NSTextViewDelegate, NSTextFieldDel
                 }
                 let rawTime = entry.fields[time] ?? "—"
                 var displayTime = rawTime
-                if rawTime.count >= 19, rawTime.contains("T") {
-                    let date = String(rawTime.prefix(10))
-                    let clock = String(rawTime.dropFirst(11))
-                    displayTime = previousDate == date ? "            " + clock : date + "  " + clock
-                    previousDate = date
+                if !groupDate.isEmpty, rawTime.hasPrefix(groupDate), rawTime.count >= 19 {
+                    displayTime = String(rawTime.dropFirst(11))
+                        .replacingOccurrences(of: #"(Z|[+-]\d{2}:?\d{2})$"#, with: "", options: .regularExpression)
                 }
+                if let firstInstant, let instant = LogTimeline.timestamp(rawTime), instant > firstInstant {
+                    let seconds = instant.timeIntervalSince(firstInstant)
+                    displayTime += "   +" + String(format: seconds.rounded() == seconds ? "%.0fs" : "%.3fs", seconds)
+                }
+                displayTime = "    " + displayTime
                 reportRows.append(.init(values: [displayTime, level, entry.fields["message"] ?? entry.fields["msg"] ?? entry.raw], tone: error ? "error" : warning ? "warning" : "normal"))
             }
             return "\(group)  \(key)  ·  \(rows.count) 条\n" + rows.map { entry in

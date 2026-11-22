@@ -98,7 +98,9 @@ class Chart {
     const axisWidth = (axis) => axis ? Math.max(30, ...[axis[0], (axis[0] + axis[1]) / 2, axis[1]]
       .map(value => draw.measureText(tickLabel(value)).width + 7)) : 7;
     this.left = axisWidth(axes[0]);
-    const right = width - (this.dualAxis ? axisWidth(axes[1]) : 5);
+    const labelEnds = this.series.length > 1 && !this.dualAxis && width >= 210;
+    const labelWidth = labelEnds ? Math.ceil(Math.max(...this.series.map(line => draw.measureText(line.name).width))) + 9 : 5;
+    const right = width - (this.dualAxis ? axisWidth(axes[1]) : labelWidth);
     this.plotWidth = right - this.left;
 
     // 百分比图保留共同基线，方便直接比较相对涨跌。
@@ -125,6 +127,22 @@ class Chart {
     this.series.forEach((serie, index) => {
       if (axes[index]) this.paintSeries(serie, axes[index]);
     });
+    if (labelEnds) {
+      const labels = this.series.flatMap((line, index) => {
+        const last = [...line.byTime].at(-1);
+        if (!last || !axes[index]) return [];
+        return [{name:line.name, color:line.accent, y:this.vertical(last[1],axes[index])}];
+      }).sort((a,b) => a.y - b.y);
+      if (labels.length === 2 && labels[1].y - labels[0].y < 14) {
+        const mid = Math.max(14, Math.min(height - 14, (labels[0].y + labels[1].y) / 2));
+        labels[0].y = mid - 7; labels[1].y = mid + 7;
+      }
+      draw.textAlign = 'left';
+      for (const label of labels) {
+        draw.fillStyle = label.color;
+        draw.fillText(label.name, right + 5, Math.max(10, Math.min(height - 2, label.y + 3)));
+      }
+    }
     this.paintSelection(width, axes, theme.getPropertyValue('--surface').trim());
   }
 

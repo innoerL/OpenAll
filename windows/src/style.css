@@ -5,8 +5,7 @@
 .search-result-context { color: var(--muted); font-size: 11px; line-height: 14px; white-space: nowrap; }
 .search-result-action {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  height: 22px; padding: 0 7px; border: 1px solid color-mix(in srgb,var(--ink) 16%,transparent);
-  border-radius: 5px; color: var(--ink); font: inherit; font-size: 12px; font-weight: 500; white-space: pre;
+  height: 19px; padding: 0; color: var(--ink); font: inherit; font-size: 12px; font-weight: 500; white-space: pre;
 }
 @media (forced-colors: active) {
   .search-result.selected { outline: 1px solid Highlight; outline-offset: -1px; }

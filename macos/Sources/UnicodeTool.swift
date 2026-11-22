@@ -125,7 +125,12 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
     private var converted = false
 
     func show(_ initial: String = "", decode: Bool? = nil) {
-        if window == nil { build() }
+        if window == nil {
+            build()
+            let compact = initial.utf16.count <= 240 && initial.prefix(241).filter { $0 == "\n" }.count <= 2
+            window?.setContentSize(NSSize(width: 800, height: compact ? 306 : 440))
+            window?.center()
+        }
         if let decode { selectedDirection = decode ? 1 : 0 }
         if !initial.isEmpty {
             input.string = initial
@@ -143,7 +148,7 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
         WindowChrome.apply(w, title: "文本 ↔ Unicode 转义")
-        w.minSize = NSSize(width: 720, height: 380)
+        w.minSize = NSSize(width: 720, height: 300)
         w.center()
         let root = NSView(frame: w.contentView!.bounds)
         root.wantsLayer = true
@@ -200,7 +205,7 @@ final class UnicodeToolWindow: NSObject, NSTextViewDelegate {
             fill.contentTintColor = OpenAllTheme.muted
             let copy = NSButton(title: "复制结果", target: self, action: #selector(copyResult))
             copy.frame.size.width = 82
-            WindowChrome.styleOutputAction(copy)
+            WindowChrome.styleAction(copy, primary: true)
             actions = [fill, copy]
             copy.toolTip = "复制右侧结果"
             resultActions = actions

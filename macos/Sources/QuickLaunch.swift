@@ -349,9 +349,7 @@ final class SearchResultRowView: NSTableRowView {
         let right = row.maxX - 12
         let badge = NSRect(x: right - ceil(size.width) - 14, y: isFlipped ? row.minY + 5 : row.maxY - 26,
                            width: ceil(size.width) + 14, height: 21)
-        OpenAllTheme.ink.withAlphaComponent(0.16).setStroke()
-        NSBezierPath(roundedRect: badge, xRadius: 5, yRadius: 5).stroke()
-        label.draw(at: NSPoint(x: badge.minX + 7, y: round(badge.midY - size.height / 2)))
+        label.draw(at: NSPoint(x: right - ceil(size.width), y: round(badge.midY - size.height / 2)))
         let context = NSAttributedString(string: Self.contextHint, attributes: [
             .font: NSFont.systemFont(ofSize: 11), .foregroundColor: OpenAllTheme.muted
         ])
@@ -452,7 +450,7 @@ final class TranslationWindow: NSObject, WKNavigationDelegate {
             webView = view
         }
         let excerpt = text.prefix(96).split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        sourceExcerpt?.stringValue = excerpt.isEmpty ? "" : "待译原文　" + excerpt
+        sourceExcerpt?.stringValue = excerpt.isEmpty ? "" : "待译原文\n" + excerpt
         sourceExcerpt?.isHidden = excerpt.isEmpty
         WindowChrome.present(window)
         WindowChrome.activate()
@@ -1107,7 +1105,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         }
         if let text {
             guard text.contains("12345") else { throw NSError(domain: "SelectionOCRPreview", code: 1) }
-            selectionWindow.show(.text(text))
+            selectionWindow.show(.text(text), recognized: true)
             try DesignPreview.capture(DesignPreview.lastWindow!, name: "10-selection-ocr-result")
         } else {
             selectionWindow.show(nil, message: recognitionError)
@@ -1686,7 +1684,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 ImageTextRecognizer.recognize(image) { [weak self] result, error in
                     guard let self, self.selectionWindow.isVisible,
                           self.selectionWindow.displayToken == displayToken else { return }
-                    self.selectionWindow.show(result.map(SelectedContent.text), message: error)
+                    self.selectionWindow.show(result.map(SelectedContent.text), message: error, recognized: result != nil)
                 }
             }
         case .open:
@@ -2594,18 +2592,18 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             }
             let ready = isDouble ? doubleTapMonitor.isActive : shortcutAvailable
             let warning = OpenAllTheme.isLight ? (NSColor.systemOrange.blended(withFraction: 0.48, of: .black) ?? .systemOrange) : .systemOrange
-            let state = NSTextField(labelWithString: ready ? "已启用" : isDouble ? "监听未启动，请检查辅助功能权限" : "已被占用，点击上方快捷键重录")
+            let state = NSTextField(labelWithString: ready ? "已启用" : isDouble ? "监听未启动" : "已占用 · 点击重录")
             state.font = .systemFont(ofSize: 12)
             state.textColor = ready ? OpenAllTheme.muted : warning
-            state.alignment = .right
-            state.frame = NSRect(x: groupRight - 326, y: 311, width: 310, height: 22)
+            state.alignment = .left
+            state.frame = NSRect(x: 286, y: 339, width: isDouble && !ready ? 100 : 192, height: 22)
             if !ready { active.layer?.borderColor = warning.withAlphaComponent(0.5).cgColor }
             body.addSubview(state)
             settingsStatus = state
-            let shortcuts: [(String, String, String, Int)] = [
-                ("剪贴板", "查找、预览与粘贴历史记录", shortcutDescription(code: settings.value.clipboardKeyCode, modifiers: settings.value.clipboardModifiers, label: settings.value.clipboardKeyLabel), 2),
-                ("复制堆栈", "连续收集内容，按顺序粘贴", shortcutDescription(code: settings.value.stackKeyCode, modifiers: settings.value.stackModifiers, label: settings.value.stackKeyLabel), 3),
-                ("对选中内容操作", "将当前选择交给相应工具处理", shortcutDescription(code: settings.value.selectionKeyCode, modifiers: settings.value.selectionModifiers, label: settings.value.selectionKeyLabel), 5)]
+            let shortcuts: [(String, String, String, Int, Bool)] = [
+                ("剪贴板", "查找、预览与粘贴历史记录", shortcutDescription(code: settings.value.clipboardKeyCode, modifiers: settings.value.clipboardModifiers, label: settings.value.clipboardKeyLabel), 2, clipboardShortcutAvailable),
+                ("复制堆栈", "连续收集内容，按顺序粘贴", shortcutDescription(code: settings.value.stackKeyCode, modifiers: settings.value.stackModifiers, label: settings.value.stackKeyLabel), 3, stackShortcutAvailable),
+                ("对选中内容操作", "将当前选择交给相应工具处理", shortcutDescription(code: settings.value.selectionKeyCode, modifiers: settings.value.selectionModifiers, label: settings.value.selectionKeyLabel), 5, selectionShortcutAvailable)]
             for (index, item) in shortcuts.enumerated() {
                 let y = CGFloat(263 - index * 71)
                 let rule = NSView(frame: NSRect(x: 44, y: y + 40, width: groupRight - 60, height: 0.5))
@@ -2613,7 +2611,12 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 rule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
                 body.addSubview(rule)
                 label(item.0, 44, y, 250)
-                label(item.1, 44, y - 20, 360, secondary: true)
+                label(item.1, 44, y - 20, 234, secondary: true)
+                let registration = settingLabel(item.4 ? "已启用" : "已占用 · 点击重录", y: y - 5, width: 190)
+                registration.frame.origin.x = 286
+                registration.font = .systemFont(ofSize: 12)
+                registration.textColor = item.4 ? OpenAllTheme.muted : warning
+                body.addSubview(registration)
                 body.addSubview(shortcutControl(item.2, tag: item.3, frame: NSRect(x: keyX, y: y - 10, width: keyWidth, height: 30)))
             }
             label("再次按同一快捷键，可关闭对应窗口。", 28, 46, 450, secondary: true)
@@ -2655,7 +2658,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 let toggle = WindowChrome.checkbox(name, target: self, action: #selector(searchSourceChanged(_:)))
                 toggle.tag = tag
                 toggle.state = enabled ? .on : .off
-                toggle.frame = NSRect(x: tag == 11 ? 224 : 28, y: y, width: 180, height: 28)
+                toggle.frame = NSRect(x: tag == 11 ? 124 : 28, y: y, width: tag == 11 ? 120 : 92, height: 28)
                 body.addSubview(toggle)
             }
             let status = !chromeEnabled ? "已关闭 · 开启后自动检测配置" : chrome.profiles.isEmpty ? "尚未发现配置，可指定目录" : "已发现 \(chrome.profiles.count) 个配置"
@@ -2705,8 +2708,8 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             searchFileHint = hint
             refreshFileSearchHint()
             let manage = NSButton(title: "管理置顶与隐藏结果 →", target: self, action: #selector(openSearchManager))
-            manage.frame = NSRect(x: 28, y: showDirectory ? 28 : 108, width: 220, height: 32)
-            WindowChrome.styleAction(manage)
+            manage.frame = NSRect(x: 355, y: 432, width: 209, height: 30)
+            WindowChrome.styleOutputAction(manage)
             body.addSubview(manage)
         case 2:
             let recordingCard = NSView(frame: NSRect(x: 18, y: 283, width: 672, height: 143))
@@ -2795,25 +2798,15 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             WindowChrome.stylePopUp(size)
             body.addSubview(size)
             body.addSubview(settingLabel("排除应用", y: 146))
-            let excluded = NSPopUpButton(frame: NSRect(x: 324, y: 140, width: 240, height: 28))
             let count = clipboardStore.preferences.ignoreApplications.count
-            excluded.addItem(withTitle: count == 0 ? "未排除应用 · 点击选择" : "已排除 \(count) 个应用 · 点击修改")
-            let options = apps.compactMap { entry -> (String, String)? in
-                guard let identifier = Bundle(url: URL(fileURLWithPath: entry.value))?.bundleIdentifier else { return nil }
-                return (entry.title, identifier)
-            }
-            var identifiers = Set<String>()
-            for (name, identifier) in options.sorted(by: { $0.0.localizedStandardCompare($1.0) == .orderedAscending }) {
-                guard identifiers.insert(identifier).inserted else { continue }
-                excluded.addItem(withTitle: name)
-                excluded.lastItem?.representedObject = identifier
-                excluded.lastItem?.state = clipboardStore.preferences.ignoreApplications.contains(identifier) ? .on : .off
-            }
-            excluded.target = self
-            excluded.action = #selector(clipboardExcludedChanged(_:))
-            excluded.selectItem(at: 0)
-            WindowChrome.stylePopUp(excluded)
-            body.addSubview(excluded)
+            let exclusions = settingLabel(count == 0 ? "暂未排除应用" : "已排除 " + String(count) + " 个应用", y: 146, width: 137)
+            exclusions.frame.origin.x = 324
+            exclusions.textColor = OpenAllTheme.muted
+            body.addSubview(exclusions)
+            let editExcluded = NSButton(title: "编辑名单…", target: self, action: #selector(showExcludedApplications(_:)))
+            editExcluded.frame = NSRect(x: 462, y: 140, width: 102, height: 28)
+            WindowChrome.styleAction(editExcluded)
+            body.addSubview(editExcluded)
             let note = settingLabel("只在本机保存；排除应用和隐藏内容不会记录。", y: 98, width: 536)
             note.font = .systemFont(ofSize: 11)
             note.textColor = .secondaryLabelColor
@@ -2992,6 +2985,12 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             detail.textColor = OpenAllTheme.muted
             detail.frame = NSRect(x: 46, y: 8, width: 420, height: 18)
             sample.addSubview(detail)
+            let launch = NSTextField(labelWithString: "↵ 打开")
+            launch.font = .systemFont(ofSize: 12, weight: .medium)
+            launch.textColor = OpenAllTheme.accentText
+            launch.alignment = .right
+            launch.frame = NSRect(x: 492, y: 16, width: 108, height: 22)
+            sample.addSubview(launch)
             preview.addSubview(sample)
             appearanceAccentSample = sample
             refreshAppearanceControls()
@@ -3061,7 +3060,9 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         let rules = ranking.manualRules
         let scroll = NSScrollView(frame: NSRect(x: 28, y: 116, width: 640, height: 270))
         scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
+        scroll.hasVerticalScroller = !rules.isEmpty
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
         let contentHeight = max(270, CGFloat(rules.count) * 50 + 10)
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: contentHeight))
         if rules.isEmpty {
@@ -3173,8 +3174,12 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         accentSwatch?.layer?.backgroundColor = OpenAllTheme.accent.cgColor
         let backgroundIsCustom = !appearancePresetButtons.contains { $0.tag < 100 && $0.chosen }
         let accentIsCustom = !appearancePresetButtons.contains { $0.tag >= 100 && $0.chosen }
-        backgroundHexLabel?.stringValue = OpenAllTheme.hex(OpenAllTheme.canvas) + (backgroundIsCustom ? "  ✓" : "")
-        accentHexLabel?.stringValue = OpenAllTheme.hex(OpenAllTheme.accent) + (accentIsCustom ? "  ✓" : "")
+        backgroundHexLabel?.stringValue = OpenAllTheme.hex(OpenAllTheme.canvas)
+        backgroundSwatch?.title = backgroundIsCustom ? "✓" : ""
+        backgroundSwatch?.contentTintColor = OpenAllTheme.readableText(.white, on: [OpenAllTheme.canvas])
+        accentHexLabel?.stringValue = OpenAllTheme.hex(OpenAllTheme.accent)
+        accentSwatch?.title = accentIsCustom ? "✓" : ""
+        accentSwatch?.contentTintColor = OpenAllTheme.onAccent
     }
 
     @objc private func appearancePanelChanged(_ sender: NSColorPanel) {
@@ -3255,8 +3260,29 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
         next.maxItemBytes = (sender.selectedItem?.representedObject as? Int ?? 20) * 1_000_000
         clipboardStore.updatePreferences(next)
     }
-    @objc private func clipboardExcludedChanged(_ sender: NSPopUpButton) {
-        guard let identifier = sender.selectedItem?.representedObject as? String else { return }
+    @objc private func showExcludedApplications(_ sender: NSButton) {
+        let excluded = Set(clipboardStore.preferences.ignoreApplications)
+        var names = Dictionary(uniqueKeysWithValues: excluded.map { ($0, $0) })
+        for entry in apps {
+            if let id = Bundle(url: URL(fileURLWithPath: entry.value))?.bundleIdentifier { names[id] = entry.title }
+        }
+        let menu = NSMenu(title: "排除应用")
+        for checked in [true, false] {
+            let entries = names.filter { excluded.contains($0.key) == checked }.sorted { $0.value.localizedStandardCompare($1.value) == .orderedAscending }
+            if !entries.isEmpty, !menu.items.isEmpty { menu.addItem(.separator()) }
+            for (id, name) in entries {
+                let item = menu.addItem(withTitle: name, action: #selector(clipboardExcludedChanged(_:)), keyEquivalent: "")
+                item.state = checked ? .on : .off
+                item.representedObject = id
+                item.target = self
+            }
+        }
+        if menu.items.isEmpty { menu.addItem(withTitle: "尚未发现应用", action: nil, keyEquivalent: "") }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+    }
+
+    @objc private func clipboardExcludedChanged(_ sender: NSMenuItem) {
+        guard let identifier = sender.representedObject as? String else { return }
         var next = clipboardStore.preferences
         if next.ignoreApplications.contains(identifier) {
             next.ignoreApplications.removeAll { $0 == identifier }

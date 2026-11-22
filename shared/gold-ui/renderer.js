@@ -104,6 +104,23 @@ function updateQuote(id, card, item, snapshot) {
   if (id === 'ctf') source.dataset.source = quote?.source === '金价网 · 金子银子' ? 'ctfFallback' : 'ctf';
 }
 
+function groupQuoteStatus() {
+  const shared = $('#shared-quote-status');
+  const states = [cards.gold, cards.ctf].map(card => $('.state', card));
+  const times = [cards.gold, cards.ctf].map(card => $('.quote-time', card));
+  const commonState = states[0].textContent === states[1].textContent &&
+    states[0].dataset.tone === states[1].dataset.tone;
+  const commonTime = times[0].textContent === times[1].textContent && times[0].title === times[1].title;
+  shared.hidden = !commonTime && !commonState;
+  shared.dataset.tone = commonState ? states[0].dataset.tone : '';
+  shared.textContent = [commonState ? '两项报价' + states[0].textContent : '', commonTime ? times[0].textContent : ''].filter(Boolean).join(' · ');
+  shared.title = commonTime ? times[0].title : '';
+  for (const card of [cards.gold,cards.ctf,$('#summary-gold'),$('#summary-ctf')]) {
+    $('.state',card).hidden = commonState;
+    $('.quote-time',card).hidden = commonTime;
+  }
+}
+
 function element(tag, text, className) {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -203,6 +220,7 @@ function render(snapshot) {
     updateQuote(id, cards[id], instruments[id], snapshot);
     updateQuote(id, $(`#summary-${id}`), instruments[id], snapshot);
   }
+  groupQuoteStatus();
   const valid = row => Number.isFinite(row.price) && row.price > 0 && row.date >= snapshot.since && row.date <= snapshot.today;
   const retailPrices = new Map(ctf.rows.filter(valid).map(row => [row.date, row.price]));
   const base = gold.rows.filter(row => valid(row) && retailPrices.has(row.date))

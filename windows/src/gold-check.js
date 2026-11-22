@@ -75,6 +75,7 @@ module.exports = async function verifyGold(searchWindow, output) {
     }
     check(true, '美元、欧元、人民币报价及历史换算');
     await click('chart-change');
+    await capture('combined-default');
     await execute(searchWindow, () => openall.saveSettings({ theme: 'light', backgroundHex: '#f2f2ef', accentHex: '#926fad' }));
     await until(async () => (await read()).theme.background === '#f2f2ef' && await execute(gold, () => document.documentElement.dataset.theme === 'light'), '宿主浅色外观同步');
     check(gold.getBackgroundColor().toLowerCase() === '#f2f2ef', '金价原生背景跟随宿主浅色外观');

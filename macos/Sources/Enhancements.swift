@@ -271,7 +271,7 @@ private final class TextLineRuler: NSRulerView {
     }
 }
 
-final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
+final class LocalTextToolWindow: NSObject, NSTextViewDelegate, NSSplitViewDelegate {
     enum Mode { case configuration, sql }
     private var window: NSWindow?
     private var input: NSTextView!
@@ -282,6 +282,9 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
     private var inputSummary: NSTextField!
     private var outputSummary: NSTextField!
     private var changeLegend: NSView!
+    private var split: NSSplitView!
+    private var sourcePane: NSView!
+    private var previousSplit: CGFloat = 0.5
     private var mode: Mode = .configuration
 
     func show(_ selected: Mode, text: String = "") {
@@ -310,7 +313,8 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
 
     private func build() {
         let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 420),
-                             styleMask: [.titled, .closable], backing: .buffered, defer: false)
+                             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        panel.minSize = NSSize(width: 790, height: 350)
         panel.isReleasedWhenClosed = false
         WindowChrome.apply(panel, title: "本地文本工具")
         panel.center()
@@ -331,12 +335,12 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
             root.addSubview(label)
             return label
         }
-        for (title, x) in [("原文", 24), ("结果", 504)] {
-            label(title, x: CGFloat(x), y: 352, width: 48, size: 13, color: OpenAllTheme.ink).font = .systemFont(ofSize: 13, weight: .semibold)
-        }
+        let sourceTitle = label("原文", x: 24, y: 352, width: 42, size: 13, color: OpenAllTheme.ink)
+        let outputTitle = label("结果", x: 504, y: 352, width: 42, size: 13, color: OpenAllTheme.ink)
+        [sourceTitle, outputTitle].forEach { $0.font = .systemFont(ofSize: 13, weight: .semibold) }
         inputSummary = label("", x: 70, y: 352, width: 245)
         outputSummary = label("", x: 550, y: 352, width: 282)
-        outputSummary.alignment = .right
+        outputSummary.alignment = .left
         for summary in [inputSummary, outputSummary] {
             summary?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             summary?.lineBreakMode = .byTruncatingTail
@@ -375,11 +379,11 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         input = editor(12, "粘贴原文", editable: true)
         output = editor(492, "格式化后可在这里选择或复制结果", editable: false)
         input.delegate = self
-        for rect in [NSRect(x: 480, y: 60, width: 0.5, height: 326),
-                     NSRect(x: 0, y: 60, width: 960, height: 0.5)] {
+        for rect in [NSRect(x: 0, y: 60, width: 960, height: 0.5)] {
             let rule = NSView(frame: rect)
             rule.wantsLayer = true
             rule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
+            rule.autoresizingMask = [.width]
             root.addSubview(rule)
         }
         let action = NSButton(title: "格式化  ⌘↵", target: self, action: #selector(run))
@@ -409,8 +413,54 @@ final class LocalTextToolWindow: NSObject, NSTextViewDelegate {
         changeLegend.layer?.backgroundColor = OpenAllTheme.accent.cgColor
         changeLegend.isHidden = true
         root.addSubview(changeLegend)
+        let expand = NSButton(title: "展开结果", target: self, action: #selector(toggleResult(_:)))
+        WindowChrome.styleOutputAction(expand)
+        expand.frame = NSRect(x: 769, y: 348, width: 74, height: 27)
+        outputSummary.frame = NSRect(x: 550, y: 352, width: 208, height: 20)
+        let panes = NSSplitView(frame: NSRect(x: 0, y: 60, width: 960, height: 326))
+        panes.isVertical = true
+        panes.dividerStyle = .thin
+        panes.autoresizingMask = [.width, .height]
+        panes.delegate = self
+        let source = NSView(frame: NSRect(x: 0, y: 0, width: 480, height: 326))
+        resultSurface.removeFromSuperview()
+        resultSurface.frame = NSRect(x: 480, y: 0, width: 480, height: 326)
+        root.addSubview(panes)
+        panes.addArrangedSubview(source)
+        panes.addArrangedSubview(resultSurface)
+        func move(_ view: NSView, into parent: NSView, offset: CGFloat, resizing: NSView.AutoresizingMask) {
+            let frame = view.frame.offsetBy(dx: -offset, dy: -60)
+            view.removeFromSuperview()
+            view.frame = frame
+            view.autoresizingMask = resizing
+            parent.addSubview(view)
+        }
+        move(sourceTitle, into: source, offset: 0, resizing: .minYMargin)
+        move(inputSummary, into: source, offset: 0, resizing: [.minYMargin, .width])
+        move(input.enclosingScrollView!, into: source, offset: 0, resizing: [.width, .height])
+        move(outputTitle, into: resultSurface, offset: 480, resizing: .minYMargin)
+        move(changeLegend, into: resultSurface, offset: 480, resizing: .minYMargin)
+        move(outputSummary, into: resultSurface, offset: 480, resizing: [.minYMargin, .width])
+        move(output.enclosingScrollView!, into: resultSurface, offset: 480, resizing: [.width, .height])
+        move(copy, into: resultSurface, offset: 480, resizing: [.minXMargin, .minYMargin])
+        move(expand, into: resultSurface, offset: 480, resizing: [.minXMargin, .minYMargin])
+        split = panes
+        sourcePane = source
         WindowChrome.installControls(on: panel, compact: true)
         window = panel
+    }
+
+    func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat { 200 }
+    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat { splitView.bounds.width - 370 }
+
+    @objc private func toggleResult(_ sender: NSButton) {
+        let expand = !sourcePane.isHidden
+        if expand { previousSplit = sourcePane.frame.width / max(1, split.bounds.width) }
+        sourcePane.isHidden = expand
+        split.adjustSubviews()
+        if !expand { split.setPosition(split.bounds.width * previousSplit, ofDividerAt: 0) }
+        sender.title = expand ? "并排查看" : "展开结果"
+        window?.makeFirstResponder(expand ? output : input)
     }
 
     func textDidChange(_ notification: Notification) {

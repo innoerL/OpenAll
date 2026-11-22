@@ -862,7 +862,7 @@ final class JSONToolWindow: NSObject, NSTextViewDelegate, NSSearchFieldDelegate 
         guard let root = searchBar?.superview else { return }
         let compact = root.bounds.width < 888
         let start: CGFloat = compact ? 314 : 476
-        let width = min(514, root.bounds.width - 20 - start)
+        let width = min(416, root.bounds.width - 20 - start)
         searchBar.frame = NSRect(x: root.bounds.width - 20 - width, y: searchButton.frame.midY - 16, width: width, height: 32)
         let overflow = searchVisible && compact
         foldButton.isHidden = overflow

@@ -61,6 +61,27 @@ enum DeveloperConversion {
     }
 }
 
+private final class ConversionCopyButton: NSButton {
+    var rowHovered = false { didSet { updateTint() } }
+    private func updateTint() { contentTintColor = rowHovered || window?.firstResponder === self ? OpenAllTheme.ink : .clear }
+    override func becomeFirstResponder() -> Bool { let focused = super.becomeFirstResponder(); if focused { contentTintColor = OpenAllTheme.ink }; return focused }
+    override func resignFirstResponder() -> Bool { let result = super.resignFirstResponder(); contentTintColor = rowHovered ? OpenAllTheme.ink : .clear; return result }
+}
+
+private final class ConversionHoverRow: NSView {
+    weak var copyButton: ConversionCopyButton?
+    private var hoverTracking: NSTrackingArea?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.inVisibleRect, .activeInActiveApp, .mouseEnteredAndExited], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTracking = area
+    }
+    override func mouseEntered(with event: NSEvent) { copyButton?.rowHovered = true }
+    override func mouseExited(with event: NSEvent) { copyButton?.rowHovered = false }
+}
+
 final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
     private var window: NSWindow?
     private var root: NSView!
@@ -256,10 +277,10 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             let name = sourceUnit.name.components(separatedBy: " · ")[0]
             durationSummary?.stringValue = "\(raw) \(name) \(operation) \(targetValue) \(targetUnit.name)"
         } else { durationSummary?.stringValue = "换算超出范围" }
-        let order = Array(0..<10)
+        let order = [target] + [6, 7, 5, 4, 3, 8, 9, 2, 1, 0].filter { $0 != target }
         for (position, index) in order.enumerated() {
             let row = durationRows[index]
-            let card = NSView(frame: NSRect(x: 0, y: CGFloat(333 - position * 37), width: holder.bounds.width, height: 35))
+            let card = ConversionHoverRow(frame: NSRect(x: 0, y: CGFloat(333 - position * 37), width: holder.bounds.width, height: 35))
             card.wantsLayer = true
             card.layer?.backgroundColor = (index == target ? OpenAllTheme.accent.withAlphaComponent(0.10) : NSColor.clear).cgColor
             let rule = NSView(frame: NSRect(x: 12, y: 0, width: card.bounds.width - 24, height: 0.5))
@@ -280,13 +301,17 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             card.addSubview(number)
             card.addSubview(label(row.title, frame: NSRect(x: 14, y: 8, width: 132, height: 20),
                                   size: 11, color: OpenAllTheme.muted))
-            let copy = NSButton(title: "复制", target: self, action: #selector(copyDuration(_:)))
+            let copy = ConversionCopyButton(title: "复制", target: self, action: #selector(copyDuration(_:)))
             copy.tag = index
             copy.frame = NSRect(x: card.bounds.width - 52, y: 4, width: 40, height: 27)
             WindowChrome.styleOutputAction(copy)
             copy.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "复制完整数值")
             copy.imagePosition = .imageOnly
             copy.contentTintColor = OpenAllTheme.muted
+            copy.isBordered = false
+            card.copyButton = copy
+            copy.rowHovered = false
+            copy.setAccessibilityLabel("复制" + row.title + "的完整数值")
             copy.toolTip = "复制完整数值"
             card.addSubview(copy)
             holder.addSubview(card)
@@ -348,6 +373,8 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         let times = expression.nextOccurrences(after: Date())
         holder.addSubview(label("未来执行时间", frame: NSRect(x: 12, y: 214, width: 300, height: 24),
                                 size: 14, weight: .medium))
+        holder.addSubview(label("北京时间 UTC+8", frame: NSRect(x: 124, y: 215, width: 165, height: 21),
+                                size: 11, color: OpenAllTheme.muted))
         guard !times.isEmpty else {
             holder.addSubview(label("未来五年内没有匹配的时间。", frame: NSRect(x: 12, y: 176, width: 500, height: 24),
                                     size: 12, color: OpenAllTheme.muted))
@@ -377,10 +404,6 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
             timestamp.font = .monospacedDigitSystemFont(ofSize: 13, weight: index == 0 ? .semibold : .regular)
             timestamp.isSelectable = true
             row.addSubview(timestamp)
-            if index == 0 {
-                row.addSubview(label("北京时间 UTC+8", frame: NSRect(x: 368, y: 8, width: 152, height: 19),
-                                     size: 11, color: OpenAllTheme.muted))
-            }
             holder.addSubview(row)
         }
     }
@@ -409,8 +432,8 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         asciiStatus = status
         let header = NSView(frame: NSRect(x: 12, y: 301, width: 904, height: 30))
         WindowChrome.styleCard(header, radius: 6)
-        for (title, x, width) in [("十进制", 15, 100), ("十六进制", 125, 120),
-                                  ("字符", 255, 96), ("说明", 367, 375), ("复制字符", 814, 68)] {
+        for (title, x, width) in [("十进制", 15, 90), ("十六进制", 117, 100),
+                                  ("字符", 238, 92), ("说明", 348, 247), ("复制字符", 608, 80)] {
             header.addSubview(label(title, frame: NSRect(x: x, y: 5, width: width, height: 20),
                                     size: 11, color: OpenAllTheme.muted, weight: .medium))
         }
@@ -460,22 +483,23 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
                 row.wantsLayer = true
                 row.layer?.backgroundColor = OpenAllTheme.surface.withAlphaComponent(0.35).cgColor
             }
-            for (value, x, width) in [(String(item.number), 16, 100), (item.hex, 126, 120),
-                                      (item.character, 256, 96), (asciiDescription(item.number), 368, 375)] {
+            for (value, x, width) in [(String(item.number), 16, 90), (item.hex, 118, 100),
+                                      (item.character, 239, 92), (asciiDescription(item.number), 349, 247)] {
                 let field = label(value, frame: NSRect(x: x, y: 4, width: width, height: 20), size: 12)
-                if x < 368 { field.font = .monospacedSystemFont(ofSize: 12, weight: .regular) }
+                if x < 349 { field.font = .monospacedSystemFont(ofSize: x == 239 ? 15 : 12, weight: x == 239 ? .semibold : .regular) }
                 field.isSelectable = true
                 row.addSubview(field)
             }
             let copy = NSButton(title: "复制", target: self, action: #selector(copyASCII(_:)))
             copy.tag = item.number
             copy.toolTip = "复制字符：\(item.character)"
-            copy.frame = NSRect(x: 800, y: 2, width: 84, height: 25)
+            copy.frame = NSRect(x: 596, y: 2, width: 80, height: 25)
             WindowChrome.styleOutputAction(copy)
             copy.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "复制字符")
             copy.imagePosition = .imageOnly
             copy.contentTintColor = OpenAllTheme.muted
             row.addSubview(copy)
+            row.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(copyASCIIRow(_:))))
             document.addSubview(row)
         }
         scroll.documentView = document
@@ -490,6 +514,11 @@ final class DeveloperConverterWindow: NSObject, NSTextFieldDelegate {
         if (65...90).contains(number) { return "大写字母" }
         if (97...122).contains(number) { return "小写字母" }
         return "控制字符"
+    }
+
+    @objc private func copyASCIIRow(_ gesture: NSClickGestureRecognizer) {
+        guard let button = gesture.view?.subviews.compactMap({ $0 as? NSButton }).first else { return }
+        copyASCII(button)
     }
 
     @objc private func copyASCII(_ sender: NSButton) {

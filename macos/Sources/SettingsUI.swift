@@ -203,7 +203,7 @@ final class PermissionsView: NSView {
     }
 
     private func build() {
-        for y in [286.0, 166.0] {
+        for y in [295.0, 200.0] {
             let rule = NSView(frame: NSRect(x: 28, y: y, width: 536, height: 1))
             rule.wantsLayer = true
             rule.layer?.backgroundColor = OpenAllTheme.rule.cgColor
@@ -236,40 +236,40 @@ final class PermissionsView: NSView {
         WindowChrome.styleOutputAction(accessibilityButton)
         addSubview(accessibilityButton)
 
-        let files = label("文件与文件夹", x: 28, y: 239, width: 180, size: 13)
+        let files = label("文件与文件夹", x: 28, y: 252, width: 180, size: 13)
         files.font = .systemFont(ofSize: 13, weight: .medium)
         addSubview(files)
-        fileStatus = label("", x: 209, y: 239, width: 151)
+        fileStatus = label("", x: 209, y: 252, width: 151)
         fileStatus.textColor = OpenAllTheme.muted
         addSubview(fileStatus)
-        fileHelp = label("文件搜索使用 Spotlight 与本地扫描；受保护目录按提示授权。", x: 28, y: 198, width: 335)
+        fileHelp = label("文件搜索使用 Spotlight 与本地扫描；受保护目录按提示授权。", x: 28, y: 214, width: 335)
         fileHelp.textColor = OpenAllTheme.muted
         fileHelp.cell?.wraps = true
         fileHelp.cell?.usesSingleLineMode = false
         fileHelp.frame.size.height = 32
         addSubview(fileHelp)
         let retry = NSButton(title: "选择下载…", target: self, action: #selector(chooseDownloads))
-        retry.frame = NSRect(x: 385, y: 234, width: 180, height: 30)
+        retry.frame = NSRect(x: 385, y: 247, width: 180, height: 30)
         WindowChrome.styleAction(retry)
         addSubview(retry)
         downloadsButton = retry
         let fileButton = NSButton(title: "打开文件权限设置 ↗", target: self, action: #selector(openFiles))
-        fileButton.frame = NSRect(x: 385, y: 202, width: 180, height: 26)
+        fileButton.frame = NSRect(x: 385, y: 215, width: 180, height: 26)
         WindowChrome.styleOutputAction(fileButton)
         addSubview(fileButton)
         filesPermissionButton = fileButton
 
-        let browser = label("Chrome 书签与历史", x: 28, y: 124, width: 220, size: 13)
+        let browser = label("Chrome 书签与历史", x: 28, y: 155, width: 220, size: 13)
         browser.font = .systemFont(ofSize: 13, weight: .medium)
         addSubview(browser)
-        let browserStatus = label("无需额外授权", x: 209, y: 124, width: 151)
+        let browserStatus = label("无需额外授权", x: 209, y: 155, width: 151)
         browserStatus.textColor = OpenAllTheme.muted
         addSubview(browserStatus)
         let browserButton = NSButton(title: "打开搜索设置 →", target: self, action: #selector(openSearchSettings))
-        browserButton.frame = NSRect(x: 385, y: 119, width: 180, height: 30)
+        browserButton.frame = NSRect(x: 385, y: 150, width: 180, height: 30)
         WindowChrome.styleOutputAction(browserButton)
         addSubview(browserButton)
-        let browserHelp = label("书签与历史的搜索范围可在搜索设置中调整。", x: 28, y: 97, width: 536)
+        let browserHelp = label("书签与历史的搜索范围可在搜索设置中调整。", x: 28, y: 128, width: 536)
         browserHelp.textColor = OpenAllTheme.muted
         addSubview(browserHelp)
         subviews.forEach { $0.frame.origin.y += 25 }

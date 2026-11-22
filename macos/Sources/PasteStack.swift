@@ -62,6 +62,19 @@ final class StackPanel: NSPanel {
 }
 
 final class StackRow: NSButton {
+    weak var removeButton: NSButton?
+    private var hoverArea: NSTrackingArea?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.inVisibleRect, .activeInActiveApp, .mouseEnteredAndExited], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+    override func mouseEntered(with event: NSEvent) { removeButton?.alphaValue = 1 }
+    override func mouseExited(with event: NSEvent) {
+        removeButton?.alphaValue = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0.7
+    }
     override func draw(_ dirtyRect: NSRect) {}
 }
 
@@ -267,6 +280,8 @@ final class PasteStackWindow: NSObject {
             remove.contentTintColor = OpenAllTheme.muted
             remove.setAccessibilityLabel("移除第 \(index + 1) 项")
             remove.toolTip = "从待粘贴队列中移除此项"
+            remove.alphaValue = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0.7
+            row.removeButton = remove
             remove.frame = NSRect(x: 271, y: floor(row.bounds.midY - 13), width: 28, height: 26)
             row.addSubview(remove)
             list.addSubview(row)

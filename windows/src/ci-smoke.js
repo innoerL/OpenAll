@@ -138,6 +138,41 @@ module.exports = async function smoke(searchWindow, output, version, runtimeErro
       return samples.every(color => color && color !== 'rgba(0, 0, 0, 0)') && new Set(samples).size === 3;
     }), '普通文本、JSON 与 Markdown 实际绘制为三种类型色');
     await capture('05-clipboard');
+    check(await evaluate(() => document.querySelector('.clipboard-shelf').dataset.layout === 'cards'), '新用户默认沿用剪贴板大卡片');
+    const selectedBeforeSwitch = await evaluate(() => {
+      const rows = document.querySelectorAll('.clip-card');
+      rows[1].dispatchEvent(new MouseEvent('click', {bubbles:true, ctrlKey:true}));
+      document.querySelector('.clipboard-layout').click();
+      return [...OpenAllApp.controller.getSelected()];
+    });
+    await until(() => evaluate(async () => (await openall.settings()).clipboardPreferences.shelfLayout === 'list'), '紧凑列表偏好落盘');
+    check(await evaluate(expected => {
+      const track = document.querySelector('.clip-track'), rows = [...track.children];
+      return rows.every(row => row.getBoundingClientRect().height === 34)
+        && track.getAttribute('aria-orientation') === 'vertical' && document.activeElement === rows[1]
+        && rows.filter(row => row.getAttribute('aria-selected') === 'true').length === expected.length
+        && expected.every(id => OpenAllApp.controller.getSelected().includes(id));
+    }, selectedBeforeSwitch), '切换列表保留实际焦点与全部已选记录');
+    await capture('05-clipboard-list');
+    active.webContents.sendInputEvent({ type:'keyDown', keyCode:'Down' });
+    active.webContents.sendInputEvent({ type:'keyUp', keyCode:'Down' });
+    await until(() => evaluate(() => document.activeElement === document.querySelectorAll('.clip-card')[2]), '列表方向键下移一行');
+    await evaluate(() => OpenAllApp.render('clipboard'));
+    check(await evaluate(() => document.querySelector('.clipboard-layout').getAttribute('aria-pressed') === 'true'), '重建剪贴板后恢复紧凑布局');
+    await evaluate(() => {
+      const input = document.querySelector('.clipboard-search');
+      input.focus(); input.value = 'choose'; input.dispatchEvent(new Event('input')); input.setSelectionRange(1,4);
+      document.querySelector('.clipboard-layout').click();
+    });
+    await until(() => evaluate(async () => (await openall.settings()).clipboardPreferences.shelfLayout === 'cards'), '大卡片偏好落盘');
+    check(await evaluate(() => {
+      const input = document.querySelector('.clipboard-search');
+      return document.activeElement === input && input.value === 'choose' && input.selectionStart === 1 && input.selectionEnd === 4
+        && document.querySelectorAll('.clip-card').length === 1 && document.querySelector('.clip-track').getAttribute('aria-orientation') === 'horizontal';
+    }), '恢复卡片布局后搜索词、插入点、选区和筛选结果完整');
+    await evaluate(() => {
+      const input = document.querySelector('.clipboard-search'); input.value = ''; input.dispatchEvent(new Event('input'));
+    });
     await evaluate(() => document.querySelector('[aria-label="新建标签"]').click());
     await until(() => evaluate(() => !!document.querySelector('dialog[open] input')), '剪贴板标签命名');
     await capture('tool-clipboard-new-tag');

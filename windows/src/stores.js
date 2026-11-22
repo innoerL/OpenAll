@@ -91,7 +91,7 @@ const defaults = {
   searchShortcutMode:'combo',doubleTap:'Alt',pinyinEnabled:true,searchFiles:false,
   chromeBookmarks:false,chromeHistory:false,chromePath:'',aliases,commandAliases:{},
   theme:'dark',backgroundHex:'#242626',accentHex:'#d8c19e',launchAtLogin:false,
-  clipboardPreferences:{enabled:true,maxItems:300,maxItemBytes:20_000_000,retentionDays:30,directPaste:true,
+  clipboardPreferences:{enabled:true,maxItems:300,maxItemBytes:20_000_000,retentionDays:30,directPaste:true,shelfLayout:'cards',
     ignoreApplications:[],plainTextByDefault:false,pausedUntil:null,pinboards:['收藏'],pinboardColors:{收藏:'blue'}}
 };
 function readJSON(file, fallback) { try { return JSON.parse(fs.readFileSync(file,'utf8')); } catch { return structuredClone(fallback); } }
@@ -109,6 +109,7 @@ function normalizeSettings(saved={}) {
   const s={...structuredClone(defaults),...saved};
   s.clipboardPreferences={...defaults.clipboardPreferences,...saved.clipboardPreferences};
   const p=s.clipboardPreferences;
+  p.shelfLayout = p.shelfLayout === 'list' ? 'list' : 'cards';
   p.maxItems=Math.min(10000,Math.max(10,Number(p.maxItems)||300));
   p.maxItemBytes=Math.min(100_000_000,Math.max(100000,Number(p.maxItemBytes)||20_000_000));
   p.retentionDays=Math.min(3650,Math.max(1,Number(p.retentionDays)||30));

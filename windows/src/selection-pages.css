@@ -6,3 +6,11 @@ body[data-page=selection] #chrome,body[data-page=stack] #chrome{display:none}bod
 
 .selection-position { margin-inline-start: 9px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .queue-row > svg { color: var(--muted); }
+.queue-remove { opacity: .68; }
+.queue-row:is(:hover,:focus-within) .queue-remove,
+.queue-list:focus-visible .queue-row.focused .queue-remove { opacity: 1; }
+@media (forced-colors: active), (prefers-contrast: more) { .queue-remove { opacity: 1; } }
+
+.context-selection.recognizing { display:grid; grid-template-rows:auto minmax(30px,1fr) 32px auto; gap:7px; }
+.context-selection.recognizing .selection-preview.image { height:100%; }
+.context-selection.recognizing .selection-loading { align-items:center; }

@@ -107,7 +107,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
         addSubview(saveButton)
         deleteButton = NSButton(title: "删除", target: self, action: #selector(deleteAlias))
         deleteButton.frame = NSRect(x: 608, y: 86, width: 70, height: 30)
-        WindowChrome.styleAction(deleteButton)
+        WindowChrome.styleOutputAction(deleteButton)
         addSubview(deleteButton)
         notice.font = .systemFont(ofSize: 12)
         notice.textColor = OpenAllTheme.muted
@@ -136,7 +136,7 @@ final class AliasEditorView: NSView, NSTextFieldDelegate {
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byTruncatingTail
             paragraph.lineSpacing = 0
-            let text = NSMutableAttributedString(string: "  " + alias.title + "\n  " + alias.allNames.joined(separator: " · "),
+            let text = NSMutableAttributedString(string: "  " + alias.title + "\n  " + (alias.allNames.first ?? alias.title),
                 attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: OpenAllTheme.muted, .paragraphStyle: paragraph])
             text.addAttributes([.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: OpenAllTheme.ink],
                                range: NSRange(location: 0, length: ("  " + alias.title).utf16.count))

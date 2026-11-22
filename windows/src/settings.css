@@ -202,3 +202,28 @@
 .exclusion-editor > label { margin-top:8px; color:var(--ink); }
 .exclusion-editor .row input { flex:1; min-width:0; }
 .exclusion-status:empty { display:none; }
+
+.shortcut-control { display:grid; grid-template-columns:minmax(62px,104px) var(--shortcut-width); align-items:center; gap:16px; }
+.shortcut-status { text-align:left; }
+[data-tab=general] .settings-row:has(.shortcut-control) { padding-block:9px; }
+.search-behavior { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:18px; }
+.search-behavior button { font-size:12px; }
+.alias-edit-line { display:flex; align-items:center; gap:7px; }
+.alias-edit-line input { flex:1; min-width:0; }
+.alias-edit-line button { flex:none; }
+.alias-form .row > button:last-child:not(.primary) { background:transparent; border-color:transparent; color:var(--secondary); }
+.snippet-template-actions { padding-block:3px; border-bottom:1px solid var(--rule); }
+.snippet-variables button { border:0; border-radius:3px; padding-inline:5px; }
+.permission-more,.diagnostic-environment { color:var(--secondary); font-size:12px; }
+.permission-more summary,.diagnostic-environment summary { cursor:pointer; }
+.permission-more[open] { display:grid; gap:4px; }
+.diagnostic-environment { margin:4px 0 20px; }
+.diagnostic-environment > dl { margin-top:8px !important; }
+.custom-color { min-height:34px; padding:3px 7px; border:1px solid transparent; border-radius:6px; }
+.custom-color.active { border-color:var(--settings-mark); background:var(--selection); }
+.custom-color.active .color-check { visibility:visible; }
+.preview-open { margin-left:auto; padding-right:10px; color:var(--accent-text); font-size:12px; font-weight:550; }
+@media (max-width:660px) {
+  .shortcut-control { grid-template-columns:minmax(0,1fr); justify-items:end; gap:3px; }
+  .shortcut-status { order:1; }
+}

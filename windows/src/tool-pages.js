@@ -149,7 +149,7 @@
       }));
       setStatus(status,birthday?'出生日期 '+birthdayText(birthday):'');
     }catch(error){setStatus(status,error.message,true);}},'primary');
-    root.append(h('div',{class:'aux-id-top'},label('省份',province),label('城市',city),label('区县',region)),h('div',{class:'aux-id-date'},label('按年龄推算',age),label('出生日期 · 可手填',h('div',{class:'aux-inline'},year,month,day)),label('性别',gender),label('生成数量 · 1–500',count)),h('div',{class:'aux-actions'},generate,h('span',{class:'muted'},'按周岁沿用今天的月日，生日留空则随机。')),h('div',{class:'aux-section-bar'},heading,button('复制全部',()=>copy(ctx,numbers.join('\n')),'accent')),result,status);const keydown=event=>{if(event.key==='Enter'&&event.target.matches('input')&&!event.isComposing){event.preventDefault();generate.click();}};root.addEventListener('keydown',keydown);generate.click();return {focus:()=>age.focus(),dispose(){root.removeEventListener('keydown',keydown);}};
+    root.append(h('div',{class:'aux-id-top'},label('省份',province),label('城市',city),label('区县',region)),h('div',{class:'aux-id-date'},label('按年龄推算',age),label('出生日期 · 可手填',h('div',{class:'aux-inline'},year,month,day)),h('span',{class:'aux-id-rule muted'},'按周岁沿用今天的月日，生日留空则随机。')),h('div',{class:'aux-id-options'},label('性别',gender),label('生成数量 · 1–500',count),generate),h('div',{class:'aux-section-bar'},heading,button('复制全部',()=>copy(ctx,numbers.join('\n')),'accent')),result,status);const keydown=event=>{if(event.key==='Enter'&&event.target.matches('input')&&!event.isComposing){event.preventDefault();generate.click();}};root.addEventListener('keydown',keydown);generate.click();return {focus:()=>age.focus(),dispose(){root.removeEventListener('keydown',keydown);}};
   };
   pages.converter=async(root,ctx)=>{
     const status=shell(root,'converter'),job=worker(),modes=h('div',{class:'aux-tabs wide',role:'group','aria-label':'转换模式'}),content=h('div',{class:'aux-converter-body'});let mode='duration',timer,dead=false,cronSequence=0;const tabs=[['duration','时间单位'],['cron','Cron 表达式'],['ascii','ASCII 码表']];root.append(modes,content,status);
@@ -164,8 +164,9 @@
           const sign = Math.abs(shown-converted)<=rounding && (shown!==0 || Number(value.value)===0) ? '=' : '≈';
           summary.textContent = value.value.trim()+' '+core.durationUnits[source][0].split(' · ')[0]+' '+sign+' '+rows[target].value+' '+core.durationUnits[target][0];
         }
-        list.replaceChildren(...rows.map((row,index)=>h('div',{class:'aux-conversion-row'+(index===target?' target':'')},h('span',{class:'muted'},row.title),h('code',{title:row.value},core.durationDisplay(row.value)),copyButtonIcon(()=>copy(ctx,row.value),'复制完整数值'))));if(!value.value.trim()||!rows.length)setStatus(status,'请输入有效数字',true);else setStatus(status,'点击行末图标可复制完整精度的数值');};value.oninput=unit.onchange=update;update();}
-      if(mode==='cron'){const field=input('分 时 日 月 周','*/15 9-18 * * 1-5'),description=h('p',{class:'aux-cron-summary'}),results=h('div',{class:'aux-cron-times'}),parts=h('div',{class:'aux-cron-fields'}),presets=h('div',{class:'aux-inline'});try{core.cronParse(ctx.initialValue||'');field.value=ctx.initialValue;}catch{}const update=async()=>{const serial=++cronSequence;try{const parsed=core.cronParse(field.value);description.textContent=core.cronSummary(parsed);const dates=await job.run('cronNext',field.value,new Date(),5);if(dead||mode!=='cron'||serial!==cronSequence)return;results.replaceChildren(h('h3',{},'未来执行时间'),...dates.map((date,index)=>{const value=new Date(date).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+' '+new Date(date).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',weekday:'long'});return h('div',{class:'aux-cron-row'},h('span',{class:'muted'},index?'第 '+(index+1)+' 次':'下一次'),h('code',{},value),index===0?h('small',{class:'aux-cron-zone'},'北京时间 UTC+8'):null,copyButtonIcon(()=>copy(ctx,value),'复制第 '+(index+1)+' 次执行时间'));}));if(!dates.length)results.append(h('p',{class:'muted'},'未来五年内没有匹配的时间'));parts.replaceChildren(h('h3',{},'字段解析'),...parsed.fields.map((part,index)=>h('div',{},h('span',{class:'muted'},['分钟','小时','日期','月份','星期'][index]),h('code',{},part==='*'?'任意':part))));setStatus(status,'结果仅在本机计算 · 日期与星期同时指定时为“或”关系');}catch(error){description.textContent='';results.replaceChildren();parts.replaceChildren();setStatus(status,error.message,true);}};for(const [name,sample] of [['工作日 · 每 15 分钟','*/15 9-18 * * 1-5'],['工作日 · 09:00','0 9 * * 1-5'],['每月 1 日 · 08:30','30 8 1 * *']]){
+        const ordered = rows.length ? [target,...[6,7,5,4,3,8,9,2,1,0].filter(index=>index!==target)] : [];
+        list.replaceChildren(...ordered.map(index=>{const row = rows[index];return h('div',{class:'aux-conversion-row'+(index===target?' target':'')},h('span',{class:'muted'},row.title),h('code',{title:row.value},core.durationDisplay(row.value)),copyButtonIcon(()=>copy(ctx,row.value),'复制完整数值'));}));if(!value.value.trim()||!rows.length)setStatus(status,'请输入有效数字',true);else setStatus(status,'点击行末图标可复制完整精度的数值');};value.oninput=unit.onchange=update;update();}
+      if(mode==='cron'){const field=input('分 时 日 月 周','*/15 9-18 * * 1-5'),description=h('p',{class:'aux-cron-summary'}),results=h('div',{class:'aux-cron-times'}),parts=h('div',{class:'aux-cron-fields'}),presets=h('div',{class:'aux-inline'});try{core.cronParse(ctx.initialValue||'');field.value=ctx.initialValue;}catch{}const update=async()=>{const serial=++cronSequence;try{const parsed=core.cronParse(field.value);description.textContent=core.cronSummary(parsed);const dates=await job.run('cronNext',field.value,new Date(),5);if(dead||mode!=='cron'||serial!==cronSequence)return;results.replaceChildren(h('h3',{},'未来执行时间',h('small',{class:'aux-cron-zone'},'北京时间 UTC+8')),...dates.map((date,index)=>{const value=new Date(date).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+' '+new Date(date).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',weekday:'long'});return h('div',{class:'aux-cron-row'},h('span',{class:'muted'},index?'第 '+(index+1)+' 次':'下一次'),h('code',{},value),copyButtonIcon(()=>copy(ctx,value),'复制第 '+(index+1)+' 次执行时间'));}));if(!dates.length)results.append(h('p',{class:'muted'},'未来五年内没有匹配的时间'));parts.replaceChildren(h('h3',{},'字段解析'),...parsed.fields.map((part,index)=>h('div',{},h('span',{class:'muted'},['分钟','小时','日期','月份','星期'][index]),h('code',{},part==='*'?'任意':part))));setStatus(status,'结果仅在本机计算 · 日期与星期同时指定时为“或”关系');}catch(error){description.textContent='';results.replaceChildren();parts.replaceChildren();setStatus(status,error.message,true);}};for(const [name,sample] of [['工作日 · 每 15 分钟','*/15 9-18 * * 1-5'],['工作日 · 09:00','0 9 * * 1-5'],['每月 1 日 · 08:30','30 8 1 * *']]){
           const preset=button(name,()=>{field.value=sample;update();},'quiet');preset.title=sample;presets.append(preset);
         }field.oninput=()=>{clearTimeout(timer);timer=setTimeout(update,120);};content.append(label('Cron 表达式',field),presets,description,h('div',{class:'aux-cron-grid'},results,parts));await update();}
       if(mode==='ascii'){const field=input('搜索字符、十进制或十六进制'),category=select([['printable','可打印字符'],['control','控制字符'],['all','全部字符']]),matchLabel=h('strong',{class:'aux-ascii-match','aria-live':'polite'}),report=table([['十进制',110],['十六进制',140],['字符',106],['说明',374],['复制字符',90]],'没有匹配的字符，可试试 A、65 或 0x41');const update=()=>{const rows=core.asciiRows(field.value,field.value?'all':category.value);
@@ -173,7 +174,10 @@
         const match = rows.find(row => String(row.number) === term || row.hex.toLowerCase() === term.toLowerCase())
           || rows.find(row => row.character === term || (term.length > 1 && row.character.toLowerCase() === term.toLowerCase()));
         matchLabel.textContent = match ? match.character+'  ·  十进制 '+match.number+'  ·  '+match.hex : '';
-        report.set(rows.map(row=>[row.number,row.hex,row.character,core.asciiDescription(row.number),copyButtonIcon(()=>copy(ctx,String.fromCharCode(row.number)),'复制字符：'+row.character)]));setStatus(status,`${rows.length} 项 · ASCII 范围 0–127`);};field.oninput=category.onchange=update;content.append(h('div',{class:'aux-inline aux-ascii-lookup'},field,category,matchLabel),report.node);update();}
+        report.set(rows.map(row=>[row.number,row.hex,h('strong',{class:'ascii-glyph'},row.character),core.asciiDescription(row.number),copyButtonIcon(()=>copy(ctx,String.fromCharCode(row.number)),'复制字符：'+row.character)]));setStatus(status,`${rows.length} 项 · ASCII 范围 0–127`);};report.node.addEventListener('click',event=>{
+          const row=event.target.closest('tbody tr');
+          if(row?.cells.length===5 && !event.target.closest('button') && !window.getSelection()?.toString()) row.querySelector('button')?.click();
+        });field.oninput=category.onchange=update;content.append(h('div',{class:'aux-inline aux-ascii-lookup'},field,category,matchLabel),report.node);update();}
     }
     if(ctx.initialValue){try{core.cronParse(ctx.initialValue);mode='cron';}catch{}}await render();return {dispose(){dead=true;clearTimeout(timer);job.dispose();}};
   };
@@ -226,13 +230,7 @@
     if(id==='configDiff'){left.placeholder=right.placeholder='粘贴 JSON、YAML 或 .properties';const report=table([['变更',78],['字段路径',330],['原值',270],['新值',270]]),format=select([['auto','自动识别格式'],['json','JSON'],['yaml','YAML'],['properties','Properties']]),reveal=check('结果显示敏感值',false);async function analyze(){report.set([]);const rows=await run('configDiff',left.value,right.value,format.value,reveal.box.checked);if(!rows)return;report.set(rows.map(row=>({tone:row.status==='新增'?'added':row.status==='删除'?'removed':'changed',cells:[({'变化':'~ 修改','新增':'+ 新增','删除':'− 删除'})[row.status],row.key,h('span',{title:row.left},row.left,h('small',{},row.leftType?' · '+row.leftType:'')),h('span',{title:row.right},row.right,h('small',{},row.rightType?' · '+row.rightType:''))]})),'没有变更记录');
       const visible = rows.filter(row => !/pass(word|wd)?|secret|token|credential|authorization|api.?key|private.?key|私钥|密码/i.test(row.key));
       const first = visible.find(row => row.status === '变化') || visible[0];
-      const brief = (value,type) => {
-        if (!type) return '∅';
-        const text = String(value).replace(/[\r\n]+/g,' ');
-        return text ? text.slice(0,26) + (text.length > 26 ? '…' : '') : '空字符串';
-      };
-      const example = first && rows.length > 1 ? `${rows.length} 项变更 · ` : '';
-      const title = first ? example + first.key.slice(0,52) + ' · ' + brief(first.left,first.leftType) + ' → ' + brief(first.right,first.rightType) : rows.length ? '敏感字段已变更' : '两份配置相同';
+      const title = rows.length ? rows.length + ' 项变更' : '两份配置相同';
       complete(rows.map(row=>`${row.status} ${row.key}\n  ${row.left} [${row.leftType}] → ${row.right} [${row.rightType}]`).join('\n\n'),title,['新增','变化','删除'].map(kind => {
         const count = rows.filter(row => row.status === kind).length;
         return count ? (kind === '变化' ? '修改' : kind) + ' ' + count : '';
@@ -277,10 +275,20 @@
         const title = largest ? largest.node.slice(0,48) + ' · ' + largest.label : scans === 1 ? firstScan.slice(0,48) + ' 使用全表扫描' :
           scans ? scans + ' 个节点使用全表扫描' : rows.length + ' 个计划节点';
         const detail = [largest ? '估算 '+largest.estimate+' 行 · 实际 '+largest.actual+' 行' : scans === 1 ? measurement : '',rows[0]?.engine, (largest || scans) ? rows.length + ' 个节点' : ''].filter(Boolean).join(' · ');
+        if (rows.length && !left.hidden) toggleSource.click();
         complete(rows.map(row => '  '.repeat(row.depth || 0) + (row.warning ? '⚠ ' : '') + row.name + ' · ' + row.detail).join('\n'), title, detail, !!largest,largest || scans === 1 ? {report,index:largest?.index ?? firstScanIndex} : null);
       }
       actions.append(button('分析计划',analyzePlan,'primary'),h('span',{class:'aux-spacer'}),copyButton);
-      body.append(pane('粘贴 PostgreSQL / MySQL 的 EXPLAIN 输出',left),actions,report.node);
+      const sourcePane=pane('原始执行计划',left);
+      const toggleSource=button('收起原文',()=>{
+        left.hidden=!left.hidden;
+        toggleSource.textContent=left.hidden?'展开原文':'收起原文';
+        toggleSource.setAttribute('aria-expanded',String(!left.hidden));
+        sourcePane.classList.toggle('source-collapsed',left.hidden);
+      },'quiet');
+      toggleSource.setAttribute('aria-expanded','true');
+      sourcePane.querySelector('.aux-pane-bar .aux-inline').append(toggleSource);
+      body.append(sourcePane,actions,report.node);
     }
     if(id==='sqlRestore'){left.placeholder='SELECT * FROM users WHERE id = ?';right.placeholder='Parameters: 42(Integer) 或 [42]、{"id":42}';const output=editor('还原后的 SQL','',true,'sql'),report=table(['已替换','未匹配占位符','未使用参数']);
       const sqlText = output.querySelector('.cm-content') || output;
@@ -294,7 +302,12 @@
         const details = pending ? ['已还原 ' + result.replaced + ' 处',result.unresolved && result.unused.length ? result.unused.length + ' 个参数未使用' : ''].filter(Boolean).join(' · ') : '';
         report.node.hidden = !pending;
         complete(result.sql,title,details,pending);},'primary'),h('span',{class:'aux-spacer'}),copyButton);body.append(h('div',{class:'aux-split inputs'},pane('带占位符的 SQL',left),pane('参数日志',right)),actions,pane('还原结果',output),report.node);report.node.classList.add('summary');report.node.hidden=true;body.querySelector(':scope > .aux-pane .aux-pane-bar')?.remove();}
-    if(id==='logTimeline'){left.placeholder='每行一条日志，最多解析 10000 行';const group=select([['','先识别字段']]),time=select([['','原始顺序']]),manual=input('字段名=正则表达式（使用第 1 个捕获组）',old.rule||''),manualHolder=h('div',{class:'aux-inline aux-log-rule',hidden:'true'},manual),report=table([['时间 / 聚合项',320],['级别',96],['消息',532]]);async function renderGroups(){if(!logs.length||!group.value)return;const groups=await run('logGroups',logs,group.value,time.value);if(!groups)return;const rows=[];let errors=0, warnings=0, representative=null;const affected=new Set();for(const g of groups){rows.push({tone:'group',cells:[g.name,`${g.entries.length} 条`,'']});for(const row of g.entries) {
+    if(id==='logTimeline'){left.placeholder='每行一条日志，最多解析 10000 行';const group=select([['','先识别字段']]),time=select([['','原始顺序']]),manual=input('字段名=正则表达式（使用第 1 个捕获组）',old.rule||''),manualHolder=h('div',{class:'aux-inline aux-log-rule',hidden:'true'},manual),report=table([['时间 / 聚合项',320],['级别',96],['消息',532]]);async function renderGroups(){if(!logs.length||!group.value)return;const groups=await run('logGroups',logs,group.value,time.value);if(!groups)return;const rows=[];let errors=0, warnings=0, representative=null;const affected=new Set();for(const g of groups){
+          const startTime = String(g.entries[0]?.fields[time.value] ?? '');
+          const datePrefix = /^\d{4}-\d{2}-\d{2}/.exec(startTime)?.[0];
+          const start = Date.parse(startTime);
+          rows.push({tone:'group',cells:[g.name,`${g.entries.length} 条`,datePrefix || '']});
+          for(const row of g.entries) {
           const level = row.fields.level || row.fields.severity || row.fields.loglevel || '—';
           const normalized = String(level).trim().toUpperCase();
           const error = ['ERROR','ERR','FATAL','CRITICAL','CRIT','PANIC','EMERG','EMERGENCY','ALERT','错误','严重'].includes(normalized);
@@ -317,7 +330,11 @@
               representative = {rank,index:rows.length,position:row.position,title:[request ? '请求 ' + request.slice(0,32) + (request.length > 32 ? '…' : '') : '',kind].filter(Boolean).join(' · ')};
             }
           }
-          rows.push({tone:error ? 'log-error' : warn ? 'log-warning' : '', cells:[row.fields[time.value] || '#'+(row.position+1),level,row.fields.message || row.fields.msg || row.raw]});
+          const stamp=String(row.fields[time.value] ?? '');
+          const clock=datePrefix && stamp.startsWith(datePrefix) ? stamp.slice(11).replace(/(?:Z|[+-]\d{2}:?\d{2})$/,'') : stamp;
+          const elapsed=(Date.parse(stamp)-start)/1000;
+          const label=Number.isFinite(elapsed) && elapsed>0 ? '  +'+Number(elapsed.toFixed(3))+'s' : '';
+          rows.push({tone:error ? 'log-error' : warn ? 'log-warning' : '', cells:[h('span',{title:stamp},clock || '#'+(row.position+1),h('small',{},label)),level,row.fields.message || row.fields.msg || row.raw]});
         }}report.set(rows);
         const alerts = [errors ? errors+' 条错误' : '', warnings ? warnings+' 条警告' : ''].filter(Boolean).join(' · ');
         complete(groups.map(g=>`▸ ${g.name} · ${g.entries.length} 条\n`+g.entries.map(row=>'  '+(row.fields[time.value]||'#'+(row.position+1))+'  '+row.raw).join('\n')).join('\n\n'),representative?.title || alerts || '已整理事件时间线',
@@ -430,7 +447,9 @@
       const close = () => { shade.remove(); crop.focus(); };
       const guide = document.createElementNS('http://www.w3.org/2000/svg','svg');
       guide.classList.add('image-crop-guide');
-      guide.setAttribute('aria-hidden','true');
+      guide.setAttribute('tabindex','0');
+      guide.setAttribute('role','img');
+      guide.setAttribute('aria-label','裁剪画布，拖动角点调整选区，或使用下方坐标输入框');
       guide.setAttribute('viewBox', '0 0 '+original.naturalWidth+' '+original.naturalHeight);
       const picture = document.createElementNS(guide.namespaceURI,'image');
       picture.setAttribute('href',original.src);
@@ -444,7 +463,14 @@
       selection.setAttribute('stroke','var(--accent)');
       selection.setAttribute('stroke-width','2');
       selection.setAttribute('vector-effect','non-scaling-stroke');
-      guide.append(picture,mask,selection);
+      const handles = Array.from({length:4}, () => {
+        const handle = document.createElementNS(guide.namespaceURI,'circle');
+        handle.setAttribute('fill','white');
+        handle.setAttribute('stroke','#383838');
+        handle.setAttribute('vector-effect','non-scaling-stroke');
+        return handle;
+      });
+      guide.append(picture,mask,selection,...handles);
       const submit = button('裁剪', async () => {
         const [x,y,w,hgt] = read();
         close();
@@ -459,6 +485,14 @@
         mask.setAttribute('d', valid ? 'M0 0H'+W+'V'+H+'H0Z M'+x+' '+y+'h'+w+'v'+hgt+'h'+(-w)+'Z' : '');
         selection.setAttribute('visibility',valid ? 'visible' : 'hidden');
         if (valid) for (const [key,val] of Object.entries({x,y,width:w,height:hgt})) selection.setAttribute(key,String(val));
+        const scale = guide.getScreenCTM()?.a || 1;
+        handles.forEach((handle,i) => {
+          handle.setAttribute('visibility',valid ? 'visible' : 'hidden');
+          if (!valid) return;
+          handle.setAttribute('r',String(3.5/scale));
+          handle.setAttribute('cx',String(i%2 ? x+w : x));
+          handle.setAttribute('cy',String(i>=2 ? y+hgt : y));
+        });
       }
       let startPoint;
       function imagePoint(event) {
@@ -468,8 +502,14 @@
       }
       guide.addEventListener('pointerdown',event=>{
         const point = imagePoint(event);
-        if (event.button !== 0 || !point || point.x < 0 || point.y < 0 || point.x > original.naturalWidth || point.y > original.naturalHeight) return;
-        startPoint = [Math.round(point.x),Math.round(point.y)];
+        if (event.button !== 0 || !point) return;
+        const corners = handles.map((h,i) => ({i, x:h.cx.baseVal.value, y:h.cy.baseVal.value}))
+          .map(c => ({...c, distance:Math.hypot(c.x-point.x,c.y-point.y)}));
+        const nearest = corners.reduce((a,b) => a.distance < b.distance ? a : b);
+        const resizing = !submit.disabled && nearest.distance * guide.getScreenCTM().a <= 7;
+        if (!resizing && (point.x < 0 || point.y < 0 || point.x > original.naturalWidth || point.y > original.naturalHeight)) return;
+        const origin = resizing ? corners[3-nearest.i] : point;
+        startPoint = [Math.round(origin.x),Math.round(origin.y)];
         guide.setPointerCapture(event.pointerId);
       });
       function selectTo(event) {
@@ -499,7 +539,7 @@
         if (event.key==='Escape') { event.preventDefault(); close(); }
         if (event.key==='Enter' && document.activeElement?.matches('input') && !submit.disabled) { event.preventDefault(); submit.click(); }
       });
-      root.append(shade); redraw(); fields[0].focus();
+      root.append(shade); redraw(); guide.focus();
     }
     async function copyOutput(){if(!output)return;try{const png=format.value==='png'?output:await raster(Number(width.value),Number(height.value));await ctx.api.fileAction('copyImage',{dataUrl:png});ctx.notify('已复制图片');}catch(error){setStatus(status,error.message,true);}}
     async function saveOutput(){if(!output)return;try{const result=await ctx.api.fileAction('save',{name:fileName+'.'+(format.value==='jpeg'?'jpg':format.value),dataUrl:output,format:format.value});if(!result?.canceled)setStatus(status,'图片已保存');}catch(error){setStatus(status,error.message,true);}}

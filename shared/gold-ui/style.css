@@ -166,3 +166,14 @@ html:has(#outlook:not([hidden])) {
 
 .summary .week-confidence { display:none; }
 .summary .week-summary { column-gap:5px; }
+
+#shared-quote-status { display:flex; align-items:center; gap:6px; margin:0 2px 8px; color:var(--secondary); font-size:11px; line-height:1.35; }
+#shared-quote-status[hidden], .quote-card [hidden] { display:none; }
+#shared-quote-status[data-tone=ok]::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--online,var(--ctf-line)); }
+.forecast-unit { font-size:12px; }
+#outlook .outlook-heading { column-gap:8px; }
+#drivers { line-height:1.55; }
+.range-track::before { height:3px; top:3px; }
+.range-track { margin-block:4px; }
+.day-direction .chance, .day-direction .chance strong { color:var(--foreground); font-size:12px; font-weight:550; }
+.outlook .view-switch button[aria-pressed=true] { color:var(--foreground); background:color-mix(in srgb,var(--foreground) 12%,transparent); }

@@ -195,10 +195,25 @@ private final class ImageCropGuide: NSView, NSTextFieldDelegate {
         NSPoint(x: min(pixels.width, max(0, ((point.x - imageRect.minX) / imageRect.width * pixels.width).rounded())),
                 y: min(pixels.height, max(0, ((point.y - imageRect.minY) / imageRect.height * pixels.height).rounded())))
     }
+    private var corners: [NSPoint] {
+        [NSPoint(x: selection.minX, y: selection.minY), NSPoint(x: selection.maxX, y: selection.minY),
+         NSPoint(x: selection.minX, y: selection.maxY), NSPoint(x: selection.maxX, y: selection.maxY)]
+    }
+    override var acceptsFirstResponder: Bool { true }
     override func resetCursorRects() { addCursorRect(imageRect, cursor: .crosshair) }
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        start = imageRect.contains(point) ? pixel(point) : nil
+        guard imageRect.insetBy(dx: -5, dy: -5).contains(point) else { start = nil; return }
+        let pixelPoint = pixel(point)
+        let tolerance = 7 * pixels.width / max(1, imageRect.width)
+        let handle = corners.enumerated().min { a, b in
+            hypot(a.element.x - pixelPoint.x, a.element.y - pixelPoint.y) < hypot(b.element.x - pixelPoint.x, b.element.y - pixelPoint.y)
+        }
+        if let handle, hypot(handle.element.x - pixelPoint.x, handle.element.y - pixelPoint.y) <= tolerance {
+            start = corners[3 - handle.offset]
+        } else {
+            start = pixelPoint
+        }
     }
     override func mouseDragged(with event: NSEvent) {
         guard let start else { return }
@@ -209,7 +224,7 @@ private final class ImageCropGuide: NSView, NSTextFieldDelegate {
         didSelect?(rect)
     }
     override func mouseUp(with event: NSEvent) { mouseDragged(with: event); start = nil }
-    func verifyDragForDesign(region: NSRect) -> Bool {
+    func verifyDragForDesign(from start: NSPoint, to end: NSPoint) -> Bool {
         guard DesignPreview.enabled, let window else { return false }
         let scale = imageRect.width / pixels.width
         func event(_ type: NSEvent.EventType, _ x: CGFloat, _ y: CGFloat) -> NSEvent? {
@@ -217,9 +232,9 @@ private final class ImageCropGuide: NSView, NSTextFieldDelegate {
             return NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: 0,
                                       windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
         }
-        guard let down = event(.leftMouseDown, region.minX, region.minY),
-              let moved = event(.leftMouseDragged, region.maxX, region.maxY),
-              let up = event(.leftMouseUp, region.maxX, region.maxY) else { return false }
+        guard let down = event(.leftMouseDown, start.x, start.y),
+              let moved = event(.leftMouseDragged, end.x, end.y),
+              let up = event(.leftMouseUp, end.x, end.y) else { return false }
         mouseDown(with: down); mouseDragged(with: moved); mouseUp(with: up)
         return true
     }
@@ -251,6 +266,14 @@ private final class ImageCropGuide: NSView, NSTextFieldDelegate {
         stroke.lineWidth = 2
         OpenAllTheme.accent.setStroke()
         stroke.stroke()
+        for corner in corners {
+            let x = imageRect.minX + corner.x * scale, y = imageRect.minY + corner.y * scale
+            let handle = NSBezierPath(ovalIn: NSRect(x: x - 3.5, y: y - 3.5, width: 7, height: 7))
+            NSColor.white.setFill()
+            handle.fill()
+            NSColor.black.withAlphaComponent(0.75).setStroke()
+            handle.stroke()
+        }
     }
 }
 
@@ -352,7 +375,7 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
             WindowChrome.styleAction(button)
             button.layer?.backgroundColor = NSColor.clear.cgColor
             button.layer?.borderWidth = 0
-            button.font = .systemFont(ofSize: 12)
+            button.font = .systemFont(ofSize: 13, weight: .medium)
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
             button.imagePosition = .imageLeading
             if title != "裁剪" { button.toolTip = "向\(title == "左转" ? "左" : "右")旋转 90°" }
@@ -611,7 +634,8 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
             submit.isEnabled = true
         }
         guide.updateFromFields = updateGuide
-        panel.initialFirstResponder = fields.first
+        guide.setAccessibilityLabel("裁剪画布，拖动角点调整选区，或使用下方坐标输入框")
+        panel.initialFirstResponder = guide
         if DesignPreview.enabled {
             DesignPreview.lastWindow = panel
             verifyCrop = {
@@ -619,13 +643,29 @@ final class ImageToolWindow: NSObject, NSTextFieldDelegate {
                 let region = NSRect(x: (maxSize.width * 0.10).rounded(), y: (maxSize.height * 0.125).rounded(),
                                     width: (maxSize.width * 0.47).rounded(), height: (maxSize.height * 0.58).rounded())
                 panel.contentView?.layoutSubtreeIfNeeded()
-                let selected = guide.verifyDragForDesign(region: region)
+                let selected = guide.verifyDragForDesign(from: region.origin, to: NSPoint(x: region.maxX, y: region.maxY))
                 let expected = [region.minX, region.minY, region.width, region.height].map { Int($0) }
                 let actual = fields.map(\.integerValue)
                 let diagnostic = "裁剪拖动检查：原图 \(maxSize)，画布 \(guide.bounds)，预期 [X,Y,宽,高] \(expected)，实际 \(actual)，选区 \(guide.selection)"
                 print(diagnostic)
                 guard selected, zip(actual, expected).allSatisfy({ abs($0 - $1) <= 2 }) else {
                     throw NSError(domain: "CropDragCoordinates", code: 1, userInfo: [NSLocalizedDescriptionKey: diagnostic])
+                }
+                guard panel.initialFirstResponder === guide, guide.acceptsFirstResponder else { throw NSError(domain: "CropCanvasFocus", code: 1) }
+                for index in 0..<4 {
+                    let previous = guide.selection
+                    let start = NSPoint(x: index.isMultiple(of: 2) ? previous.minX : previous.maxX,
+                                        y: index < 2 ? previous.minY : previous.maxY)
+                    let opposite = NSPoint(x: index.isMultiple(of: 2) ? previous.maxX : previous.minX,
+                                           y: index < 2 ? previous.maxY : previous.minY)
+                    let target = NSPoint(x: start.x + (index.isMultiple(of: 2) ? 9 : -9), y: start.y + (index < 2 ? 7 : -7))
+                    let expected = [min(target.x,opposite.x),min(target.y,opposite.y),abs(target.x-opposite.x),abs(target.y-opposite.y)].map { Int($0) }
+                    let dragged = guide.verifyDragForDesign(from: start, to: target)
+                    let actual = fields.map(\.integerValue)
+                    guard dragged, zip(actual,expected).allSatisfy({ abs($0 - $1) <= 2 }) else {
+                        throw NSError(domain: "CropCornerResize", code: index+1,
+                                      userInfo: [NSLocalizedDescriptionKey: "角 \(index) 拖动时对角应固定，预期 \(expected)，实际 \(actual)"])
+                    }
                 }
                 let newWidth = max(1, expected[2] - max(1, expected[2] / 16))
                 fields[2].integerValue = newWidth

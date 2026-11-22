@@ -9,20 +9,21 @@ private final class GoldRailView: NSView, WindowThemeRefreshing {
     var onOpen: (() -> Void)?
 
     override func draw(_ dirtyRect: NSRect) {
-        let tab = NSRect(x: bounds.midX - 8, y: bounds.midY - 12, width: 16, height: 24)
-        OpenAllTheme.accent.setFill()
-        NSBezierPath(roundedRect: tab, xRadius: 5, yRadius: 5).fill()
-        // 两层金锭在窄边条上保留一个像素的间隙。
-        let mark = NSBezierPath()
-        for (x, y) in [(CGFloat(5), CGFloat(12.5)), (1.5, 8), (8.5, 8)] {
-            mark.move(to: NSPoint(x: tab.minX + x, y: tab.minY + y))
-            mark.line(to: NSPoint(x: tab.minX + x + 6, y: tab.minY + y))
-            mark.line(to: NSPoint(x: tab.minX + x + 5, y: tab.minY + y + 3.5))
-            mark.line(to: NSPoint(x: tab.minX + x + 1, y: tab.minY + y + 3.5))
-            mark.close()
+        let tab = bounds.insetBy(dx: 0.5, dy: 8)
+        let shape = NSBezierPath(roundedRect: tab, xRadius: 6, yRadius: 6)
+        OpenAllTheme.sidebar.setFill()
+        shape.fill()
+        OpenAllTheme.accent.withAlphaComponent(0.65).setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+        let gold = OpenAllTheme.isLight ? NSColor(srgbRed: 0.49, green: 0.32, blue: 0.06, alpha: 1) :
+            NSColor(srgbRed: 0.99, green: 0.78, blue: 0.42, alpha: 1)
+        let style: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: gold]
+        for (i, word) in ["金", "价"].enumerated() {
+            let label = NSAttributedString(string: word, attributes: style)
+            label.draw(at: NSPoint(x: round(bounds.midX - label.size().width / 2),
+                                   y: round(bounds.midY + 1 - CGFloat(i * 14))))
         }
-        OpenAllTheme.onAccent.setFill()
-        mark.fill()
     }
 
     override func mouseDown(with event: NSEvent) { onOpen?() }

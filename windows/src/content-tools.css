@@ -111,3 +111,9 @@
   .aux-image .aux-dialog { padding:14px; }
   .aux-image .aux-dialog .aux-crop-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
+
+.aux-id .aux-id-date { grid-template-columns: minmax(76px,0.65fr) minmax(170px,1.3fr) minmax(116px,1fr); align-items:end; }
+.aux-id-rule { font-size:12px; line-height:1.45; padding:0 0 5px 6px; }
+.aux-id-options { display:grid; grid-template-columns:minmax(90px,140px) minmax(100px,144px) 1fr; align-items:end; gap:12px; }
+.aux-id-options > button { justify-self:end; }
+@media(max-width:560px) { .aux-id .aux-id-date { grid-template-columns:minmax(62px,.55fr) minmax(150px,1.45fr); } .aux-id-rule { grid-column:1/-1; padding:0; } }

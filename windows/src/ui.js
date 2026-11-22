@@ -9,6 +9,7 @@
     convert:'M3 7h17M16 3l4 4-4 4M21 17H4M8 13l-4 4 4 4',
     chart:'M3 3v18h18M7 16v-5M12 16V6M17 16v-8',
     list:'M4 5h1M8 5h12M4 12h1M8 12h12M4 19h1M8 19h12',
+    cards:'M3 5h7v14H3zM14 5h7v14h-7z',
     sliders:'M3 5h13M20 5h1M3 12h4M11 12h10M3 19h10M17 19h4M16 3v4M7 10v4M13 17v4',
     database:'M3 5c0-4 18-4 18 0s-18 4-18 0v14c0 4 18 4 18 0V5M3 12c0 4 18 4 18 0',
     cursor:'M4 2v17l5-5 4 8 4-2-4-8h7z',

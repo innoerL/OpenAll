@@ -70,3 +70,7 @@
 .manual-article .aux-copyable:is(:hover,:focus-visible,.manual-copied)::after { background:var(--accent-text,var(--ink)); }
 .manual-article .manual-copied::after { content:"✓"; mask:none; background:none; color:var(--accent-text,var(--ink)); font:600 13px system-ui; }
 .manual-article .manual-copied { background:var(--raised); text-decoration:underline; text-underline-offset:.22em; }
+
+.manual-notes { margin:4px 0 12px; color:var(--muted); font-size:12px; }
+.manual-notes summary { cursor:pointer; width:fit-content; padding:3px 0; }
+.manual-notes p { margin:6px 0 0; line-height:1.6; }

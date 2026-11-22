@@ -38,6 +38,7 @@ final class MarkdownHelpRow: NSButton {
                                  withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .regular), .foregroundColor: OpenAllTheme.ink])
         (detail as NSString).draw(in: NSRect(x: 124, y: 6, width: bounds.width - 194, height: 20),
                                   withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular), .foregroundColor: OpenAllTheme.muted])
+        guard hovering || focused else { return }
         ("↵" as NSString).draw(in: NSRect(x: bounds.maxX - 46, y: 6, width: 36, height: 20),
                                 withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: hovering || focused ? OpenAllTheme.accentText : OpenAllTheme.muted])
     }

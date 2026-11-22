@@ -45,7 +45,7 @@ function currentContext(win){return windowContexts.get(win?.id)||{};}
 function windowState(win){return {maximized:win.isMaximized(),resizable:win.isResizable()};}
 function canReceivePaste(page){return page !== 'clipboardPreview' && !transient.has(page);}
 function rememberTarget(){const focused=BrowserWindow.getFocusedWindow();const ctx=currentContext(focused);if(focused&&canReceivePaste(ctx.page)){pasteTarget={windowId:focused.id};return;}if(native.foreground.pid&&native.foreground.pid!==process.pid){lastExternal=native.foreground;pasteTarget={...lastExternal};}}
-function dimensions(page){const sizes={search:[720,76],clipboard:[screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea.width,330],stack:[340,174],translate:[580,320],selection:[640,510],json:[960,600],comparison:[1040,600],configFormat:[960,420],sqlFormat:[960,420],markdown:[980,540],manual:[980,540],unicode:[800,380],id:[660,520],image:[900,540],converter:[980,610],settings:[930,560],configDiff:[1000,680],sqlRestore:[1000,680],logTimeline:[1000,680],explain:[1000,680]};return sizes[page]||[980,540];}
+function dimensions(page){const sizes={search:[720,76],clipboard:[screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea.width,330],stack:[340,174],translate:[580,320],selection:[640,510],json:[960,600],comparison:[1040,600],configFormat:[960,420],sqlFormat:[960,420],markdown:[980,540],manual:[980,540],unicode:[800,380],id:[660,520],image:[900,540],converter:[980,610],settings:[930,560],configDiff:[1000,680],sqlRestore:[1000,530],logTimeline:[1000,680],explain:[1000,680]};return sizes[page]||[980,540];}
 function position(win,page){const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;const [width,height]=win.getSize();if(page==='clipboard')win.setBounds({x:area.x,y:area.y+area.height-height,width:area.width,height});else if(page==='stack')win.setPosition(area.x+area.width-width-24,area.y+24);else if(page==='search')win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+Math.max(80,area.height*.22)));else win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+(area.height-height)/2));}
 async function getGoldService(){
  if(app.isQuitting)throw Error('OpenAll 正在退出');
@@ -71,7 +71,9 @@ async function createWindow(rawPage,initialValue,options={}){
   if(!options.hidden){if(gold)await goldWindowController.show();else {existing.show();existing.focus();}}return existing;
  }
  if(gold)gold.update('view','quotes');
- const [width,height]=dimensions(page),isTransient=transient.has(page);
+ const [width,defaultHeight]=dimensions(page),isTransient=transient.has(page);
+ const unicodeInput = page === 'unicode' ? (typeof initialValue === 'string' ? initialValue : initialValue?.text || '') : '';
+ const height = page === 'unicode' ? (unicodeInput.length <= 240 && unicodeInput.split('\n',4).length <= 3 ? 306 : 440) : defaultHeight;
  const win=new BrowserWindow({width,height,...(gold?goldPlacement(gold):{}),minWidth:gold?345:page==='search'?720:page==='clipboard'?400:page==='stack'?340:page==='translate'?580:480,minHeight:gold?396:page==='search'?76:page==='clipboard'?330:page==='stack'?174:page==='translate'?320:300,
    frame:false,transparent:isTransient,backgroundColor:gold?gold.snapshot().theme.background:isTransient?'#00000000':settings.backgroundHex,show:false,title:gold?'OpenAll · 金价':page==='search'?'OpenAll':(commands.find(x=>x.id===page)?.title||'OpenAll'),
    skipTaskbar:isTransient,alwaysOnTop:gold?gold.snapshot().pinned:isTransient,resizable:!isTransient,hasShadow:true,icon:path.join(__dirname,'../assets/icon.png'),
@@ -203,6 +205,15 @@ async function windowAction(event,action,payload={}){
  default:throw Error('未知窗口操作');}
 }
 async function clipboardAction(event,action,payload={}){
+ if(action==='setLayout'){
+   if(!['cards','list'].includes(payload.layout))throw Error('未知的剪贴板布局');
+   const previous=settings.clipboardPreferences.shelfLayout;
+   settings.clipboardPreferences.shelfLayout=payload.layout;
+   try{await store.write('settings',settings);}
+   catch(error){if(settings.clipboardPreferences.shelfLayout===payload.layout)settings.clipboardPreferences.shelfLayout=previous;throw error;}
+   broadcast('settings-changed',settings);
+   return settings.clipboardPreferences.shelfLayout;
+ }
  const ids=payload.ids||[payload.id||payload.hash].filter(Boolean),selected=ids.length?clips.records.filter(x=>ids.includes(x.id)||ids.includes(x.hash)):[];
  switch(action){case 'read':return clips.full(ids[0]);case 'delete':{const removable=selected.filter(x=>!x.favorite&&!x.tags?.length).map(x=>x.id);const list=await clips.delete(removable);changedClipboard();return list;}case 'clear':{const list=await clips.delete(clips.records.filter(x=>payload.includeFavorites||!x.favorite).map(x=>x.id));changedClipboard();return list;}
  case 'favorite':clips.change(ids,x=>{x.favorite=payload.value??!x.favorite;if(x.favorite&&!x.tags.includes('收藏'))x.tags.push('收藏');if(!x.favorite)x.tags=x.tags.filter(t=>t!=='收藏');});changedClipboard();return clips.list();

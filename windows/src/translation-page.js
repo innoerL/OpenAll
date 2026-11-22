@@ -11,7 +11,8 @@
     const excerpt = h('p', {class:'translation-original', hidden:true});
     function showSource(text) {
       const value = String(text || '').slice(0, 96).replace(/\s+/g, ' ').trim();
-      excerpt.textContent = value ? '待译原文　' + value : '';
+      excerpt.replaceChildren();
+      if (value) excerpt.append(h('span',{class:'translation-source-label'},'待译原文'),document.createTextNode(value));
       excerpt.hidden = !value;
     }
     const initialText = typeof ctx.initialValue === 'string' ? ctx.initialValue : ctx.initialValue?.text || '';

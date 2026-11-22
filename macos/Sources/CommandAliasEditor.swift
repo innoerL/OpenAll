@@ -113,7 +113,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         let customLabel = label("自定义别名", x: 20, y: 213, width: 88, size: 12)
         customLabel.textColor = OpenAllTheme.ink
         detail.addSubview(customLabel)
-        aliasField = NSTextField(frame: NSRect(x: 110, y: 210, width: 261, height: 32))
+        aliasField = NSTextField(frame: NSRect(x: 110, y: 210, width: 175, height: 32))
         aliasField.placeholderString = "输入此功能的其他叫法"
         aliasField.delegate = self
         aliasField.target = self
@@ -124,10 +124,10 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         format.textColor = OpenAllTheme.muted
         detail.addSubview(format)
         let save = NSButton(title: "保存别名", target: self, action: #selector(saveAliases))
-        save.frame = NSRect(x: 20, y: 112, width: 118, height: 32)
+        save.frame = NSRect(x: 292, y: 210, width: 80, height: 32)
         WindowChrome.styleAction(save, primary: true)
         detail.addSubview(save)
-        notice = label("", x: 148, y: 113, width: 220, size: 11)
+        notice = label("", x: 110, y: 151, width: 260, size: 11)
         notice.textColor = OpenAllTheme.muted
         detail.addSubview(notice)
         refreshSelection()
@@ -138,7 +138,7 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         for (index, button) in buttons.enumerated() {
             let command = commands[index]
             let extra = store.names(for: command.id)
-            let subtitle = extra.isEmpty ? distinct(command.keywords.filter { $0 != command.title }).prefix(2).joined(separator: " · ") : extra.joined(separator: " · ")
+            let subtitle = extra.isEmpty ? distinct(command.keywords.filter { $0 != command.title }).prefix(2).joined(separator: " · ") : (extra.first ?? "")
             let selected = index == selectedIndex
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byTruncatingTail
@@ -157,7 +157,9 @@ final class CommandAliasEditorView: NSView, NSSearchFieldDelegate {
         }
         let command = commands[selectedIndex]
         commandTitle.stringValue = command.title
-        builtInNames.stringValue = distinct([command.title] + command.keywords).joined(separator: "  ·  ")
+        let systemWords = distinct(command.keywords.filter { $0 != command.title })
+        builtInNames.stringValue = systemWords.prefix(4).joined(separator: "  ·  ") + (systemWords.count > 4 ? "  …" : "")
+        builtInNames.toolTip = systemWords.joined(separator: " · ")
         aliasField.stringValue = aliasDrafts[command.id] ?? store.names(for: command.id).joined(separator: "、")
         if aliasDrafts[command.id] != nil { notice.stringValue = "尚未保存" }
     }

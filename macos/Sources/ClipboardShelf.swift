@@ -181,7 +181,12 @@ final class BoardRenameField: NSTextField, NSTextFieldDelegate {
 final class ShelfTab: NSButton {
     var titleText: String { didSet { invalidateIntrinsicContentSize(); needsDisplay = true } }
     var dotColor: NSColor { didSet { needsDisplay = true } }
-    var selected = false { didSet { needsDisplay = true } }
+    var selected = false {
+        didSet {
+            needsDisplay = true
+            setAccessibilityValue(selected ? "已选中" : "未选中")
+        }
+    }
     var isAdd = false { didSet { invalidateIntrinsicContentSize(); needsDisplay = true } }
     var onChoose: (() -> Void)?
     var onContext: (() -> NSMenu?)?
@@ -268,6 +273,10 @@ private enum ClipTypePalette {
     }
 }
 
+private final class ShelfListDocument: NSView {
+    override var isFlipped: Bool { true }
+}
+
 final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
     func refreshWindowTheme() { needsDisplay = true }
     private static let imageCache: NSCache<NSString, NSImage> = {
@@ -284,6 +293,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         return label
     }
     var searchTerm = ""
+    var compact = false
     private var textPreview: (text: String, truncated: Bool)?
     private static let jsonKey = try! NSRegularExpression(pattern: #""(?:[^"\\]|\\.)*"(?=\s*:)"#)
     private static let markdownHeading = try! NSRegularExpression(pattern: #"(?m)^#{1,6}[^\n]*"#)
@@ -292,7 +302,12 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
     private var loadingImage = false
     var boardColor: NSColor?
     var sourceIcon: NSImage?
-    var selected = false { didSet { needsDisplay = true } }
+    var selected = false {
+        didSet {
+            needsDisplay = true
+            setAccessibilityValue(selected ? "已选中" : "未选中")
+        }
+    }
     var onChoose: ((ClipboardRecord, Bool, NSEvent.ModifierFlags) -> Void)?
     var onPreview: (() -> Void)?
     var onContext: ((ClipboardRecord, NSEvent) -> Void)?
@@ -389,7 +404,70 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         hovering = false
     }
 
+    private var ageText: String {
+        let age = max(0, Date().timeIntervalSince(item.date))
+        return age < 60 ? "刚刚" : age < 3600 ? "\(Int(age / 60)) 分钟前" :
+            age < 86400 ? "\(Int(age / 3600)) 小时前" : "\(Int(age / 86400)) 天前"
+    }
+
+    private func drawListRow() {
+        let row = bounds.insetBy(dx: 1, dy: 1)
+        if selected || hovering {
+            let color = selected ? OpenAllTheme.accent.withAlphaComponent(0.19) : OpenAllTheme.raised
+            color.setFill()
+            let shape = NSBezierPath(roundedRect: row, xRadius: 5, yRadius: 5)
+            shape.fill()
+            if selected && window?.firstResponder === self {
+                OpenAllTheme.accentText.withAlphaComponent(0.72).setStroke()
+                shape.stroke()
+            }
+        }
+        let format = formatLabel
+        let type = item.kind == "files" ? "文件" : format
+        let chip = NSRect(x: 9, y: floor(row.midY - 10), width: 101, height: 20)
+        let background = boardColor ?? ClipTypePalette.background(for: type, light: OpenAllTheme.isLight)
+        let chipInk = boardColor == nil ? (OpenAllTheme.isLight ? ClipTypePalette.lightInk : ClipTypePalette.darkInk)
+            : OpenAllTheme.readableText(OpenAllTheme.ink, on: [background])
+        background.setFill()
+        NSBezierPath(roundedRect: chip, xRadius: 4, yRadius: 4).fill()
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
+        style.alignment = .center
+        let label = (item.pinned ? "★ " : "") + format
+        (label as NSString).draw(in: chip.insetBy(dx: 3, dy: 2), withAttributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: chipInk, .paragraphStyle: style])
+        style.alignment = .right
+        let age = NSRect(x: row.maxX - 92, y: floor(row.midY - 8), width: 80, height: 17)
+        (ageText as NSString).draw(in: age, withAttributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular), .foregroundColor: OpenAllTheme.muted, .paragraphStyle: style])
+        let showSource = row.width >= 670
+        let source = NSRect(x: age.minX - (showSource ? 140 : 22), y: floor(row.midY - 8), width: 16, height: 16)
+        sourceIcon?.draw(in: source, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        style.alignment = .left
+        if showSource {
+            (item.sourceName as NSString).draw(in: NSRect(x: source.maxX + 6, y: source.minY, width: 104, height: 17), withAttributes: [
+                .font: NSFont.systemFont(ofSize: 12), .foregroundColor: OpenAllTheme.muted, .paragraphStyle: style])
+        }
+        let preview: String
+        if item.kind == "files" {
+            preview = item.filePaths.prefix(4).map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: "、")
+        } else {
+            let text = item.text.isEmpty ? item.title : item.text
+            preview = text.prefix(260).split(whereSeparator: \.isNewline).joined(separator: " ")
+        }
+        let content = NSMutableAttributedString(string: preview, attributes: [
+            .font: NSFont.systemFont(ofSize: 14, weight: selected ? .medium : .regular),
+            .foregroundColor: OpenAllTheme.ink, .paragraphStyle: style])
+        if !searchTerm.isEmpty, searchTerm.utf16.count <= 260 {
+            let match = (preview as NSString).range(of: searchTerm, options: .caseInsensitive)
+            if match.location != NSNotFound { content.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match) }
+        }
+        let textX = chip.maxX + 12
+        content.draw(in: NSRect(x: textX, y: floor(row.midY - 9), width: max(0, source.minX - textX - 12), height: 19))
+    }
+
     override func draw(_ dirtyRect: NSRect) {
+        if compact { drawListRow(); return }
         let bounds = self.bounds.insetBy(dx: 4, dy: 4)
         let card = NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12)
         let fill = selected ? OpenAllTheme.raised.blended(withFraction: 0.055, of: OpenAllTheme.accent) : nil
@@ -415,9 +493,6 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         }
         head.fill()
         let heading = (item.pinned ? "★ " : "") + formatLabel
-        let age = max(0, Date().timeIntervalSince(item.date))
-        let ageText = age < 60 ? "刚刚" : age < 3600 ? "\(Int(age / 60)) 分钟前" :
-            age < 86400 ? "\(Int(age / 3600)) 小时前" : "\(Int(age / 86400)) 天前"
         let ageFont = NSFont.systemFont(ofSize: 11)
         let ageWidth = ceil((ageText as NSString).size(withAttributes: [.font: ageFont]).width)
         let iconRect = NSRect(x: bounds.maxX - 32, y: bounds.maxY - 27, width: 19, height: 19)
@@ -581,6 +656,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     private var cards: NSView!
     private var status: NSTextField!
     private var keyboardHint: NSTextField!
+    private var layoutButton: NSButton!
     var onCompareText: ((String, String) -> Void)?
     private var previewButton: NSButton!
     private var previewWindow: NSWindow?
@@ -605,8 +681,10 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     private var reloading = false
     private var editAction: ClipboardEditAction?
     private var editPopover: NSPopover?
-    private var cardWidth: CGFloat = 216
+    private let rowHeight: CGFloat = 34
+    private let cardWidth: CGFloat = 240
     private var cardStep: CGFloat { cardWidth + 12 }
+    private var isCompact: Bool { store.preferences.shelfLayout == .list }
 
     init(store: ClipboardStore) {
         self.store = store
@@ -756,14 +834,18 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
 
     @MainActor func verifyFocusedDeletionForDesign() throws -> Bool {
         guard DesignPreview.enabled, let panel else { return false }
+        let previousLayout = store.preferences.shelfLayout
+        store.setShelfLayout(.cards)
         store.seedPreviewRecords()
         show(target: nil)
         defer {
             // 验证只使用隔离预览数据，结束后还原样例供后续工具截图使用。
             previewWindow?.close()
+            store.setShelfLayout(previousLayout)
             store.seedPreviewRecords()
             show(target: nil)
         }
+        guard try verifyShelfLayoutsForDesign(panel) else { return false }
         let originalIDs = Set(store.records.map(\.id))
         guard panel.makeFirstResponder(search), let initialEditor = search.currentEditor() as? NSTextView,
               keyboardHint.stringValue == "↓ 选择卡片，再按空格预览",
@@ -851,6 +933,60 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         guard store.records.isEmpty, search.currentEditor() === panel.firstResponder else { return false }
         (search.currentEditor() as? NSTextView)?.doCommand(by: #selector(NSResponder.deleteBackward(_:)))
         return store.records.isEmpty
+    }
+
+    @MainActor private func verifyShelfLayoutsForDesign(_ panel: NSPanel) throws -> Bool {
+        for config in [#"{"maxItems":48}"#, #"{"maxItems":48,"shelfLayout":"future"}"#] {
+            let options = try JSONDecoder().decode(ClipboardPreferences.self, from: Data(config.utf8))
+            guard options.shelfLayout == .cards, options.maxItems == 48 else { return false }
+        }
+        guard !isCompact, displayedItems.count >= 3, layoutButton.toolTip == "切换为紧凑列表" else { return false }
+        try DesignPreview.capture(panel, name: "02-clipboard-cards")
+        select(displayedItems[1], paste: false, modifiers: .command)
+        let members = selectedIDs
+        let primary = selectedID
+        layoutButton.performClick(nil)
+        guard isCompact, members.count == 2, selectedIDs == members, selectedID == primary,
+              let row = panel.firstResponder as? ClipCard, row.item.id == primary,
+              row.compact, cards.isFlipped, scroll.hasVerticalScroller, !scroll.hasHorizontalScroller,
+              let firstRow = visibleCards[0], firstRow.frame.maxY == row.frame.minY,
+              firstRow.frame.width > cardWidth, keyboardHint.toolTip?.contains("↑ ↓ 浏览") == true else { return false }
+        try DesignPreview.capture(panel, name: "02-clipboard-compact")
+        guard let down = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+              windowNumber: panel.windowNumber, context: nil, characters: "\u{f701}",
+              charactersIgnoringModifiers: "\u{f701}", isARepeat: false, keyCode: 125) else { return false }
+        row.keyDown(with: down)
+        guard selectedIDs == [displayedItems[2].id] else { return false }
+        moveCard(direction: 1, modifiers: .command, focusCard: true)
+        guard let last = displayedItems.last, selectedID == last.id,
+              cards.visibleRect.intersects(itemFrame(at: displayedItems.count - 1)) else { return false }
+        previewSelected()
+        guard previewRecord?.id == last.id else { return false }
+        previewWindow?.close()
+        showSearchForDesign("Markdown")
+        guard panel.makeFirstResponder(search), let editor = search.currentEditor() as? NSTextView else { return false }
+        let selection = NSRange(location: 2, length: 2)
+        editor.setSelectedRange(selection)
+        let filtered = displayedItems.map(\.id)
+        let selected = selectedIDs
+        layoutButton.performClick(nil)
+        guard !isCompact, !filtered.isEmpty, filtered == displayedItems.map(\.id),
+              selected == selectedIDs, panel.firstResponder === editor, editor.selectedRange() == selection,
+              scroll.hasHorizontalScroller, !scroll.hasVerticalScroller else { return false }
+        layoutButton.performClick(nil)
+        show(target: nil)
+        guard isCompact, ClipboardStore().preferences.shelfLayout == .list,
+              let focused = panel.firstResponder as? ClipCard, focused.compact,
+              let backspace = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: panel.windowNumber, context: nil, characters: "\u{7f}",
+                charactersIgnoringModifiers: "\u{7f}", isARepeat: false, keyCode: 51) else { return false }
+        let deleted = focused.item.id
+        focused.keyDown(with: backspace)
+        guard !store.records.contains(where: { $0.id == deleted }) else { return false }
+        layoutButton.performClick(nil)
+        store.seedPreviewRecords()
+        show(target: nil)
+        return !isCompact && ClipboardStore().preferences.shelfLayout == .cards
     }
 
     func verifySearchSelectionForDesign() -> Bool {
@@ -981,7 +1117,14 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         tabs = NSStackView(frame: NSRect(x: 254, y: 280, width: 810, height: 32))
         tabs.orientation = .horizontal
         tabs.spacing = 6
+        tabs.wantsLayer = true
+        tabs.layer?.masksToBounds = true
         root.addSubview(tabs)
+        layoutButton = NSButton(title: "", target: self, action: #selector(toggleShelfLayout))
+        layoutButton.frame = NSRect(x: 1007, y: 280, width: 30, height: 28)
+        ClipboardShelfStyle.action(layoutButton)
+        layoutButton.imagePosition = .imageOnly
+        root.addSubview(layoutButton)
         typeFilter = NSPopUpButton(frame: NSRect(x: 1044, y: 280, width: 96, height: 28), pullsDown: false)
         for title in ["全部", "文本", "链接", "图片", "文件"] { typeFilter.addItem(withTitle: title) }
         typeFilter.toolTip = "按内容类型筛选"
@@ -1027,7 +1170,10 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         previewButton.toolTip = "查看完整内容（空格）"
         root.addSubview(previewButton)
         panel = w
-        w.focusChanged = { [weak self] in self?.updateSelectionStatus() }
+        w.focusChanged = { [weak self] in
+            self?.updateSelectionStatus()
+            if self?.isCompact == true { self?.visibleCards.values.forEach { $0.needsDisplay = true } }
+        }
     }
 
     private func moveToBottom() {
@@ -1042,8 +1188,9 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         searchOutline.frame.size.width = min(300, width * 0.2)
         search.frame = searchOutline.bounds.insetBy(dx: 8, dy: 4)
         tabs.frame.origin.x = searchOutline.frame.maxX + 15
-        tabs.frame.size.width = width - tabs.frame.minX - 160
         typeFilter.frame.origin.x = width - 145
+        layoutButton.frame.origin.x = typeFilter.frame.minX - 36
+        tabs.frame.size.width = max(0, layoutButton.frame.minX - tabs.frame.minX - 12)
         root.subviews.compactMap { $0 as? NSButton }.first { $0.title == "×" }?.frame.origin.x = width - 42
         scroll.frame.size.width = width - 36
         if cards.frame.width < scroll.frame.width { cards.frame.size.width = scroll.frame.width }
@@ -1271,11 +1418,23 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         }
     }
     @objc private func typeFilterChanged() { selectedID = nil; selectedIDs.removeAll(); reload(); focusFirstCard() }
-    private func reload() {
+    @objc private func toggleShelfLayout() {
+        store.setShelfLayout(isCompact ? .cards : .list)
+        reload(keepingItems: true)
+    }
+
+    private func itemFrame(at index: Int) -> NSRect {
+        if isCompact {
+            return NSRect(x: 2, y: CGFloat(index) * rowHeight, width: max(0, cards.bounds.width - 4), height: rowHeight)
+        }
+        return NSRect(x: CGFloat(index) * cardStep + 4, y: 1, width: cardWidth, height: 182)
+    }
+
+    private func reload(keepingItems: Bool = false) {
         guard panel != nil else { return }
         let restoreCardFocus = panel?.firstResponder is ClipCard
         reloading = true
-        rebuildTabs()
+        if !keepingItems { rebuildTabs() }
         for card in visibleCards.values {
             card.removeFromSuperview()
             card.prepareForReuse()
@@ -1283,7 +1442,39 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         }
         visibleCards.removeAll()
         cards.viewWithTag(7341)?.removeFromSuperview()
-        displayedItems = visibleItems()
+        if !keepingItems {
+            displayedItems = visibleItems()
+            selectedIDs.formIntersection(Set(displayedItems.map(\.id)))
+            if !displayedItems.contains(where: { $0.id == selectedID }) {
+                selectedID = displayedItems.first(where: { selectedIDs.contains($0.id) })?.id ?? displayedItems.first?.id
+            }
+            if selectedIDs.isEmpty, let selectedID { selectedIDs.insert(selectedID) }
+        }
+        let compact = isCompact
+        let changedLayout = compact != (cards is ShelfListDocument)
+        if changedLayout {
+            scroll.hasHorizontalScroller = !compact
+            scroll.hasVerticalScroller = compact
+            scroll.horizontalScrollElasticity = compact ? .none : .allowed
+            scroll.verticalScrollElasticity = compact ? .allowed : .none
+            let documentFrame = NSRect(origin: .zero, size: scroll.contentSize)
+            cards = compact ? ShelfListDocument(frame: documentFrame) : NSView(frame: documentFrame)
+            scroll.documentView = cards
+            scroll.contentView.scroll(to: .zero)
+        }
+        if compact {
+            cards.frame.size = NSSize(width: scroll.contentSize.width, height: max(scroll.contentSize.height, CGFloat(displayedItems.count) * rowHeight))
+        } else {
+            cards.frame.size = NSSize(width: max(scroll.contentSize.width, CGFloat(displayedItems.count) * cardStep + 8), height: 190)
+        }
+        if changedLayout || layoutButton.toolTip == nil {
+            let nextLayout = compact ? "大卡片" : "紧凑列表"
+            layoutButton.image = NSImage(systemSymbolName: compact ? "square.grid.2x2" : "list.bullet", accessibilityDescription: nil)
+            layoutButton.toolTip = "切换为\(nextLayout)"
+            layoutButton.setAccessibilityLabel("切换为\(nextLayout)")
+            layoutButton.setAccessibilityValue(compact ? "紧凑列表" : "大卡片")
+            previewButton.title = compact ? "预览记录" : "预览卡片"
+        }
         if displayedItems.isEmpty {
             let emptyText: String
             if hasSearchFilter { emptyText = "没有匹配的记录" }
@@ -1297,13 +1488,9 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             empty.frame = NSRect(x: 16, y: 78, width: scroll.contentSize.width - 32, height: 24)
             cards.addSubview(empty)
         }
-        selectedIDs.formIntersection(Set(displayedItems.map(\.id)))
-        if !displayedItems.contains(where: { $0.id == selectedID }) {
-            selectedID = displayedItems.first(where: { selectedIDs.contains($0.id) })?.id ?? displayedItems.first?.id
+        if changedLayout, let index = displayedItems.firstIndex(where: { $0.id == selectedID }) {
+            cards.scrollToVisible(itemFrame(at: index))
         }
-        if selectedIDs.isEmpty, let selectedID { selectedIDs.insert(selectedID) }
-        cardWidth = 240
-        cards.frame.size.width = max(scroll.contentSize.width, CGFloat(displayedItems.count) * cardStep + 8)
         updateSelectionStatus()
         previewButton.isEnabled = !displayedItems.isEmpty
         reloading = false
@@ -1315,10 +1502,13 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
 
     private func updateVisibleCards() {
         guard !reloading, scroll != nil, !displayedItems.isEmpty else { return }
-        let step = cardStep
+        let compact = isCompact
+        let step = compact ? rowHeight : cardStep
         let viewport = scroll.contentView.bounds
-        let first = min(displayedItems.count - 1, max(0, Int(floor(viewport.minX / step)) - 2))
-        let last = min(displayedItems.count - 1, Int(ceil(viewport.maxX / step)) + 2)
+        let start = compact ? viewport.minY : viewport.minX
+        let end = compact ? viewport.maxY : viewport.maxX
+        let first = min(displayedItems.count - 1, max(0, Int(floor(start / step)) - 2))
+        let last = min(displayedItems.count - 1, Int(ceil(end / step)) + 2)
         var needed = Set(first...max(first, last))
         if let selectedIndex = displayedItems.firstIndex(where: { $0.id == selectedID }) {
             needed.insert(selectedIndex)
@@ -1332,7 +1522,8 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         for index in needed.sorted() where visibleCards[index] == nil {
             let item = displayedItems[index]
             let card = reusableCards.popLast() ?? ClipCard(frame: .zero)
-            card.frame = NSRect(x: CGFloat(index) * step + 4, y: 1, width: cardWidth, height: 182)
+            card.compact = compact
+            card.frame = itemFrame(at: index)
             card.item = item
             card.searchTerm = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             card.title = item.title
@@ -1413,6 +1604,8 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         case 123, 124:
             moveCard(direction: event.keyCode == 124 ? 1 : -1,
                      modifiers: event.modifierFlags, focusCard: true)
+        case 125, 126:
+            if isCompact { moveCard(direction: event.keyCode == 125 ? 1 : -1, modifiers: event.modifierFlags, focusCard: true) }
         case 36, 76: pasteSelected()
         case 49: previewSelected()
         case 51, 117:
@@ -1461,7 +1654,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         else { selectedIDs = [displayedItems[next].id] }
         visibleCards.values.forEach { $0.selected = selectedIDs.contains($0.item.id) }
         updateSelectionStatus()
-        cards.scrollToVisible(NSRect(x: CGFloat(next) * cardStep + 4, y: 1, width: cardWidth, height: 182))
+        cards.scrollToVisible(itemFrame(at: next))
         updateVisibleCards()
         if focusCard, let card = visibleCards[next] { panel?.makeFirstResponder(card) }
     }
@@ -1647,11 +1840,11 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         var hints: [String]
         if displayedItems.isEmpty { hints = [] }
         else if let editor = search.currentEditor(), panel.firstResponder === editor {
-            hints = ["↓ 选择卡片，再按空格预览"]
+            hints = [isCompact ? "↓ 选择记录，再按空格预览" : "↓ 选择卡片，再按空格预览"]
         } else if let card = panel.firstResponder as? ClipCard {
             hints = [selectedIDs.count > 1 ? "↵ 粘贴所选" : "↵ 粘贴"]
-            if !card.item.pinned { hints.append("⌫ 删除此卡") }
-            hints += ["← → 浏览", "空格 预览", "⌘ 点击多选"]
+            if !card.item.pinned { hints.append(isCompact ? "⌫ 删除此条" : "⌫ 删除此卡") }
+            hints += [isCompact ? "↑ ↓ 浏览" : "← → 浏览", "空格 预览", "⌘ 点击多选"]
         } else { hints = [] }
         keyboardHint.toolTip = hints.joined(separator: "　")
         var visible = hints
@@ -1943,10 +2136,23 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         let popover = NSPopover()
         popover.behavior = .transient
         let controller = NSViewController()
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 260))
-        let editor = NSScrollView(frame: NSRect(x: 14, y: 52, width: 392, height: 194))
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 290))
+        root.appearance = OpenAllTheme.appearance
+        let title = NSTextField(labelWithString: "编辑后粘贴")
+        title.font = .systemFont(ofSize: 16, weight: .semibold)
+        title.textColor = OpenAllTheme.ink
+        title.frame = NSRect(x: 14, y: 250, width: 392, height: 25)
+        root.addSubview(title)
+        let editor = NSScrollView(frame: NSRect(x: 14, y: 52, width: 392, height: 190))
         editor.hasVerticalScroller = true
-        editor.borderType = .bezelBorder
+        editor.scrollerStyle = .overlay
+        editor.autohidesScrollers = true
+        editor.scrollerKnobStyle = OpenAllTheme.isLight ? .dark : .light
+        editor.drawsBackground = false
+        editor.borderType = .noBorder
+        editor.wantsLayer = true
+        editor.layer?.cornerRadius = 6
+        editor.layer?.masksToBounds = true
         let textView = NSTextView(frame: editor.bounds)
         textView.string = item.text
         textView.font = .systemFont(ofSize: 14)
@@ -1959,6 +2165,11 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         let confirm = NSButton(title: "保存并粘贴", target: nil, action: nil)
         WindowChrome.styleAction(confirm, primary: true)
         confirm.frame = NSRect(x: 286, y: 12, width: 120, height: 30)
+        let cancel = NSButton(title: "取消", target: popover, action: #selector(NSPopover.performClose(_:)))
+        WindowChrome.styleAction(cancel)
+        cancel.keyEquivalent = "\u{1b}"
+        cancel.frame = NSRect(x: 202, y: 12, width: 76, height: 30)
+        root.addSubview(cancel)
         let action = ClipboardEditAction { [weak self, weak popover] in
             guard let self, self.store.editText(item.id, text: textView.string) else { return }
             popover?.close()

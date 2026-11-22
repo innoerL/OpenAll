@@ -223,9 +223,16 @@
     action.append(h('kbd', { 'aria-hidden': 'true' }, 'Ctrl+↵'));
     action.setAttribute('aria-keyshortcuts', 'Control+Enter');
     const copy = button('复制结果', async () => { await api.copyText(output.value); status.textContent = '已复制结果'; });
+    const expand = button('展开结果', () => {
+      const expanded = host.classList.toggle('expanded-result');
+      expand.textContent = expanded ? '并排查看' : '展开结果';
+      expand.setAttribute('aria-pressed',String(expanded));
+      (expanded ? output : input).focus();
+    });
+    expand.setAttribute('aria-pressed','false');
     copy.disabled = true;
     inputPane.append(h('div', { class: 'editor-pane-heading' }, '原文', inputCount), inputBox);
-    outputPane.append(h('div', { class: 'editor-pane-heading' }, '结果', outputCount, copy), outputBox);
+    outputPane.append(h('div', { class: 'editor-pane-heading' }, '结果', outputCount, copy, expand), outputBox);
     grid.append(inputPane, outputPane);
     host.append(grid, h('footer', { class: 'editor-formatter-footer' }, action, status));
     let input, output, work, disposed = false, revision = 0, busy = false;

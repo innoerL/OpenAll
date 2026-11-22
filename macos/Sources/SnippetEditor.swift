@@ -104,10 +104,13 @@ final class SnippetEditorView: NSView, NSTableViewDataSource, NSTableViewDelegat
         keywordField.placeholderString = "例如 reply"
         addSubview(keywordField)
         addSubview(label("内容", frame: NSRect(x: 260, y: 311, width: 80, height: 20)))
-        let variables = [("插入日期", "{{date}}"), ("插入时间", "{{time}}"), ("插入剪贴板", "{{clipboard}}")]
+        let variableLabel = label("插入变量", frame: NSRect(x: 514, y: 311, width: 68, height: 20))
+        variableLabel.font = .systemFont(ofSize: 12)
+        addSubview(variableLabel)
+        let variables = [("日期", "{{date}}"), ("时间", "{{time}}"), ("剪贴板", "{{clipboard}}")]
         for (index, item) in variables.enumerated() {
             let button = NSButton(title: item.0, target: self, action: #selector(insertVariable(_:)))
-            button.frame = NSRect(x: 484 + CGFloat(index) * 94, y: 309, width: 94, height: 25)
+            button.frame = NSRect(x: 575 + CGFloat(index) * 62, y: 309, width: 62, height: 25)
             WindowChrome.styleOutputAction(button)
             button.identifier = NSUserInterfaceItemIdentifier(item.1)
             button.toolTip = item.1

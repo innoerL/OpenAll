@@ -146,6 +146,15 @@ app.whenReady().then(async () => {
     }), '修改原文后区分旧结果，重新处理后复制最新内容');
     await run(async () => renderEditorTest('sqlFormat', 'select a,b from t where id=1'));
     check(await run(async () => (await controller.format()) && controller.getResult().startsWith('SELECT\n')), 'SQL 格式化');
+    check(await run(() => {
+      const toggle = [...document.querySelectorAll('.output button')].find(button => button.textContent === '展开结果');
+      const pane = document.querySelector('.editor-formatter-pane.output');
+      const width = pane.clientWidth, value = controller.getResult();
+      toggle.click();
+      if (pane.clientWidth < width * 1.8 || controller.getResult() !== value) return false;
+      toggle.click();
+      return pane.clientWidth === width && controller.getResult() === value;
+    }), '展开与还原双栏保留完整 SQL');
     await screenshot('sql-format');
     check(!errors.length, '编辑器无运行时错误');
     report.passed = true;

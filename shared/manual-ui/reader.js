@@ -71,6 +71,16 @@ window.mountOpenAllManual = function (host, article, actions) {
     toolbar.insertBefore(sectionPicker, toolbar.querySelector('button'));
   }
   const intro = [...article.children].filter(element => !groups.some(group => group.heading === element || group.blocks.includes(element)));
+  const notes = intro.filter(node => node.matches('p,ul,ol,blockquote'));
+  if (notes.length && groups.length) {
+    const details = document.createElement('details');
+    details.className = 'manual-notes';
+    const summary = document.createElement('summary');
+    summary.textContent = '适用环境与使用说明';
+    notes[0].before(details);
+    details.append(summary, ...notes);
+    intro.push(details);
+  }
   const empty = document.createElement('div');
   empty.className = 'manual-empty';
   const reset = document.createElement('button');

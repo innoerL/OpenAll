@@ -293,11 +293,11 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         provinceChanged()
         for (title, x, width) in [("按年龄推算", CGFloat(24), CGFloat(78)),
                                    ("出生日期 · 可手填", 126, 180),
-                                   ("性别", 326, 136), ("生成数量 · 1–500", 482, 154)] {
+                                   ("性别", 24, 140), ("生成数量 · 1–500", 186, 168)] {
             let label = NSTextField(labelWithString: title)
             label.font = .systemFont(ofSize: 11, weight: .medium)
             label.textColor = OpenAllTheme.muted
-            label.frame = NSRect(x: x, y: 335, width: width, height: 18)
+            label.frame = NSRect(x: x, y: title == "性别" || title.hasPrefix("生成数量") ? 274 : 335, width: width, height: 18)
             root.addSubview(label)
         }
         age = numericField("周岁", x: 24, y: 304, width: 70, root: root)
@@ -309,26 +309,26 @@ final class IDGeneratorWindow: NSObject, NSTextFieldDelegate {
         year = numericField("年", x: 126, y: 304, width: 62, root: root)
         month = numericField("月", x: 194, y: 304, width: 53, root: root)
         day = numericField("日", x: 253, y: 304, width: 53, root: root)
-        gender = NSPopUpButton(frame: NSRect(x: 326, y: 304, width: 136, height: 30))
+        gender = NSPopUpButton(frame: NSRect(x: 24, y: 244, width: 140, height: 30))
         WindowChrome.stylePopUp(gender)
         gender.addItems(withTitles: ["随机性别", "男", "女"])
         root.addSubview(gender)
-        count = numericField("数量", x: 482, y: 304, width: 154, root: root)
+        count = numericField("数量", x: 186, y: 244, width: 144, root: root)
         count.stringValue = "5"
         let generate = NSButton(title: "生成测试号", target: self, action: #selector(regenerate))
-        generate.frame = NSRect(x: 24, y: 258, width: 132, height: 30)
+        generate.frame = NSRect(x: 504, y: 244, width: 132, height: 30)
         WindowChrome.styleAction(generate, primary: true)
         generate.keyEquivalent = "\r"
         root.addSubview(generate)
         let birthdayHint = NSTextField(labelWithString: "按周岁沿用今天的月日，生日留空则随机。")
         birthdayHint.font = .systemFont(ofSize: 12)
         birthdayHint.textColor = OpenAllTheme.muted
-        birthdayHint.frame = NSRect(x: 172, y: 264, width: 442, height: 18)
+        birthdayHint.frame = NSRect(x: 325, y: 310, width: 309, height: 18)
         root.addSubview(birthdayHint)
         resultLabel = NSTextField(labelWithString: "生成结果")
         resultLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         resultLabel.textColor = OpenAllTheme.ink
-        resultLabel.frame = NSRect(x: 24, y: 220, width: 160, height: 24)
+        resultLabel.frame = NSRect(x: 24, y: 214, width: 160, height: 24)
         root.addSubview(resultLabel)
         let scroll = NSScrollView(frame: NSRect(x: 24, y: 54, width: 612, height: 156))
         scroll.hasVerticalScroller = true
