@@ -75,6 +75,23 @@ module.exports = async function verifyGold(searchWindow, output) {
     await until(() => execute(gold, () => !document.querySelector('#outlook').hidden && document.querySelectorAll('#forecast-rows tr').length === 7), '七日展望');
     await click('forecast-ctf');
     await until(() => execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true'), '周大福展望');
+    check(await execute(gold, async () => {
+      const state = await openallGold.read();
+      const quote = state.instruments.ctf.quote;
+      const days = state.outlook.forecasts.ctf.days;
+      const format = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 });
+      const price = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(quote.price);
+      const rows = [...document.querySelectorAll('#forecast-rows tr')];
+      const header = document.querySelector('.forecast-baseline');
+      return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date &&
+        header.querySelector('strong').textContent === price + ' 元/克' &&
+        document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
+        rows.length === 7 && days.length === 7 && rows.every((row, i) => {
+          const day = days[i];
+          return day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
+            row.querySelector('time').dateTime === day.date && row.cells[2].textContent === format.format(day.mid);
+        });
+    }), '当日周大福牌价与日期在表头，七个目标日逐行展示双品种模型实际参考价');
     const normalSize = gold.getContentSize();
     try {
       gold.setContentSize(345, normalSize[1]);

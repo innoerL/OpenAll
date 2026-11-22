@@ -2,7 +2,7 @@ const { dateAt, dateBeforeYear, latestSlot, scheduledAt, DAY, HALF_HOUR } = requ
 const { isConnectionError, marketIsClosed } = require('./sources.cjs');
 const { convertGold, earlier } = require('./currency.cjs');
 const { getChanges } = require('./changes.cjs');
-const { forecast, MODEL_VERSION } = require('./outlook.cjs');
+const { forecast, modelVersionFor } = require('./outlook.cjs');
 const { upcomingCalendar } = require('./macro-calendar.cjs');
 
 const INSTRUMENTS = ['gold', 'ctf'];
@@ -77,23 +77,32 @@ class Scheduler {
       const context = this.store.getSetting('marketContext') ?? {};
       const forecasts = {};
       const verification = {};
+      const retail = new Map(instruments.ctf.history.map(point => [point.date, point]));
+      for (const quote of this.store.dailyRetailQuotes(dateBeforeYear(today), today)) retail.set(quote.date, quote);
+      const retailHistory = [...retail.values()].sort((a, b) => a.date.localeCompare(b.date));
+      const hasRecentHistory = (status, points) => {
+        const latest = points.filter(point => point.date < today).at(-1);
+        return !['pending', 'loading'].includes(status) && latest?.date >= earlier(today, 4);
+      };
+      const gold = instruments.gold;
+      const goldReady = hasRecentHistory(gold.historyStatus, gold.history);
       for (const id of INSTRUMENTS) {
         const data = instruments[id];
+        const priceHistory = id === 'ctf' ? retailHistory : data.history;
         const value = forecast({
-          instrument: id, priceHistory: data.history, goldHistory: instruments.gold.history,
+          instrument: id, priceHistory, goldHistory: gold.history,
           quote: data.quote, today, marketIsClosed, macro: context.macro,
         });
-        const latestHistory = data.history.filter(point => point.date < today).at(-1);
-        const ready = data.status === 'done' && !['loading', 'pending'].includes(data.historyStatus) &&
-          latestHistory?.date >= earlier(today, 4);
+        const ready = data.status === 'done' && goldReady &&
+          (id === 'gold' || hasRecentHistory(data.historyStatus, priceHistory));
         if (value) {
           value.anchor.fromQuote = data.quote?.date === value.anchor.date && data.quote?.price === value.anchor.price;
           value.provisional = !ready;
         }
-        // 历史尚在加载时仅展示暂估；已有同日存档继续沿用，不因刷新或升级改价。
+        // 所需历史加载期间只展示暂估，同一品种、模型和基准日的正式预测只发行一次。
         forecasts[id] = id === 'gold' && marketIsClosed(scheduledAt(today)) ? value :
           this.store.issueForecast(id, today, data.quote, value, now, ready);
-        verification[id] = this.store.forecastStats(id, forecasts[id]?.version ?? MODEL_VERSION);
+        verification[id] = this.store.forecastStats(id, forecasts[id]?.version ?? modelVersionFor(id));
       }
       const events = (context.news ?? []).filter((event) => event.timestamp <= now && now - event.timestamp <= 4 * DAY)
         .sort((a, b) => Number(b.tag.endsWith('风险')) - Number(a.tag.endsWith('风险')) || b.timestamp - a.timestamp);
@@ -148,7 +157,6 @@ class Scheduler {
       } else {
         this.store.saveHistory(instrument, slot, data.rows ?? data, data.partial ? finished + HALF_HOUR : null);
       }
-      this.forecastCache = null;
     } catch (error) {
       if (this.stopped) return;
       const detail = isConnectionError(error) ? '连接行情服务失败' :
@@ -157,6 +165,7 @@ class Scheduler {
       if (isConnectionError(error)) this.onConnectionError();
     } finally {
       this.running.delete(key);
+      this.forecastCache = null;
       if (!this.stopped) this.publish();
     }
   }

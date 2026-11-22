@@ -1,6 +1,6 @@
 const { DatabaseSync } = require('node:sqlite');
 const { dateAt } = require('./time.cjs');
-const { MODEL_VERSION, classifyReturn } = require('./outlook.cjs');
+const { modelVersionFor, classifyReturn } = require('./outlook.cjs');
 const { onSchedule, summarizeChecks } = require('./forecast-verification.cjs');
 
 class Store {
@@ -116,12 +116,17 @@ class Store {
   }
 
   issueForecast(instrument, origin, quote, forecast, issuedAt, canIssue = true) {
-    // 同一基准日只沿用最早发行的版本，升级或历史刷新不能替换用户已看过的预测。
-    const first = this.db.prepare(`
-      SELECT model_version AS version FROM forecast_checks
-      WHERE instrument = ? AND origin = ? ORDER BY issued_at, rowid LIMIT 1
-    `).get(instrument, origin);
-    const version = first?.version ?? MODEL_VERSION;
+    const currentVersion = modelVersionFor(instrument);
+    let version = currentVersion;
+    // 周大福新模型可在升级当日独立发行；若无法试算，优先找本版已发行的记录。
+    if (instrument !== 'ctf' || !forecast) {
+      const archived = this.db.prepare(`
+        SELECT model_version AS version FROM forecast_checks
+        WHERE instrument = ? AND origin = ?
+        ORDER BY (model_version = ?) DESC, issued_at, rowid LIMIT 1
+      `).get(instrument, origin, instrument === 'ctf' ? currentVersion : '');
+      version = archived?.version ?? currentVersion;
+    }
     const getIssued = this.db.prepare(`
       SELECT estimate, origin_price AS price FROM forecast_checks
       WHERE model_version = ? AND instrument = ? AND origin = ? ORDER BY target
@@ -138,7 +143,7 @@ class Store {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const day of forecast.days) {
-          save.run(MODEL_VERSION, instrument, origin, day.date, issuedAt, quote.fetchedAt, quote.price, JSON.stringify(day));
+          save.run(version, instrument, origin, day.date, issuedAt, quote.fetchedAt, quote.price, JSON.stringify(day));
         }
       });
       existing = get();
@@ -153,7 +158,7 @@ class Store {
     };
   }
 
-  forecastStats(instrument, version = MODEL_VERSION) {
+  forecastStats(instrument, version = modelVersionFor(instrument)) {
     const offsets = [1, 3, 7];
     const rows = this.db.prepare(`
       SELECT origin, target, issued_at AS issuedAt, origin_fetched_at AS originFetchedAt, estimate, actual,
@@ -190,6 +195,16 @@ class Store {
       SELECT slot, fetched_at AS fetchedAt, price, date, quote_time AS quoteTime, source, note
       FROM quotes WHERE instrument = ? ORDER BY slot DESC LIMIT 1
     `).get(instrument);
+  }
+
+  dailyRetailQuotes(firstDate, lastDate) {
+    // 补入当日实采牌价，包括历史日线尚未补齐的周末，不使用事后补拉的旧日期报价。
+    return this.db.prepare(`
+      SELECT date, price, fetched_at AS fetchedAt FROM quotes
+      WHERE instrument = 'ctf' AND slot = date AND date BETWEEN ? AND ?
+        AND source NOT IN ('上海有色网', '搜金价')
+      ORDER BY date
+    `).all(firstDate, lastDate).filter(point => dateAt(point.fetchedAt) === point.date);
   }
 
   priorQuotes(instrument, date) {

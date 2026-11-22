@@ -18,7 +18,7 @@ const modes = ['history', 'auto', 'price', 'macro'];
 const offsets = [1, 3, 7];
 const report = {
   cutoff, period, modelVersion: MODEL_VERSION,
-  methods: { history: '原同期限历史方向组点价（对照）', auto: '生产默认：周大福保守基准；国际金价原方法',
+  methods: { history: '原同期限历史方向组点价（对照）', auto: '生产默认：周大福双品种逐期限估计，国际现货沿用同期限历史方法',
     price: '价格特征实验模型（未启用）', macro: '宏观特征实验模型（最新存档可能含修订，未启用）' },
   note: '逐日推进，训练目标不得越过原点；日线与日牌价代理不等于当时10点可得数据，不能视为实盘准确率。',
   basis: { gold: hourlyFilename ? '北京时间10点历史点位' : '日线收盘代理', ctf: '日牌价代理', macro: 'FRED 最新存档，按固定滞后截断' },

@@ -212,9 +212,11 @@ const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', weekday: 'sh
 
 function renderOutlook() {
   if (!lastSnapshot) return;
-  const { outlook, currency } = lastSnapshot;
+  const { outlook, currency, today, instruments } = lastSnapshot;
+  const isCTF = forecastInstrument === 'ctf';
+  const quote = isCTF ? instruments.ctf.quote : null;
   const verification = outlook.verification[forecastInstrument];
-  const signature = JSON.stringify([outlook, currency, forecastInstrument]);
+  const signature = JSON.stringify([outlook, currency, forecastInstrument, today, quote?.date, quote?.price]);
   if (signature === outlookSignature) return;
   outlookSignature = signature;
   const data = outlook.forecasts[forecastInstrument];
@@ -223,13 +225,32 @@ function renderOutlook() {
   const target = $('#forecast-rows');
   target.replaceChildren();
   const meta = $('#forecast-meta');
+  meta.replaceChildren();
+  const hasQuote = quote?.date && Number.isFinite(quote.price);
+  const hasJoint = data?.days.some(day => day.pointMethod === 'joint-history' || day.sparseReason);
+  const hasFixed = data?.days.some(day => day.pointMethod === 'persistence');
+  const heading = $('#forecast-price-heading');
+  heading.textContent = isCTF ? (hasFixed ? '基准参考价' : '每日参考价') : '参考估计';
+  heading.title = hasFixed ? '此档预测逐日沿用发行时的基准牌价' : '从同一预测基准分别估算各目标日期的价格';
+  function addPrice(label, price, date, formatter) {
+    const line = element('span', undefined, 'forecast-baseline');
+    const stamp = element('time', date);
+    stamp.dateTime = date;
+    line.append(label + ' ', element('strong', price == null ? '待更新' : `${formatter.format(price)} ${unit}`), ' · ', stamp);
+    meta.append(line);
+  }
+  if (isCTF) {
+    addPrice(hasQuote && quote.date !== today ? '最近周大福牌价' : '今日周大福牌价',
+      hasQuote ? quote.price : null, hasQuote ? quote.date : today, whole);
+  }
   if (data) {
-    const baseline = element('span', undefined, 'forecast-baseline');
-    baseline.append('基准 ', element('strong', `${number.format(data.anchor.price)} ${unit}`), ' · ', data.anchor.date);
-    const model = element('span', `模型 ${data.version || verification.version || '—'} · 方向概率未校准${data.provisional ? ' · 数据尚未就绪，暂估' : ''}`);
-    meta.replaceChildren(baseline, model);
+    if (!isCTF || !hasQuote || data.anchor.date !== quote.date || data.anchor.price !== quote.price) {
+      addPrice(isCTF ? '预测基准' : '基准', data.anchor.price, data.anchor.date, isCTF ? whole : number);
+    }
+    const method = hasFixed ? '旧版沿用基准价 · ' : '';
+    meta.append(element('span', `${method}模型 ${data.version || verification.version || '—'} · 方向概率未校准${data.provisional ? ' · 数据尚未就绪，暂估' : ''}`));
   } else {
-    meta.textContent = '等待足够的最新历史报价或参考汇率';
+    meta.append(element('span', isCTF ? '等待足够的预测数据' : '等待足够的最新历史报价或参考汇率'));
   }
   $('#forecast-table').hidden = !data;
   for (const item of data?.days ?? []) {
@@ -248,11 +269,14 @@ function renderOutlook() {
       trend.append(label);
       trend.title = `${item.sample} 个历史情景 · ${item.model} · 方向概率未校准，不是价格命中率`;
     } else {
-      trend.textContent = item.closed ? '例行休市' : '样本不足';
+      const reason = { 'gold-history': '国际行情不足', 'ctf-history': '牌价历史不足', 'paired-history': '同期样本不足' };
+      trend.textContent = item.closed ? '例行休市' : reason[item.sparseReason] || '样本不足';
     }
-    const price = element('td', item.mid ? number.format(item.mid) : '—');
-    price.title = item.mid ? (item.pointMethod === 'persistence' ?
-      '参考估计沿用基准价，方向概率与区间另行估计；不代表保证价格不变' : '参考估计来自历史情景；方向概率不是价格命中率') : '';
+    const price = element('td', Number.isFinite(item.mid) ? number.format(item.mid) : '—');
+    if (Number.isFinite(item.mid)) {
+      price.title = item.pointMethod === 'joint-history' ? '根据近期国际现货与周大福牌价涨跌，单独估算该日参考价' :
+        item.pointMethod === 'persistence' ? '旧版参考价沿用发行时的基准牌价' : '参考估计来自该期限的历史情景';
+    }
     row.append(dateCell, trend, price, element('td', item.low ? `${number.format(item.low)} – ${number.format(item.high)}` : '—'));
     target.append(row);
   }
@@ -320,8 +344,8 @@ function renderOutlook() {
   }
   $('#model-note').textContent = data ?
     '涨跌相对基准价，±0.2% 以内为维持。方向概率未校准，不是价格命中率。' +
-      (data.days.some(day => day.pointMethod === 'persistence') ?
-        '周大福参考估计采用不变价保守基准，方向与区间另行估计；不代表保证价格不变。' : '参考估计来自历史情景。') +
+      (hasJoint ? '周大福每日参考价结合近期牌价涨跌与基准日前的国际现货收盘走势，按各日期分别估算。' :
+        hasFixed ? '此档周大福参考价沿用发行时的基准牌价，方向与区间按期限估计。' : '参考估计来自历史情景。') +
       '区间为历史情景范围，覆盖率以到期记录验证。市场因素和日历用于解读行情。' +
       (forecastInstrument === 'gold' && currency !== 'USD' ? ' 展望按当前汇率折算，方向基于美元金价。' : '') : '';
 }

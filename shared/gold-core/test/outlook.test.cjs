@@ -92,7 +92,7 @@ test('涨跌以当前基准的实际百分比划分，正负 0.2% 边界仍属�
   assert.equal(classifyReturn(Math.log1p(-.00201)), 'down');
 });
 
-test('默认周大福点价使用保守基准，方向独立估计，国际现货保持原方法', () => {
+test('周大福按七个自然日跨度分别估价，国际现货仍使用原历史模型', () => {
   const now = Date.parse('2026-11-20T05:30:00Z');
   const today = dateAt(now);
   const history = Array.from({ length: 200 }, (_, index) => ({
@@ -103,10 +103,13 @@ test('默认周大福点价使用保守基准，方向独立估计，国际现�
   const result = forecast(input);
   const available = result.days.filter(day => day.probabilities);
   assert.equal(available.length, 7);
-  assert(available.every(day => day.mid === 1500 && day.pointMethod === 'persistence'));
+  assert.equal(result.version, '4.0.0');
+  assert(available.every(day => day.pointMethod === 'joint-history' && day.mid > 1500));
+  assert.equal(new Set(available.map(day => Math.round(day.mid))).size, 7);
   assert(available.every(day => day.direction === 'up' && day.low < day.mid && day.high > day.mid));
-  assert.deepEqual(forecast({ ...input, instrument: 'gold' }),
-    forecast({ ...input, instrument: 'gold', modelMode: 'history' }));
+  const gold = forecast({ ...input, instrument: 'gold' });
+  assert.equal(gold.version, '3.0.0');
+  assert.deepEqual(gold, forecast({ ...input, instrument: 'gold', modelMode: 'history' }));
 });
 
 test('使用最多历史情景选出预计方向与可信度，预计价与方向保持一致', () => {

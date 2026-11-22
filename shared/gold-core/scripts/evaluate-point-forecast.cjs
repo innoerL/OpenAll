@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const Module = require('node:module');
+const { execFileSync } = require('node:child_process');
 const assert = require('node:assert/strict');
 const { DatabaseSync } = require('node:sqlite');
 
@@ -40,7 +41,19 @@ const registration = JSON.parse(registrationText);
 const registrationHash = hash(registrationText);
 assert.equal(registrationHash, '20b3f5d411d78296e325dd3a36887400b974c87f87e78fd17bc45f6f28fe1ef2', '冻结预注册已被修改');
 const FROZEN_SELECTION = 'persistence';
-const currentProduction = require(modulePath);
+// 这次历史实验比较的是 3.0.0 的已交付实现。升级现行模型后仍须加载同一份源码。
+const productionHash = 'd0e3553108f037299da3d4fd8327e3ce60fccf0b55a926159c499ec48dc29799';
+let frozenProductionSource = fs.readFileSync(modulePath, 'utf8');
+if (hash(frozenProductionSource) !== productionHash) {
+  const commit = '6e577205a68446145b1fab6dccf541e190933afd';
+  try {
+    frozenProductionSource = execFileSync('git', ['-C', directory, 'show', commit + ':shared/gold-core/outlook.cjs'], { encoding: 'utf8' });
+  } catch {
+    throw new Error('缺少历史模型源码。请在含提交 ' + commit + ' 的 Git 仓库内复验，或使用该提交的完整源码。');
+  }
+}
+assert.equal(hash(frozenProductionSource), productionHash, '冻结 3.0.0 参考算法校验失败');
+const currentProduction = compileReference(frozenProductionSource, 'frozen-v3');
 
 function compileReference(text, label) {
   // 只在内存中编译冻结源码，保持原模块的相对依赖解析；不改写生产文件。
@@ -333,7 +346,7 @@ const holdout = evaluate('holdout');
 const report = {
   schemaVersion: 1,
   reference: { originalName: 'shared/gold-core/outlook.cjs', sourceCommit: '30e6a49', modelVersion: '2.0.0', sha256: BASELINE_HASH },
-  production: { modelVersion: currentProduction.MODEL_VERSION, sha256: hash(fs.readFileSync(modulePath)),
+  production: { modelVersion: currentProduction.MODEL_VERSION, sha256: productionHash,
     ctfAutoMatchesFrozenPersistence: true, strictEquality: true },
   protocol: registration,
   protocolSha256: registrationHash,

@@ -444,6 +444,30 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("document.querySelector('#forecast-ctf').click(); return true;")
             try check(try await tool.execute("return document.querySelectorAll('#forecast-rows tr').length === 7 && !!document.querySelector('#verification-note').textContent;") as? Bool == true,
                 "七日表格与实际报价验证展示")
+            let checkPrices = """
+            const state = await openallGold.read();
+            const {date, price} = state.instruments.ctf.quote;
+            const days = state.outlook.forecasts.ctf.days;
+            const rows = [...document.querySelectorAll('#forecast-rows tr')];
+            const header = document.querySelector('.forecast-baseline');
+            const format = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:0});
+            const actual = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(price);
+            return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === date &&
+              header.querySelector('strong').textContent === actual + ' 元/克' &&
+              document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
+              rows.length === 7 && days.length === 7 && rows.every((row,i) => {
+                const day = days[i];
+                return day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
+                  row.querySelector('time').dateTime === day.date && row.cells[2].textContent === format.format(day.mid);
+              });
+            """
+            try check(try await tool.execute(checkPrices) as? Bool == true, "周大福当日牌价表头与七个目标日参考价对应模型输出")
+            let originalFrame = panel.frame
+            panel.setFrame(NSRect(origin: originalFrame.origin, size: NSSize(width: 345, height: originalFrame.height)), display: true)
+            try await tool.until("窄窗七日参考价布局") {
+                try await tool.execute("return innerWidth <= 345 && document.querySelector('#forecast-table').getBoundingClientRect().right <= document.querySelector('#outlook').getBoundingClientRect().right;") as? Bool == true
+            }
+            panel.setFrame(originalFrame, display: true)
             try await capture("gold-outlook")
             let preserved = try await tool.execute("window.__goldCheckDocument=document; window.__goldCheckCanvas=document.querySelector('#gold canvas'); return document.querySelector('#gold .hover').textContent;") as? String
             try await OpenAllTheme.withTemporaryAppearanceForDesign(background: NSColor(srgbRed: 0.93, green: 0.95, blue: 0.97, alpha: 1),

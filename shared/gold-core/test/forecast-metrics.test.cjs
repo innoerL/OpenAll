@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { summarizeChecks } = require('../forecast-verification.cjs');
 const { Store } = require('../store.cjs');
-const { MODEL_VERSION, classifyReturn, dateAfter } = require('../outlook.cjs');
+const { MODEL_VERSION, modelVersionFor, classifyReturn, dateAfter } = require('../outlook.cjs');
 const { scheduledAt } = require('../time.cjs');
 
 const probabilities = { up: .6, down: .2, flat: .2 };
@@ -11,7 +11,7 @@ const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-1
 const quote = (date, price) => ({ date, price, quoteTime: null, source: '离线验证', note: '' });
 
 function archive(store, options = {}) {
-  const { version = MODEL_VERSION, instrument = 'ctf', origin = '2026-10-01', horizon = 1,
+  const { instrument = 'ctf', version = modelVersionFor(instrument), origin = '2026-10-01', horizon = 1,
     originPrice = 100, targetPrice = 100, mid = 110, low = 95, high = 105,
     fetchedDelay = 0, issuedDelay = 0, targetDelay = 0 } = options;
   const target = dateAfter(origin, horizon);
@@ -113,46 +113,32 @@ test('首次预测与首次结算保持不变，同日新计算及后续报价�
   close(result.recent.actualReturn, .1);
 });
 
-test('升级当天沿用最早发行版本的完整预测，下个基准日才发行新版本', context => {
+test('升级当天分别保存两个周大福模型的发行时间和原价，重复刷新读取本版存档', context => {
   const store = new Store(':memory:');
   context.after(() => store.close());
-  const origin = '2026-10-01', started = scheduledAt(origin);
-  // 模拟旧程序曾在当天发行多个版本；按发行时间选择，不按版本名或插入顺序选择。
-  archive(store, { version: 'another-test-version', origin, issuedDelay: 5000, mid: 999 });
-  const original = [
-    estimate({ date: dateAfter(origin, 1), mid: 103, low: 99, high: 108, model: '旧模型' }),
-    { date: dateAfter(origin, 2), sparse: true },
-    estimate({ date: dateAfter(origin, 3), mid: 107, low: 95, high: 115, model: '旧模型' }),
-  ];
-  const insert = store.db.prepare(`INSERT INTO forecast_checks
+  const origin = '2026-10-01', started = scheduledAt(origin), target = dateAfter(origin, 1);
+  const oldDay = estimate({ date: target, mid: 100, low: 97, high: 106, pointMethod: 'persistence' });
+  store.db.prepare(`INSERT INTO forecast_checks
     (model_version, instrument, origin, target, issued_at, origin_fetched_at, origin_price, estimate)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const day of original) insert.run('previous-test-version', 'ctf', origin, day.date, started + 1000, started, 100, JSON.stringify(day));
+    VALUES ('3.0.0', 'ctf', ?, ?, ?, ?, 100, ?)`).run(origin, target, started, started, JSON.stringify(oldDay));
   store.saveQuote('ctf', origin, quote(origin, 100), started);
+  const currentQuote = store.latestQuote('ctf');
   const next = { version: MODEL_VERSION, anchor: { date: origin, price: 100, fromQuote: true },
-    days: [estimate({ date: dateAfter(origin, 1), mid: 100, low: 98, high: 102, pointMethod: 'persistence' })] };
-  const before = store.db.prepare('SELECT * FROM forecast_checks ORDER BY model_version, target').all();
-  for (const canIssue of [true, false]) {
-    const result = store.issueForecast('ctf', origin, store.latestQuote('ctf'), next, started + 6000, canIssue);
-    assert.equal(result.version, 'previous-test-version');
-    assert.equal(result.provisional, false);
-    assert.deepEqual(result.days, original);
-    assert.equal(result.days[0].pointMethod, undefined, '旧存档不能染上新模型的点价方法');
-  }
-  const unavailable = store.issueForecast('ctf', origin, null, null, started + 6000, false);
-  assert.equal(unavailable.version, 'previous-test-version');
-  assert.deepEqual(unavailable.days, original, '当前数据不可用时也能返回已发行存档');
-  assert.deepEqual(store.db.prepare('SELECT * FROM forecast_checks ORDER BY model_version, target').all(), before);
-  const tomorrow = dateAfter(origin, 1);
-  store.saveQuote('ctf', tomorrow, quote(tomorrow, 105), scheduledAt(tomorrow));
-  const newForecast = { ...next, anchor: { date: tomorrow, price: 105, fromQuote: true },
-    days: [estimate({ date: dateAfter(tomorrow, 1), mid: 105, low: 102, high: 108, pointMethod: 'persistence' })] };
-  const issued = store.issueForecast('ctf', tomorrow, store.latestQuote('ctf'), newForecast, scheduledAt(tomorrow) + 1000);
-  assert.equal(issued.version, MODEL_VERSION);
+    days: [estimate({ date: target, mid: 103, low: 98, high: 108, pointMethod: 'joint-history' })] };
+  const issue = (value, canIssue) => store.issueForecast('ctf', origin, currentQuote, value, started + 60_000, canIssue);
+  assert.deepEqual(issue(null, false).days, [oldDay]);
+  assert.equal(issue(next, false).provisional, true);
+  const issued = issue(next, true);
   assert.equal(issued.provisional, false);
-  assert.deepEqual(issued.days, newForecast.days);
-  assert.equal(store.db.prepare('SELECT count(*) AS count FROM forecast_checks WHERE model_version = ? AND origin = ?').get(MODEL_VERSION, origin).count, 0);
-  assert.equal(store.db.prepare('SELECT count(*) AS count FROM forecast_checks WHERE model_version = ? AND origin = ?').get(MODEL_VERSION, tomorrow).count, 1);
+  assert.equal(issued.version, MODEL_VERSION);
+  assert.deepEqual(issued.days, next.days);
+  assert.deepEqual(issue(null, false).days, next.days);
+  assert.deepEqual(issue({ ...next, days: [oldDay] }, true).days, next.days);
+  const rows = store.db.prepare('SELECT estimate, issued_at AS time FROM forecast_checks ORDER BY issued_at').all();
+  assert.deepEqual(rows.map(row => [JSON.parse(row.estimate).mid, row.time]), [[100, started], [103, started + 60_000]]);
+  store.saveQuote('ctf', target, quote(target, 104), scheduledAt(target));
+  assert.equal(store.forecastStats('ctf', '3.0.0').byHorizon[1].mae, 4);
+  assert.equal(store.forecastStats('ctf').byHorizon[1].mae, 1);
 });
 
 test('历史更新期间只展示暂估，首次就绪才存档，已发行内容不退回暂估', context => {

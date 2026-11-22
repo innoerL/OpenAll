@@ -44,7 +44,7 @@ test('价格模型可利用当日已知周大福报价的原点动量，而非�
 
 test('当日历史日线不能冒充已知原点报价，也不能进入当日尚未结束的训练目标', () => {
   const input = sample();
-  for (const modelMode of ['history', 'price', 'macro']) {
+  for (const modelMode of ['auto', 'history', 'price', 'macro']) {
     const expected = forecast({ ...input, modelMode });
     const poisoned = forecast({ ...input, modelMode,
       priceHistory: [...input.priceHistory, { date: input.today, price: 1e12 }],
@@ -59,7 +59,7 @@ test('加入或改写原点之后的历史价、目标价与宏观行，不得�
   const future = [1, 2, 3, 7, 14].map((offset, index) => ({
     date: dateAfter(input.today, offset), price: index % 2 ? 1e-6 : 1e12,
   }));
-  for (const modelMode of ['history', 'price', 'macro']) {
+  for (const modelMode of ['auto', 'history', 'price', 'macro']) {
     const expected = forecast({ ...input, modelMode });
     const withFutureTargets = forecast({ ...input, modelMode,
       priceHistory: [...input.priceHistory, ...future],
@@ -85,4 +85,51 @@ test('时间对齐改动不改变正负 0.2% 的涨跌分类边界', () => {
   assert.equal(classifyReturn(Math.log1p(-.002)), 'flat');
   assert.equal(classifyReturn(Math.log1p(.00201)), 'up');
   assert.equal(classifyReturn(Math.log1p(-.00201)), 'down');
+});
+
+test('同一目标日独立估算，调换顺序或只估单日得到同一参考价', () => {
+  const input = sample();
+  const full = forecast({ ...input, offsets: [1, 2, 3, 4, 5, 6, 7] });
+  const reordered = forecast({ ...input, offsets: [7, 2, 1] });
+  assert.deepEqual(reordered.days, [full.days[6], full.days[1], full.days[0]]);
+  assert.deepEqual(forecast({ ...input, offsets: [2] }).days, [full.days[1]]);
+});
+
+test('当周大福与国际金价走势均平坦时，逐日计算可以自然同价', () => {
+  const input = sample();
+  const flat = input.priceHistory.map(row => ({ ...row, price: 1068 }));
+  const result = forecast({ ...input, priceHistory: flat, goldHistory: flat,
+    quote: { date: input.today, price: 1068 } });
+  assert(result.days.every(day => day.mid === 1068 && day.pointMethod === 'joint-history'));
+});
+
+test('国际现货与周大福的近期走势均能改变同一期限的预测收益', () => {
+  const input = sample();
+  // 两组不同周期的收益分别驱动合成牌价。保持基准不变，分别改变各来源已知的近期涨跌。
+  const spotReturn = index => .012 * Math.sin(index / 4);
+  let spot = 3000, retail = 1000;
+  const goldHistory = input.goldHistory.map((row, index) => ({ date: row.date, price: spot *= Math.exp(spotReturn(index)) }));
+  const priceHistory = input.priceHistory.map((row, index) => ({
+    date: row.date, price: retail *= Math.exp(.007 * Math.sin(index / 13) + .32 * spotReturn(index - 2)),
+  }));
+  const quote = { date: input.today, price: retail };
+  const next = (priceHistory, goldHistory) => forecast({ ...input, quote, priceHistory, goldHistory, offsets: [1] }).days[0].mid;
+  const replaceLast = (rows, ratio) => [...rows.slice(0, -1), { ...rows.at(-1), price: rows.at(-1).price * ratio }];
+  const base = next(priceHistory, goldHistory);
+  assert(Math.abs(base - next(priceHistory, replaceLast(goldHistory, 1.012))) > .01);
+  assert(Math.abs(base - next(replaceLast(priceHistory, .995), goldHistory)) > .01);
+});
+
+test('周日缺少历史牌价仍可用同跨度真实样本，缺少国际历史时明确留空', () => {
+  const input = sample();
+  const priceHistory = input.priceHistory.filter(row => new Date(row.date).getUTCDay() !== 0);
+  const offsets = [1, 2, 3, 4, 5, 6, 7];
+  const result = forecast({ ...input, priceHistory, offsets });
+  assert(result.days.every(day => day.mid > 0));
+  for (const goldHistory of [[], input.goldHistory.slice(0, -10)]) {
+    const missing = forecast({ ...input, priceHistory, goldHistory, offsets });
+    assert(missing.days.every(day => day.sparseReason === 'gold-history' && day.mid === undefined));
+  }
+  const short = forecast({ ...input, priceHistory, goldHistory: input.goldHistory.slice(-12) });
+  assert(short.days.every(day => day.sparseReason === 'paired-history'));
 });

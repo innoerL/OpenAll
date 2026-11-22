@@ -29,17 +29,64 @@ async function verifyForecastMetrics(search, checks) {
     await execute(gold, () => document.querySelector('#forecast-ctf').click());
     original = await execute(gold, () => openallGold.read());
     check(await execute(gold, () => document.querySelector('#forecast-table th:nth-child(2)').textContent.includes('方向概率') &&
-      document.querySelector('#forecast-table th:nth-child(3)').textContent === '参考估计' &&
+      document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
       document.querySelector('#forecast-meta').textContent.includes('方向概率未校准') && !document.body.textContent.includes('可信度')),
-    '展望使用未校准方向概率与参考估计，不把概率称为价格准确率');
+    '展望区分方向概率与每日参考价');
     check(original.outlook.verification.ctf.byHorizon[1].priceCount === 0 &&
       await execute(gold, () => document.querySelector('#verification-note').textContent.includes('暂无到期的准时价格误差样本') &&
         !/0(?:\.0+)?%/.test(document.querySelector('#verification-note').textContent)), '没有到期样本时明确说明，不展示零误差');
-    check(original.outlook.forecasts.ctf.days.some(day => day.pointMethod === 'persistence') &&
-      await execute(gold, () => document.querySelector('#model-note').textContent.includes('不变价保守基准') &&
-        document.querySelector('#model-note').textContent.includes('不代表保证价格不变')), '周大福保守点价说明不保证未来价格不变');
+    check(original.outlook.forecasts.ctf.days.every(day => day.pointMethod === 'joint-history') &&
+      await execute(gold, () => document.querySelector('#model-note').textContent.includes('国际现货收盘走势')),
+    '周大福逐日估价展示对应的数据来源');
 
     // 只向页面发送内存快照，既不修改宿主状态，也不往预测存档写入虚构样本。
+    const legacy = structuredClone(original);
+    legacy.outlook.forecasts.ctf.version = '3.0.0';
+    for (const day of legacy.outlook.forecasts.ctf.days) {
+      day.pointMethod = 'persistence';
+      day.mid = legacy.outlook.forecasts.ctf.anchor.price;
+    }
+    gold.webContents.send('openall:gold-snapshot', legacy);
+    await until(() => execute(gold, () => document.querySelector('#forecast-price-heading').textContent === '基准参考价'));
+    check(await execute(gold, () => document.querySelector('#forecast-meta').textContent.includes('旧版沿用基准价') &&
+      document.querySelector('#model-note').textContent.includes('发行时的基准牌价')), '旧档按发行版本标明固定参考价');
+
+    const stale = structuredClone(original);
+    stale.instruments.ctf.quote.date = '2026-11-19';
+    stale.instruments.ctf.quote.price = 1058;
+    gold.webContents.send('openall:gold-snapshot', stale);
+    await until(() => execute(gold, () => document.querySelector('.forecast-baseline').textContent.includes('最近周大福牌价')));
+    check(await execute(gold, () => {
+      const lines = document.querySelectorAll('#forecast-meta .forecast-baseline');
+      return lines[0].querySelector('strong').textContent === '1,058 元/克' &&
+        lines[0].querySelector('time').dateTime === '2026-11-19' && lines[1].textContent.includes('预测基准');
+    }), '已有预测与当前报价不同，表头分别标记最近牌价及预测基准');
+
+    const sparse = structuredClone(original);
+    const reasons = ['gold-history', 'ctf-history', 'paired-history'];
+    sparse.outlook.forecasts.ctf.days = sparse.outlook.forecasts.ctf.days.map(({date}, index) => ({
+      date, sparse: true, sparseReason: reasons[index % reasons.length],
+    }));
+    gold.webContents.send('openall:gold-snapshot', sparse);
+    await until(() => execute(gold, () => document.querySelector('#forecast-rows').textContent.includes('同期样本不足')));
+    check(await execute(gold, () => {
+      const rows = [...document.querySelectorAll('#forecast-rows tr')];
+      const reasons = ['国际行情不足', '牌价历史不足', '同期样本不足'];
+      return rows.length === 7 && rows.every((row, i) =>
+        row.cells[1].textContent === reasons[i % reasons.length] && row.cells[2].textContent === '—');
+    }), '缺国际行情、近期牌价或配对样本时逐日显示原因');
+
+    const empty = structuredClone(original);
+    empty.outlook.forecasts.ctf = null;
+    gold.webContents.send('openall:gold-snapshot', empty);
+    await until(() => execute(gold, () => document.querySelector('#forecast-table').hidden));
+    check(await execute(gold, () => document.querySelector('#forecast-meta').textContent.includes('今日周大福牌价') &&
+      document.querySelector('.forecast-baseline strong').textContent.includes('元/克')), '预测未就绪时仍可读取今日实际牌价');
+
+    empty.instruments.ctf.quote = null;
+    gold.webContents.send('openall:gold-snapshot', empty);
+    await until(() => execute(gold, () => document.querySelector('.forecast-baseline strong').textContent === '待更新'));
+    check(true, '尚无牌价时显示待更新');
     const sample = structuredClone(original), verification = sample.outlook.verification.ctf;
     verification.byHorizon[1] = { ...verification.byHorizon[1], total: 12, hit: 8, priceCount: 12,
       mae: 15, mape: .0125, baselineMAE: 20, intervalCount: 12, intervalCoverage: .75 };
