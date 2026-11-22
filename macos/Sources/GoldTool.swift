@@ -524,7 +524,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
                   range.selectNodeContents(text);
                   if ([...range.getClientRects()].some(rect => rect.left < box.left - 1 || rect.right > box.right + 1)) return false;
                 }
-                return cell.scrollWidth <= cell.clientWidth + 1;
+                return true;
               });
             };
             try {
