@@ -387,7 +387,8 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             checks.append(label)
         }
         func capture(_ name: String) async throws {
-            _ = try await tool.execute("await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); return true;")
+            // 失焦时 WebKit 可能暂停动画帧；原生快照会合成已排版的页面。
+            _ = try await tool.execute("await document.fonts.ready; return document.documentElement.getBoundingClientRect().width;")
             guard let web = tool.webView else { throw componentError("金价网页未创建。") }
             let image = try await web.takeSnapshot(configuration: nil)
             guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
@@ -452,8 +453,12 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             const header = document.querySelector('.forecast-baseline');
             const format = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:0});
             const actual = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(price);
+            const scale = document.querySelector('#forecast-scale');
             return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === date &&
               header.querySelector('strong').textContent.trim() === actual + ' 人民币/克' &&
+              document.querySelector('#forecast-table th:nth-child(3)').textContent === '方向概率未校准' &&
+              !scale.hidden && scale.firstElementChild.textContent === format.format(Math.min(...days.map(day => day.low))) &&
+              scale.lastElementChild.textContent === format.format(Math.max(...days.map(day => day.high))) &&
               document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
               rows.length === 7 && days.length === 7 && rows.every((row,i) => {
                 const day = days[i];

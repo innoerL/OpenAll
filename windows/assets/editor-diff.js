@@ -407,14 +407,26 @@
       }
     }));
   }
-  const gutterObserver = new ResizeObserver(entries => {
-    for (const entry of entries) {
-      const pane = entry.target.closest('.pane');
-      const width = entry.contentRect.width + 'px';
+  const gutterObservers = panes.map(pane => {
+    let gutter;
+    const observer = new ResizeObserver(() => {
+      if (!pane.isConnected) return;
+      const current = pane.querySelector('.cm-gutters');
+      if (current !== gutter) {
+        if (gutter) observer.unobserve(gutter);
+        if (current) observer.observe(current);
+        gutter = current;
+      }
+      if (!gutter) return;
+      const width = gutter.getBoundingClientRect().width + 'px';
       if (pane.style.getPropertyValue('--gutter-width') !== width) pane.style.setProperty('--gutter-width', width);
-    }
+    });
+    observer.observe(pane);
+    return observer;
   });
-  panes.forEach(pane => gutterObserver.observe(pane.querySelector('.cm-gutters')));
+  window.addEventListener('pagehide', event => {
+    if (!event.persisted) gutterObservers.forEach(observer => observer.disconnect());
+  });
   copyButtons.forEach(button => button.addEventListener('click', () => {
     const side = Number(button.dataset.side);
     window.parent.postMessage({ openallComparison: true, action: 'copy', side, text: inputs[side].value }, '*');
@@ -617,6 +629,7 @@
       if (typeof theme[key] === 'string') root.style.setProperty('--' + key, theme[key]);
     }
     root.style.colorScheme = theme.light ? 'light' : 'dark';
+    root.style.setProperty('--match-ink', theme.light ? '#245b91' : '#9cc8ef');
     const removed = theme.light ? '178,62,80' : '197,92,105';
     const added = theme.light ? '40,133,81' : '65,164,112';
     root.style.setProperty('--removed', `rgba(${removed},${theme.light ? '.14' : '.22'})`);

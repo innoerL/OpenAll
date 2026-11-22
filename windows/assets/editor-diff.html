@@ -96,6 +96,8 @@
     }
     #find-query::placeholder { color:var(--muted); }
     .match-nav { flex:none; display:flex; align-items:center; padding-left:8px; border-left:1px solid var(--rule); }
+    .match-nav:has(button:enabled) :is(#find-count,button:enabled),.find-icon { color:var(--match-ink,var(--ink)); }
+    .query-field:focus-within { border-color:var(--match-ink,var(--accent)); }
     .match-nav[hidden] { display:none; }
     #find-count { padding:0 6px 0 0; color:var(--secondary); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
     #find-scope {
