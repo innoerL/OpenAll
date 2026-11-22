@@ -73,6 +73,8 @@ module.exports = async function verifyGold(searchWindow, output) {
     check(gold.isAlwaysOnTop() === !pinned, '置顶设置同步原生窗口');
     await click('outlook-view');
     await until(() => execute(gold, () => !document.querySelector('#outlook').hidden && document.querySelectorAll('#forecast-rows tr').length === 7), '七日展望');
+    const toolbar = () => execute(gold, () => ['layout', 'currency'].map(id => document.getElementById(id).getClientRects().length > 0));
+    assert.deepEqual(await toolbar(), [false, true], '国际展望仅显示币种切换');
     await click('forecast-ctf');
     await until(() => execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true'), '周大福展望');
     check(await execute(gold, async () => {
@@ -84,14 +86,42 @@ module.exports = async function verifyGold(searchWindow, output) {
       const rows = [...document.querySelectorAll('#forecast-rows tr')];
       const header = document.querySelector('.forecast-baseline');
       return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date &&
-        header.querySelector('strong').textContent === price + ' 元/克' &&
+        header.querySelector('strong').textContent.trim() === price + ' 人民币/克' &&
         document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
         rows.length === 7 && days.length === 7 && rows.every((row, i) => {
           const day = days[i];
-          return day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
-            row.querySelector('time').dateTime === day.date && row.cells[2].textContent === format.format(day.mid);
+          const track = row.querySelector('.range-track');
+          if (!track) return false;
+          const [low, mid, high] = ['--low', '--mid', '--high'].map(name => Number.parseFloat(track.style.getPropertyValue(name)));
+          return 0 <= low && low <= mid && mid <= high && high <= 100 &&
+            day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
+            row.querySelector('time').dateTime === day.date &&
+            row.cells[1].matches('.forecast-price') && row.cells[1].textContent === format.format(day.mid) &&
+            row.cells[2].matches('.forecast-direction') && row.cells[2].textContent.includes(day.confidence + '%') &&
+            row.cells[3].matches('.forecast-range') && row.cells[3].textContent.includes(format.format(day.high));
         });
     }), '当日周大福牌价与日期在表头，七个目标日逐行展示双品种模型实际参考价');
+    assert.deepEqual(await toolbar(), [false, false], '周大福展望隐藏无关控件');
+    gold.show();
+    gold.focus();
+    gold.webContents.focus();
+    const disclosureIds = ['verification-breakdown', 'method-details'];
+    for (const id of disclosureIds) {
+      check(await execute(gold, id => {
+        const details = document.getElementById(id);
+        const summary = details?.querySelector(':scope > summary');
+        summary?.focus();
+        return !details?.open && summary && document.activeElement === summary;
+      }, id), '详情摘要可获键盘焦点：' + id);
+      for (const opened of [true, false]) {
+        gold.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+        gold.webContents.sendInputEvent({ type: 'char', keyCode: '\r' });
+        gold.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+        await until(() => execute(gold, (id, opened) => document.getElementById(id).open === opened, id, opened), '回车切换详情 ' + id);
+      }
+    }
+    await execute(gold, () => { document.activeElement.blur(); document.querySelector('main').scrollTop = 0; window.scrollTo(0,0); });
+    check(true, '回车可分别展开与收拢验证统计、预测说明');
     const normalSize = gold.getContentSize();
     try {
       gold.setContentSize(345, normalSize[1]);
@@ -104,6 +134,7 @@ module.exports = async function verifyGold(searchWindow, output) {
           table.getBoundingClientRect().right <= card.right &&
           document.querySelector('#close').getBoundingClientRect().right <= document.documentElement.clientWidth;
       }), '最窄窗口可同时查看七行日期、完整情景区间和窗口操作');
+      await capture('outlook-narrow');
     } finally {
       gold.setContentSize(...normalSize);
     }
@@ -130,6 +161,8 @@ module.exports = async function verifyGold(searchWindow, output) {
     }, '打开宿主外观设置');
     check(true, '金价外观按钮直接进入 OpenAll 外观设置');
     await capture('outlook'); await click('quotes-view'); await capture('combined-dark');
+    assert.deepEqual(await toolbar(), [true, true], '返回行情恢复币种与布局切换');
+    check(true, '窗口操作随行情、国际展望及周大福展望切换');
     await execute(gold, () => { const canvas = document.querySelector('#combined canvas'); canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })); window.__goldCanvas = canvas; window.__goldHover = document.querySelector('#combined .hover'); });
     await execute(searchWindow, () => openall.saveSettings({ theme: 'custom', backgroundHex: '#e6e2dc', accentHex: '#4455aa' }));
     await until(async () => (await read()).theme.background === '#e6e2dc', '再次同步自定义背景');

@@ -453,20 +453,44 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             const format = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:0});
             const actual = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(price);
             return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === date &&
-              header.querySelector('strong').textContent === actual + ' 元/克' &&
+              header.querySelector('strong').textContent.trim() === actual + ' 人民币/克' &&
               document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
               rows.length === 7 && days.length === 7 && rows.every((row,i) => {
                 const day = days[i];
                 return day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
-                  row.querySelector('time').dateTime === day.date && row.cells[2].textContent === format.format(day.mid);
+                  row.querySelector('time').dateTime === day.date &&
+                  row.cells[1].matches('.forecast-price') && row.cells[1].textContent === format.format(day.mid) &&
+                  row.cells[2].matches('.forecast-direction') && row.cells[2].textContent.includes(day.confidence + '%') &&
+                  row.cells[3].matches('.forecast-range') && row.cells[3].textContent.includes(format.format(day.high));
               });
             """
             try check(try await tool.execute(checkPrices) as? Bool == true, "周大福当日牌价表头与七个目标日参考价对应模型输出")
+            // 用 WebKit 的原生键盘事件操作两段详情，截图前恢复首屏。
+            guard let browser = tool.webView else { throw componentError("未出现金价内容视图") }
+            _ = panel.makeFirstResponder(browser)
+            for id in ["verification-breakdown", "method-details"] {
+                let focused = try await tool.execute("const details=document.getElementById('\(id)'), summary=details.querySelector('summary'); summary.focus(); return !details.open && document.activeElement===summary;")
+                try check(focused as? Bool == true, "键盘可聚焦详情摘要：\(id)")
+                for opened in [true, false] {
+                    for type in [NSEvent.EventType.keyDown, .keyUp] {
+                        guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
+                            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber,
+                            context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)
+                        else { throw componentError("无法创建回车事件") }
+                        if type == .keyDown { browser.keyDown(with: event) } else { browser.keyUp(with: event) }
+                    }
+                    try await tool.until("回车切换详情 \(id)") {
+                        try await tool.execute("return document.getElementById('\(id)').open===\(opened);") as? Bool == true
+                    }
+                }
+            }
+            _ = try await tool.execute("document.activeElement.blur(); document.querySelector('main').scrollTop=0; window.scrollTo(0,0); return true;")
             let originalFrame = panel.frame
             panel.setFrame(NSRect(origin: originalFrame.origin, size: NSSize(width: 345, height: originalFrame.height)), display: true)
             try await tool.until("窄窗七日参考价布局") {
                 try await tool.execute("return innerWidth <= 345 && document.querySelector('#forecast-table').getBoundingClientRect().right <= document.querySelector('#outlook').getBoundingClientRect().right;") as? Bool == true
             }
+            try await capture("gold-outlook-narrow")
             panel.setFrame(originalFrame, display: true)
             try await capture("gold-outlook")
             let preserved = try await tool.execute("window.__goldCheckDocument=document; window.__goldCheckCanvas=document.querySelector('#gold canvas'); return document.querySelector('#gold .hover').textContent;") as? String

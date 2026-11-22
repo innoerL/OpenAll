@@ -1,6 +1,6 @@
-/* finesse · register=product · shell=双品种行情与七日展望 */
+/* finesse · register=product · shell=行情读数与逐日报价表 · density=7 · motion=反馈 */
 :root { color-scheme: dark; font: 13px "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif; color: var(--foreground,#f3f1eb); background: var(--background,#242626); --accent:#d8c19e; --secondary:#a8ada8; --surface:#1e2020; --border:#3a3d3d; --gold-line:#d8b879; --ctf-line:#9eb9da; --rise:#ef9f90; --fall:#8fcbb0; --flat:#c4c9cd; }
-* { box-sizing:border-box; } body { margin:0; } [hidden] { display:none!important; } button,select { font:inherit; } button { cursor:pointer; } button:focus-visible,select:focus-visible,canvas:focus-visible { outline:2px solid var(--accent); outline-offset:2px; } button { color:inherit; } html { overflow-x:hidden; }
+* { box-sizing:border-box; } body { margin:0; } [hidden] { display:none!important; } button,select { font:inherit; } button { cursor:pointer; } button:focus-visible,select:focus-visible,canvas:focus-visible { outline:2px solid var(--accent); outline-offset:2px; } button { color:inherit; } html { overflow-x:clip; }
 .window-bar { position:sticky; top:0; z-index:3; height:47px; padding:0 13px 0 17px; display:flex; justify-content:space-between; align-items:center; background:var(--background); border-bottom:1px solid var(--border); -webkit-app-region:drag; user-select:none; }
 .wordmark,.window-buttons { display:flex; align-items:center; gap:8px; } .brand { width:24px; height:24px; border-radius:4px; display:inline-flex; align-items:flex-end; justify-content:center; gap:2px; padding:5px 3px; flex:none; color:var(--accent-ink); background:var(--accent-soft); } .brand i { width:3px; background:currentColor; border-radius:1px; } .brand i:nth-child(1) { height:36%; } .brand i:nth-child(2) { height:66%; } .brand i:nth-child(3) { height:100%; } h1 { margin:0; font-size:14px; font-weight:750; letter-spacing:.02em; }
 .window-buttons { gap:4px; -webkit-app-region:no-drag; } .window-button { height:27px; min-width:29px; border:1px solid transparent; border-radius:6px; color:var(--secondary); background:transparent; padding:0 6px; line-height:1; } .window-button:hover { background:var(--raised); color:var(--foreground); } .window-button.close:hover { background:#a3433a; color:#fff; } .window-button.symbol { font-family:system-ui,sans-serif; font-size:18px; } .window-button.pin,.window-button.setting { font-size:11px; min-width:42px; } .window-button.setting { border-color:var(--border); } button[aria-pressed="true"].window-button { color:var(--accent-ink); background:var(--accent-soft); border-color:var(--border); }
@@ -16,27 +16,72 @@ main { padding:13px 16px 10px; max-width:720px; margin:auto; } .today-line { dis
 .summary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); margin-bottom:12px; } .summary { min-width:0; } .summary:first-child { padding-right:10px; } .summary+.summary { padding-left:12px; border-left:1px solid var(--border); } .summary h2 { font-size:13px; } .summary .state { display:inline-flex; margin-top:5px; } .summary .price-line { display:block; margin-top:3px; } .summary .quote-price { display:block; font-size:35px; } .summary .unit { white-space:nowrap; } .summary .quote-time { overflow-wrap:anywhere; margin-bottom:0; } .summary .changes { display:flex; margin:2px 0 0; gap:1px 7px; } .summary .source-line { margin-top:2px; }
 .chart-legend { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:4px 0 5px; font-size:10px; } .chart-legend span { display:inline-flex; align-items:center; gap:5px; color:var(--gold-line); } .chart-legend span+span { color:var(--ctf-line); } .chart-legend span:before { content:''; width:14px; border-top:2px solid currentColor; } .chart-legend span+span:before { border-top-style:dashed; } .combined .plot { height:clamp(108px,calc(100vh - 428px),196px); }
 .view-switch { display:inline-flex; align-items:center; flex:none; padding:2px; gap:1px; border:1px solid var(--border); border-radius:7px; } .view-switch button,.edge-setting button { border:1px solid transparent; border-radius:5px; padding:3px 8px; font-size:11px; color:var(--secondary); background:transparent; } .view-switch button:hover,.edge-setting button:hover { border-color:var(--border); } .view-switch button[aria-pressed="true"] { color:var(--accent-ink); background:var(--accent-soft); font-weight:600; } .edge-setting { display:flex; justify-content:flex-end; margin-top:1px; } .edge-setting button { padding:2px 4px; font-size:10px; } .edge-setting button[aria-pressed="true"] { color:var(--accent-ink); } .edge-setting button[aria-pressed="true"]:before { content:'▏'; margin-right:2px; }
-.outlook { padding-top:14px; } .outlook-heading { display:flex; justify-content:space-between; gap:4px; align-items:center; } .outlook-heading h2 { font-size:16px; } .outlook-heading h3 { margin:0; font-size:12px; } .outlook-heading>span { color:var(--secondary); font-size:10px; } .outlook-meta { color:var(--secondary); margin:5px 0 7px; font-size:10px; line-height:1.45; } #forecast-table { width:100%; text-align:left; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:12px; white-space:nowrap; } #forecast-table th,#forecast-table td { border-bottom:1px solid var(--border); padding:7px 3px; } #forecast-table th { color:var(--secondary); font-size:10px; font-weight:550; } #forecast-table td:nth-child(n+3),#forecast-table th:nth-child(n+3) { text-align:right; } #forecast-table td:last-child { color:var(--secondary); } .daily-direction { display:inline-flex; align-items:baseline; gap:6px; } .daily-direction b { font-weight:650; } .daily-confidence { color:var(--secondary); font-size:10px; } .outlook-block { margin-top:14px; padding-top:10px; border-top:1px solid var(--border); }
+.outlook { padding-top:14px; } .outlook-heading { display:flex; justify-content:space-between; gap:4px; align-items:center; } .outlook-heading h2 { font-size:16px; } .outlook-heading h3 { margin:0; font-size:12px; } .outlook-heading>span { color:var(--secondary); font-size:10px; } .outlook-meta { color:var(--secondary); margin:5px 0 7px; font-size:10px; line-height:1.45; } #forecast-table { width:100%; text-align:left; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:12px; white-space:nowrap; } #forecast-table th,#forecast-table td { border-bottom:1px solid var(--border); padding:7px 3px; } #forecast-table th { color:var(--secondary); font-size:10px; font-weight:550; }  #forecast-table td:last-child { color:var(--secondary); } .daily-direction { display:inline-flex; align-items:baseline; gap:6px; } .daily-direction b { font-weight:650; } .daily-confidence { color:var(--secondary); font-size:10px; } .outlook-block { margin-top:14px; padding-top:10px; border-top:1px solid var(--border); }
 #drivers { display:grid; gap:5px; margin-top:6px; } .driver { display:grid; grid-template-columns:minmax(0,1fr) auto auto; text-align:left; align-items:baseline; gap:8px; background:transparent; border:0; border-bottom:1px solid var(--border); padding:2px 1px 4px; color:inherit; font-size:11px; } .driver small { color:var(--secondary); font-variant-numeric:tabular-nums; } .driver b { font-weight:650; } .text-button,#events button,#calendar button { border:0; color:var(--accent-ink); background:transparent; padding:0; text-align:left; font-size:10px; } .text-button:hover,#events button:hover,#calendar button:hover,.driver:hover { text-decoration:underline; } #events,#calendar { padding:0; margin:4px 0 0; list-style:none; display:grid; gap:4px; } #events li,#calendar li { display:flex; align-items:baseline; gap:5px; min-width:0; font-size:10px; } #events li>span,#calendar li>span { color:var(--secondary); font-size:9px; white-space:nowrap; } #events button,#calendar button { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:inherit; } .model-note { color:var(--secondary); font-size:9px; margin:10px 0 0; line-height:1.5; } .error { color:var(--rise); background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px; font-size:11px; margin-bottom:8px; }
 body>.window-bar,body>main { transition:transform .22s cubic-bezier(.22,.61,.36,1); } body[data-edge-side="left"] { --edge-offset:-12px; } body[data-edge-side="right"] { --edge-offset:12px; } body[data-edge-collapsing="true"]>.window-bar,body[data-edge-collapsing="true"]>main { transform:translateX(var(--edge-offset,0)); }
 @media(prefers-reduced-motion:reduce) { body>.window-bar,body>main { transition:none; } }
 #verification-note { color:var(--foreground); font-variant-numeric:tabular-nums; } #verification-details,#verification-recent { margin-top:3px; overflow-wrap:anywhere; } .summary .week-summary { flex-wrap:wrap; row-gap:0; }
 @media(max-width:390px) { main { padding-left:9px; padding-right:9px; } .quote-card { padding-left:10px; padding-right:10px; } h2 { font-size:13px; } .window-bar { padding-left:7px; padding-right:6px; } .wordmark { gap:4px; } .brand { width:18px; height:18px; padding:4px 2px; gap:1px; } h1 { font-size:11px; } .window-buttons { gap:2px; } .window-button.symbol { min-width:23px; } .window-button.setting,.window-button.pin { min-width:34px; } .summary h2 { font-size:12px; } .summary .quote-price { font-size:32px; } .changes { flex-basis:100%; margin-left:0; } #forecast-table { font-size:10px; } .week-summary { gap:3px; font-size:9px; padding-inline:1px; } }
 
-#forecast-meta { display: grid; gap: 2px; margin: 10px 0; }
-.forecast-baseline { font-size: 11px; }
-.forecast-baseline strong { color: var(--foreground); font-weight: 600; }
-#forecast-table thead { background: var(--raised); }
-#forecast-table th { font-weight: 600; }
-#forecast-table td:nth-child(3) { font-weight: 650; }
-#forecast-table .weekday { color: var(--secondary); font-size: 10px; }
-#forecast-table tbody tr:last-child td { border-bottom: 0; }
-.outlook-block .outlook-heading { margin-bottom: 5px; }
-#events button, #calendar button { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
-@media (max-width: 420px) {
-  #forecast-table td:first-child time, #forecast-table .weekday { display: block; }
-  .daily-direction { flex-direction: column; align-items: flex-start; gap: 1px; }
-  #forecast-table th, #forecast-table td { padding: 5px 2px; }
-  #forecast-table th:nth-child(2) { white-space: normal; max-width: 52px; }
-  #forecast-table td { font-size: 11px; }
+/* 合并报价只用于行情页，周大福的牌价始终按人民币计。 */
+body:has(#outlook:not([hidden])) #layout,
+body:has(#outlook[data-instrument="ctf"]:not([hidden])) #currency { display:none; }
+
+/* 顶部突出实价，预测金额、概率和区间各自对齐。 */
+#outlook { --forecast-ink:var(--gold-line); }
+#outlook[data-instrument="ctf"] { --forecast-ink:var(--ctf-line); }
+#outlook > .outlook-heading h2 { font-size:14px; }
+#forecast-meta { display:grid; gap:4px; margin:12px 0 13px; }
+.forecast-baseline {
+  display:grid; grid-template-columns:minmax(0,1fr) auto;
+  align-items:baseline; column-gap:8px; row-gap:2px;
+  font-size:11px; font-variant-numeric:tabular-nums;
+}
+.forecast-label { grid-area:1 / 1; font-weight:600; color:var(--foreground); }
+.forecast-baseline time { grid-area:1 / 2; color:var(--secondary); }
+.forecast-baseline strong {
+  grid-area:2 / 1 / 3 / 3; color:var(--forecast-ink);
+  font-size:28px; line-height:1.12; font-weight:650; letter-spacing:-.035em;
+}
+.forecast-unit { color:var(--secondary); font-size:11px; font-weight:500; letter-spacing:0; white-space:nowrap; }
+.forecast-baseline + .forecast-baseline { display:flex; flex-wrap:wrap; align-items:baseline; margin-top:4px; }
+.forecast-baseline + .forecast-baseline strong { font:inherit; color:var(--foreground); letter-spacing:0; }
+#forecast-table { font-size:12px; }
+#forecast-table thead { background:transparent; }
+#forecast-table th { font-size:10px; font-weight:550; border-block:1px solid var(--border); padding:6px 3px; }
+#forecast-table td { padding:6px 3px; line-height:1.3; }
+#forecast-table :is(th,td):first-child { padding-left:0; }
+#forecast-table :is(th,td):last-child { text-align:right; padding-right:0; }
+#forecast-table th:nth-child(2), #forecast-table .forecast-price { text-align:right; padding-right:clamp(7px,2.7vw,18px); }
+#forecast-table .forecast-price { font-size:14px; font-weight:650; }
+#forecast-table .weekday { color:var(--secondary); font-size:10px; }
+#forecast-table .daily-direction { gap:4px; }
+#forecast-table .daily-direction b { font-weight:550; }
+#forecast-table .forecast-range { font-size:11px; }
+#forecast-table tbody tr:last-child td { border-bottom:0; }
+.range-track { display:block; position:relative; width:100%; height:5px; margin:2px 0 0; }
+.range-track::before, .range-track::after { content:""; position:absolute; border-radius:3px; }
+.range-track::before { left:var(--low); right:calc(100% - var(--high)); top:2px; height:2px; background:var(--secondary); opacity:.6; }
+.range-track::after { left:clamp(2px,var(--mid),calc(100% - 2px)); top:1px; width:4px; height:4px; transform:translateX(-50%); background:var(--forecast-ink); }
+.outlook-block .outlook-heading { margin-bottom:5px; }
+#events button, #calendar button { white-space:normal; overflow-wrap:anywhere; line-height:1.5; }
+.forecast-disclosure summary {
+  display:grid; grid-template-columns:1fr auto; align-items:center; gap:4px 8px;
+  min-height:26px; list-style:none; cursor:pointer; color:var(--foreground); font-size:12px; font-weight:600;
+}
+.forecast-disclosure summary::-webkit-details-marker { display:none; }
+.forecast-disclosure summary::after {
+  content:""; grid-area:1 / 2; width:6px; height:6px; margin-right:4px;
+  border-right:1.5px solid var(--secondary); border-bottom:1.5px solid var(--secondary); transform:rotate(-45deg);
+}
+.forecast-disclosure[open] summary::after { transform:rotate(45deg); }
+.forecast-disclosure summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:3px; }
+#verification-note { grid-area:2 / 1 / 3 / 3; font-size:11px; font-weight:450; color:var(--secondary); }
+.validation-body { padding:7px 0 1px; font-size:10px; color:var(--secondary); }
+#method-details .model-note { font-size:11px; }
+@media (max-width:420px) {
+  #forecast-table td:first-child time, #forecast-table .weekday { display:block; }
+  .daily-direction { flex-direction:column; align-items:flex-start; }
+  #forecast-table .daily-direction { gap:0; }
+  #forecast-table th, #forecast-table td { padding:5px 2px; }
 }

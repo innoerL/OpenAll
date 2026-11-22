@@ -28,12 +28,12 @@ async function verifyForecastMetrics(search, checks) {
     await execute(gold, () => openallGold.action('view', 'outlook'));
     await execute(gold, () => document.querySelector('#forecast-ctf').click());
     original = await execute(gold, () => openallGold.read());
-    check(await execute(gold, () => document.querySelector('#forecast-table th:nth-child(2)').textContent.includes('方向概率') &&
+    check(await execute(gold, () => document.querySelector('#forecast-table th:nth-child(3)').textContent.includes('概率') &&
       document.querySelector('#forecast-price-heading').textContent === '每日参考价' &&
       document.querySelector('#forecast-meta').textContent.includes('方向概率未校准') && !document.body.textContent.includes('可信度')),
     '展望区分方向概率与每日参考价');
     check(original.outlook.verification.ctf.byHorizon[1].priceCount === 0 &&
-      await execute(gold, () => document.querySelector('#verification-note').textContent.includes('暂无到期的准时价格误差样本') &&
+      await execute(gold, () => document.querySelector('#verification-note').textContent.includes('暂无到期的准时报价可验证') &&
         !/0(?:\.0+)?%/.test(document.querySelector('#verification-note').textContent)), '没有到期样本时明确说明，不展示零误差');
     check(original.outlook.forecasts.ctf.days.every(day => day.pointMethod === 'joint-history') &&
       await execute(gold, () => document.querySelector('#model-note').textContent.includes('国际现货收盘走势')),
@@ -58,7 +58,7 @@ async function verifyForecastMetrics(search, checks) {
     await until(() => execute(gold, () => document.querySelector('.forecast-baseline').textContent.includes('最近周大福牌价')));
     check(await execute(gold, () => {
       const lines = document.querySelectorAll('#forecast-meta .forecast-baseline');
-      return lines[0].querySelector('strong').textContent === '1,058 元/克' &&
+      return lines[0].querySelector('strong').textContent === '1,058 人民币/克' &&
         lines[0].querySelector('time').dateTime === '2026-11-19' && lines[1].textContent.includes('预测基准');
     }), '已有预测与当前报价不同，表头分别标记最近牌价及预测基准');
 
@@ -73,7 +73,7 @@ async function verifyForecastMetrics(search, checks) {
       const rows = [...document.querySelectorAll('#forecast-rows tr')];
       const reasons = ['国际行情不足', '牌价历史不足', '同期样本不足'];
       return rows.length === 7 && rows.every((row, i) =>
-        row.cells[1].textContent === reasons[i % reasons.length] && row.cells[2].textContent === '—');
+        row.querySelector('.forecast-direction').textContent === reasons[i % reasons.length] && row.querySelector('.forecast-price').textContent === '—');
     }), '缺国际行情、近期牌价或配对样本时逐日显示原因');
 
     const empty = structuredClone(original);
@@ -81,7 +81,7 @@ async function verifyForecastMetrics(search, checks) {
     gold.webContents.send('openall:gold-snapshot', empty);
     await until(() => execute(gold, () => document.querySelector('#forecast-table').hidden));
     check(await execute(gold, () => document.querySelector('#forecast-meta').textContent.includes('今日周大福牌价') &&
-      document.querySelector('.forecast-baseline strong').textContent.includes('元/克')), '预测未就绪时仍可读取今日实际牌价');
+      document.querySelector('.forecast-baseline strong').textContent.includes('人民币/克')), '预测未就绪时仍可读取今日实际牌价');
 
     empty.instruments.ctf.quote = null;
     gold.webContents.send('openall:gold-snapshot', empty);
@@ -107,7 +107,7 @@ async function verifyForecastMetrics(search, checks) {
     const persisted = await execute(gold, () => openallGold.read());
     assert.deepEqual(persisted.outlook.verification, original.outlook.verification);
     gold.webContents.send('openall:gold-snapshot', original);
-    await until(() => execute(gold, () => document.querySelector('#verification-note').textContent.includes('暂无到期的准时价格误差样本')));
+    await until(() => execute(gold, () => document.querySelector('#verification-note').textContent.includes('暂无到期的准时报价可验证')));
     check(true, '评价样例仅影响页面并已恢复，宿主统计保持不变');
   } finally {
     if (gold && !gold.isDestroyed()) {
