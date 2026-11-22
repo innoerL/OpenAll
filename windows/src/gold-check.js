@@ -94,7 +94,9 @@ module.exports = async function verifyGold(searchWindow, output) {
       const actual = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(quote.price);
       const buttons = [...document.querySelectorAll('#forecast-rows .forecast-day-toggle')];
       const header = document.querySelector('.forecast-baseline');
-      return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date && !header.querySelector('time').hidden &&
+      return header.textContent.includes('今日周大福牌价') && document.querySelector('#date').innerText === quote.date &&
+        header.querySelector('time').dateTime === quote.date && !header.innerText.includes(quote.date) && !document.querySelector('#forecast-meta').innerText.includes('模型') &&
+        document.querySelector('#method-details').textContent.includes(state.outlook.forecasts.ctf.version) &&
         header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
         document.querySelector('#forecast-price-heading').textContent.includes('参考价') &&
         document.querySelectorAll('#forecast-table thead th').length === 3 &&
@@ -106,7 +108,7 @@ module.exports = async function verifyGold(searchWindow, output) {
             [day.low, day.high].every(value => row.cells[2].textContent.includes(format.format(value))) &&
             !row.innerText.includes('%');
         });
-    }), '当日周大福牌价与日期在表头，七个目标日逐行展示双品种模型实际参考价');
+    }), '当日日期仅在窗口顶部，牌价与单位在表头，方法显示模型版本，七天逐行对应模型');
     assert.deepEqual(await toolbar(), [false, false], '周大福展望隐藏无关控件');
     gold.show();
     gold.focus();
@@ -174,7 +176,9 @@ module.exports = async function verifyGold(searchWindow, output) {
         const scale = document.getElementById('range-scale');
         const trackOK = [...document.querySelectorAll('.forecast-day')].every((row, index) => {
           const track = row.querySelector('.range-track'), mark = track?.querySelector('i'), day = days[index];
-          if (!track || !mark) return false;
+          if (!track || !mark || !track.querySelector('.range-today') || document.querySelector('#today-key').hidden) return false;
+          const today = parseFloat(getComputedStyle(track).getPropertyValue('--today'));
+          if (Math.abs(today - 100 * (state.instruments.ctf.quote.price - min) / (max - min)) >= .001 || !Number.isFinite(today)) return false;
           const measured = [track.style.getPropertyValue('--low'), mark.style.left, track.style.getPropertyValue('--high')];
           const prices = [day.low, day.mid, day.high];
           const bounds = mark.getBoundingClientRect();

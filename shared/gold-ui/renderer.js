@@ -221,7 +221,7 @@ function unavailableReason(day) {
   return { 'gold-history': '国际行情不足', 'ctf-history': '牌价历史不足', 'paired-history': '同期样本不足' }[day.sparseReason] || '样本不足';
 }
 
-function renderForecastDays(data, today, number, unit) {
+function renderForecastDays(data, today, number, unit, todayPrice) {
   const body = $('#forecast-rows');
   const focusedDate = document.activeElement.closest?.('.forecast-day-toggle')?.dataset.date;
   const days = data?.days || [];
@@ -232,6 +232,10 @@ function renderForecastDays(data, today, number, unit) {
     [day.mid, day.low, day.high].some(value => Number.isFinite(value) && number.format(value).length > 8)));
   const scale = $('#range-scale');
   scale.hidden = $('#range-key').hidden = !(max > min);
+  const showToday = max > min && Number.isFinite(todayPrice) && todayPrice >= min && todayPrice <= max;
+  $('#today-key').hidden = !showToday;
+  const position = value => (100 * (value - min) / (max - min)) + '%';
+  if (showToday) body.style.setProperty('--today', position(todayPrice));
   if (!scale.hidden) {
     scale.firstElementChild.textContent = number.format(min);
     scale.lastElementChild.textContent = number.format(max);
@@ -267,10 +271,10 @@ function renderForecastDays(data, today, number, unit) {
       range.append(label);
       if (max > min) {
         const track = element('span', undefined, 'range-track');
-        const position = value => (100 * (value - min) / (max - min)) + '%';
         track.setAttribute('aria-hidden', 'true');
         track.style.setProperty('--low', position(day.low));
         track.style.setProperty('--high', position(day.high));
+        if (showToday) track.append(element('span', undefined, 'range-today'));
         if (hasPrice) {
           const mark = element('i');
           mark.style.left = position(day.mid);
@@ -291,8 +295,9 @@ function renderForecastDays(data, today, number, unit) {
     if (day.model && Number.isFinite(day.confidence)) {
       const headline = element('div', undefined, 'day-direction');
       headline.dataset.direction = day.direction;
-      headline.append(element('b', FORECAST_LABELS[day.direction] || '方向待定'),
-        element('span', '方向概率 ' + day.confidence + '%'), element('span', '（未校准）', 'calibration'));
+      const chance = element('span', '方向概率 ', 'chance');
+      chance.append(element('strong', day.confidence + '%'), '（未校准）');
+      headline.append(element('b', FORECAST_LABELS[day.direction] || '方向待定'), chance);
       panel.append(headline);
       const evidence = element('p', day.model);
       if (Number.isFinite(day.sample)) evidence.append(' · ' + day.sample + ' 个历史情景');
@@ -347,7 +352,7 @@ function renderOutlook() {
   if (!lastSnapshot) return;
   const { outlook, currency, today, instruments } = lastSnapshot;
   const isCTF = forecastInstrument === 'ctf';
-  const quote = isCTF ? instruments.ctf.quote : null;
+  const quote = instruments[forecastInstrument].quote;
   const verification = outlook.verification[forecastInstrument];
   const signature = JSON.stringify([outlook, currency, forecastInstrument, today, quote?.date, quote?.price]);
   if (signature === outlookSignature) return;
@@ -368,6 +373,7 @@ function renderOutlook() {
     const line = element('div', undefined, 'forecast-baseline');
     const stamp = element('time', date);
     stamp.dateTime = date;
+    stamp.hidden = date === today;
     const value = element('strong', price == null ? '待更新' : formatter.format(price));
     if (price != null) value.append(' ', element('span', unit, 'forecast-unit'));
     line.append(element('span', label, 'forecast-label'), value, stamp);
@@ -381,14 +387,15 @@ function renderOutlook() {
     if (!isCTF || !hasQuote || data.anchor.date !== quote.date || data.anchor.price !== quote.price) {
       addPrice(isCTF ? '预测基准' : '基准', data.anchor.price, data.anchor.date, isCTF ? whole : number);
     }
-    const method = hasFixed ? '旧版沿用基准价 · ' : '';
-    meta.append(element('span', `${method}模型 ${data.version || verification.version || '—'}${data.provisional ? ' · 数据尚未就绪，暂估' : ''}`));
+    if (data.provisional || hasFixed) {
+      meta.append(element('span', [hasFixed && '旧版沿用基准价', data.provisional && '数据尚未就绪，暂估'].filter(Boolean).join(' · ')));
+    }
   } else {
     meta.append(element('span', isCTF ? '等待足够的预测数据' : '等待足够的最新历史报价或参考汇率'));
   }
   $('#forecast-table').hidden = !data;
   $('#method-details').hidden = !data;
-  renderForecastDays(data, today, number, unit);
+  renderForecastDays(data, today, number, unit, quote?.date === today ? quote.price : null);
 
   const counts = Object.entries(verification.byHorizon).map(([horizon, score]) => score.total ?
     `${horizon} 日方向命中 ${score.hit}/${score.total}` : `${horizon} 日无到期样本`);
@@ -457,10 +464,10 @@ function renderOutlook() {
     calendar.append(line);
   }
   $('#model-note').textContent = data ?
-    '涨跌相对基准价，±0.2% 以内为维持。方向概率未校准，不是价格命中率。' +
+    '模型 ' + (data.version || verification.version || '—') + '。涨跌相对基准价，±0.2% 以内为维持。方向概率未校准，不是价格命中率。' +
       (hasJoint ? '周大福每日参考价结合近期牌价涨跌与基准日前的国际现货收盘走势，按各日期分别估算。' :
         hasFixed ? '此档周大福参考价沿用发行时的基准牌价，方向与区间按期限估计。' : '参考估计来自历史情景。') +
-      '各行情景区间采用相同刻度，竖线标示参考价。区间覆盖率用到期记录验证。市场因素和日历用于解读行情。' +
+      '各行情景区间采用相同刻度。实线标示当日参考价，虚线标示刻度内的今日实价。区间覆盖率用到期记录验证。市场因素和日历用于解读行情。' +
       (forecastInstrument === 'gold' && currency !== 'USD' ? ' 展望按当前汇率折算，方向基于美元金价。' : '') : '';
 }
 

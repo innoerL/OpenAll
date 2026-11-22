@@ -380,6 +380,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
         let tool = GoldToolController(dataDirectory: directory, fixture: true)
         var checks: [String] = []
         var screenshots: [String] = []
+        var narrowAmounts: [[String: Any]] = []
         var failure: Error?
         defer { tool.stop() }
         func check(_ value: Bool, _ label: String) throws {
@@ -454,7 +455,9 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             const actual = new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(quote.price);
             const buttons = [...document.querySelectorAll('#forecast-rows .forecast-day-toggle')];
             const header = document.querySelector('.forecast-baseline');
-            return header.textContent.includes('今日周大福牌价') && header.querySelector('time').dateTime === quote.date && !header.querySelector('time').hidden &&
+            return header.textContent.includes('今日周大福牌价') && document.querySelector('#date').innerText === quote.date &&
+              header.querySelector('time').dateTime === quote.date && !header.innerText.includes(quote.date) && !document.querySelector('#forecast-meta').innerText.includes('模型') &&
+              document.querySelector('#method-details').textContent.includes(state.outlook.forecasts.ctf.version) &&
               header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
               document.querySelector('#forecast-price-heading').textContent.includes('参考价') &&
               document.querySelectorAll('#forecast-table thead th').length === 3 &&
@@ -509,41 +512,6 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
               })) && document.querySelector('#close').getBoundingClientRect().right <= width + 1;
             """
             try check(try await tool.execute(narrowPrices) as? Bool == true, "窄窗三列的日期、参考价和区间没有裁切")
-            let longPrices = """
-            const original = await openallGold.read(), principal = 123456789.12;
-            const fits = () => {
-              const row = document.querySelector('.forecast-day');
-              const width = document.documentElement.clientWidth;
-              const table = document.querySelector('#forecast-table').getBoundingClientRect();
-              return Math.abs(width - 345) <= 1 && table.left >= 0 && table.right <= width + 1 && [...row.cells].every(cell => {
-                const box = cell.getBoundingClientRect();
-                const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
-                for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-                  if (!text.textContent.trim()) continue;
-                  const range = document.createRange();
-                  range.selectNodeContents(text);
-                  if ([...range.getClientRects()].some(rect => rect.left < box.left - 1 || rect.right > box.right + 1)) return false;
-                }
-                return true;
-              });
-            };
-            try {
-              for (const [currency,id] of [['USD','gold'],['CNY','gold'],['CNY','ctf']]) {
-                const snapshot = JSON.parse(JSON.stringify(original));
-                snapshot.currency = currency;
-                document.querySelector('#forecast-' + id).click();
-                const days = snapshot.outlook.forecasts[id].days;
-                days[0] = {...days.find(entry=>entry.model),date:days[0].date,mid:principal,low:principal-100,high:principal+100};
-                window.__openallGoldDeliver({kind:'snapshot',value:snapshot});
-                if (!document.querySelector('.forecast-price').textContent.includes('123,456,789') || !fits()) return false;
-              }
-              return true;
-            } finally {
-              window.__openallGoldDeliver({kind:'snapshot',value:original});
-              document.querySelector('#forecast-ctf').click();
-            }
-            """
-            try check(try await tool.execute(longPrices) as? Bool == true, "345 像素窄窗的长美元和人民币参考价、区间无裁切")
             try await capture("gold-outlook-narrow")
             _ = try await tool.execute("document.querySelector('.forecast-day-toggle').focus(); return true;")
             let dayKeys: [(String, UInt16, Int)] = [("\u{F700}", 126, 0), ("\u{F701}", 125, 1), ("\u{F72B}", 119, 6),
@@ -556,12 +524,15 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             }
             try check(true, "方向键及 Home、End 在七天间移动焦点，到首尾保持原位")
             try pressKey()
-            try check(try await tool.execute("""
+            try await tool.until("回车后首日详情可见") {
+                try await tool.execute("""
                 const button=document.querySelector('.forecast-day-toggle'), detail=document.getElementById(button.getAttribute('aria-controls'));
                 const day=(await openallGold.read()).outlook.forecasts.ctf.days[0];
                 return button.getAttribute('aria-expanded')==='true' && detail?.matches('.forecast-detail') &&
                   detail.getClientRects().length>0 && detail.innerText.includes(day.confidence+'%') && detail.innerText.includes('未校准');
-                """) as? Bool == true, "按日期查看对应的方向概率与校准状态")
+                """) as? Bool == true
+            }
+            try check(true, "按日期查看对应的方向概率与校准状态")
             let flatPresentation = """
             const state = await openallGold.read();
             const days = state.outlook.forecasts.ctf.days;
@@ -571,7 +542,9 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             const scale = document.getElementById('range-scale');
             const trackOK = [...document.querySelectorAll('.forecast-day')].every((row, index) => {
               const track = row.querySelector('.range-track'), mark = track?.querySelector('i'), day = days[index];
-              if (!track || !mark) return false;
+              if (!track || !mark || !track.querySelector('.range-today') || document.querySelector('#today-key').hidden) return false;
+              const today = parseFloat(getComputedStyle(track).getPropertyValue('--today'));
+              if (Math.abs(today - 100 * (state.instruments.ctf.quote.price - min) / (max - min)) >= .001 || !Number.isFinite(today)) return false;
               const measured = [track.style.getPropertyValue('--low'), mark.style.left, track.style.getPropertyValue('--high')];
               const prices = [day.low, day.mid, day.high];
               const bounds = mark.getBoundingClientRect();
@@ -623,6 +596,53 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
                 _ = try await tool.execute("document.querySelector('.forecast-day-toggle[aria-expanded=true]').click(); return true;")
                 panel.setFrame(originalFrame, display: true)
             }
+            panel.setFrame(NSRect(origin: originalFrame.origin, size: NSSize(width: 345, height: originalFrame.height)), display: true)
+            try await tool.until("长金额测试窄窗排版") { try await tool.execute("return innerWidth <= 345;") as? Bool == true }
+            let longPrices = """
+            const original = await openallGold.read(), principal = 123456789.12;
+            const measure = () => {
+              const table = document.querySelector('#forecast-table').getBoundingClientRect();
+              const overflows = [];
+              for (const cell of document.querySelector('.forecast-day').cells) {
+                const box = cell.getBoundingClientRect();
+                const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+                for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+                  if (!text.textContent.trim()) continue;
+                  const range = document.createRange();
+                  range.selectNodeContents(text);
+                  for (const rect of range.getClientRects()) {
+                    if (rect.left < box.left - 1 || rect.right > box.right + 1) {
+                      overflows.push({column:cell.cellIndex,text:text.textContent,cell:[box.left,box.right],glyph:[rect.left,rect.right]});
+                    }
+                  }
+                }
+              }
+              return {innerWidth,documentWidth:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,
+                tableLeft:table.left,tableRight:table.right,tableWidth:table.width,price:document.querySelector('.forecast-price').textContent,overflows};
+            };
+            const readings = [];
+            for (const [currency,id] of [['USD','gold'],['CNY','gold'],['CNY','ctf']]) {
+              const snapshot = JSON.parse(JSON.stringify(original));
+              snapshot.currency = currency;
+              document.querySelector('#forecast-' + id).click();
+              const days = snapshot.outlook.forecasts[id].days;
+              days[0] = {...days.find(entry=>entry.model),date:days[0].date,mid:principal,low:principal-100,high:principal+100};
+              window.__openallGoldDeliver({kind:'snapshot',value:snapshot});
+              const geometry = measure();
+              const fits = geometry.price.includes('123,456,789') && Math.abs(geometry.innerWidth - 345) <= 1 &&
+                geometry.scrollWidth <= geometry.documentWidth + 1 && geometry.tableLeft >= 0 &&
+                geometry.tableRight <= geometry.documentWidth + 1 && !geometry.overflows.length;
+              readings.push({currency,instrument:id,...geometry,fits});
+              if (!fits) break;
+            }
+            return readings;
+            """
+            narrowAmounts = try await tool.execute(longPrices) as? [[String: Any]] ?? []
+            let allAmountsFit = narrowAmounts.count == 3 && narrowAmounts.allSatisfy { $0["fits"] as? Bool == true }
+            if !allAmountsFit { try await capture("gold-outlook-long-failure") }
+            try check(allAmountsFit, "345 像素窄窗的长美元和人民币参考价、区间无裁切")
+            _ = try await tool.execute("window.__openallGoldDeliver({kind:'snapshot',value:await openallGold.read()}); document.querySelector('#forecast-ctf').click(); return true;")
+            panel.setFrame(originalFrame, display: true)
             var appearanceOpened = false
             tool.onAppearanceSettings = { appearanceOpened = true }
             _ = try await tool.execute("return await openallGold.action('appearance');")
@@ -666,7 +686,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             try check(tool.panel === originalWindow, "隐藏后重新打开保留原生窗口与网页状态")
         } catch { failure = error }
         let report: [String: Any] = ["passed": failure == nil, "platform": "macos", "runtime": "AppKit + WKWebView + JavaScriptCore",
-            "checks": checks, "screenshots": screenshots, "errors": failure.map { [$0.localizedDescription] } ?? []]
+            "checks": checks, "screenshots": screenshots, "narrowAmounts": narrowAmounts, "errors": failure.map { [$0.localizedDescription] } ?? []]
         let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: output.appendingPathComponent("report.json"))
         print("金价原生界面检查：\(checks.count) 项，\(failure == nil ? "通过" : "失败")")

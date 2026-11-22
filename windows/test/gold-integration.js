@@ -8,9 +8,9 @@ fs.mkdirSync(output, { recursive: true });
 require('../src/main');
 const watchdog = setTimeout(() => { console.error('金价集成回归超时'); app.exit(1); }, 90000);
 
-async function verifyForecastMetrics(search, checks) {
-  const execute = (win, fn) => win.webContents.executeJavaScript(`(${fn.toString()})()`);
-  const check = (condition, label) => { assert.ok(condition, label); checks.push(label); };
+async function verifyForecastMetrics(search, report) {
+  const execute = (win, fn, ...args) => win.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
+  const check = (condition, label) => { assert.ok(condition, label); report.checks.push(label); };
   async function until(fn) {
     const started = Date.now();
     while (!await fn()) {
@@ -75,8 +75,19 @@ async function verifyForecastMetrics(search, checks) {
     check(await execute(gold, () => {
       const lines = document.querySelectorAll('#forecast-meta .forecast-baseline');
       return lines[0].querySelector('strong').textContent === '1,058 人民币/克' &&
-        !lines[0].querySelector('time').hidden && lines[0].querySelector('time').dateTime === '2026-11-19' && lines[1].textContent.includes('预测基准');
+        !lines[0].querySelector('time').hidden && lines[0].querySelector('time').dateTime === '2026-11-19' && lines[1].textContent.includes('预测基准') &&
+        document.querySelector('#today-key').hidden && !document.querySelector('.range-today');
     }), '已有预测与当前报价不同，表头分别标记最近牌价及预测基准');
+
+    for (const price of [null, 123456789]) {
+      const outside = structuredClone(original);
+      outside.instruments.ctf.quote = price == null ? null : {...outside.instruments.ctf.quote,price};
+      gold.webContents.send('openall:gold-snapshot', outside);
+      await until(() => execute(gold, expected => document.querySelector('.forecast-baseline strong').textContent === expected,
+        price == null ? '待更新' : '123,456,789 人民币/克'));
+      check(await execute(gold, () => document.querySelector('#today-key').hidden && !document.querySelector('.range-today')),
+        price == null ? '没有今日实价时关闭虚线及图例' : '超出共有刻度的实价不显示虚线或改变刻度');
+    }
 
     const partial = structuredClone(original);
     const partialDay = partial.outlook.forecasts.ctf.days[2];
@@ -113,22 +124,36 @@ async function verifyForecastMetrics(search, checks) {
         large.outlook.forecasts[id].days[0] = {...day,date:large.outlook.forecasts[id].days[0].date,mid:principal,low:principal-100,high:principal+100};
         gold.webContents.send('openall:gold-snapshot', large);
         await until(() => execute(gold, () => document.querySelector('.forecast-price').textContent.includes('123,456,789')));
-        check(await execute(gold, () => {
-          const row = document.querySelector('.forecast-day');
-          const width = document.documentElement.clientWidth;
+        const geometry = await execute(gold, () => {
           const table = document.querySelector('#forecast-table').getBoundingClientRect();
-          return Math.abs(width - 345) <= 1 && table.left >= 0 && table.right <= width + 1 && [...row.cells].every(cell => {
+          const overflows = [];
+          for (const cell of document.querySelector('.forecast-day').cells) {
             const box = cell.getBoundingClientRect();
             const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
             for (let text = walker.nextNode(); text; text = walker.nextNode()) {
               if (!text.textContent.trim()) continue;
               const range = document.createRange();
               range.selectNodeContents(text);
-              if ([...range.getClientRects()].some(rect => rect.left < box.left - 1 || rect.right > box.right + 1)) return false;
+              for (const rect of range.getClientRects()) {
+                if (rect.left < box.left - 1 || rect.right > box.right + 1) {
+                  overflows.push({column:cell.cellIndex,text:text.textContent,cell:[box.left,box.right],glyph:[rect.left,rect.right]});
+                }
+              }
             }
-            return true;
-          });
-        }), '345 像素下长金额完整留在各列：'+currency+' / '+id);
+          }
+          return {innerWidth,documentWidth:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,
+            tableLeft:table.left,tableRight:table.right,tableWidth:table.width,price:document.querySelector('.forecast-price').textContent,overflows};
+        });
+        report.narrowAmounts.push({currency,instrument:id,...geometry});
+        // 窗口内宽含原生滚动条，可布局宽度由浏览器实际占用决定。
+        const fits = Math.abs(geometry.innerWidth - 345) <= 1 && geometry.scrollWidth <= geometry.documentWidth + 1 &&
+          geometry.tableLeft >= 0 && geometry.tableRight <= geometry.documentWidth + 1 && !geometry.overflows.length;
+        if (!fits) {
+          const filename = 'gold-outlook-long-' + currency + '-' + id + '.png';
+          fs.writeFileSync(path.join(output, filename), (await gold.webContents.capturePage()).toPNG());
+          report.screenshots.push(filename);
+        }
+        check(fits, '345 像素下长金额完整留在各列：'+currency+' / '+id);
       }
     } finally {
       gold.setContentSize(...savedSize);
@@ -145,7 +170,7 @@ async function verifyForecastMetrics(search, checks) {
     check(await execute(gold, () => {
       const dates = [...document.querySelectorAll('.forecast-day-toggle')].map(button => button.dataset.date);
       const reasons = ['国际行情不足','牌价历史不足','同期样本不足'];
-      return dates.length === 7 && dates.every((date, i) => {
+      return document.querySelector('#today-key').hidden && !document.querySelector('.range-today') && dates.length === 7 && dates.every((date, i) => {
         const button = document.querySelector('.forecast-day-toggle[data-date="' + date + '"]');
         button.click();
         const row = button.closest('tr'), detail = document.getElementById(button.getAttribute('aria-controls'));
@@ -221,7 +246,8 @@ app.whenReady().then(async () => {
       if (!search) await new Promise(resolve => setTimeout(resolve, 35));
     }
     Object.assign(report, await require('../src/gold-check')(search, output));
-    await verifyForecastMetrics(search, report.checks);
+    report.narrowAmounts = [];
+    await verifyForecastMetrics(search, report);
     report.passed = true;
   } catch (error) { Object.assign(report, error.goldReport); report.error = error.stack; console.error(error.stack); }
   finally {
