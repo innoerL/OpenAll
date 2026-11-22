@@ -138,7 +138,13 @@ module.exports = async function verifyGold(searchWindow, output) {
         const table = document.querySelector('#forecast-table');
         const rows = [...table.querySelectorAll('.forecast-day-toggle')].map(button => button.closest('tr'));
         const width = document.documentElement.clientWidth;
-        return table.getBoundingClientRect().right <= width + 1 && document.documentElement.scrollWidth <= width + 1 &&
+        const keys = [...document.querySelectorAll('#range-key > span')];
+        const labels = ['每日参考价','今日实价'];
+        const legend = keys.map(key => key.getBoundingClientRect());
+        const legendFits = keys.length === 2 && keys.every((key,i) => key.innerText.trim() === labels[i] &&
+          legend[i].left >= 0 && legend[i].right <= width && legend[i].width > 0 && key.scrollWidth <= key.clientWidth + 1) &&
+          legend[0].bottom <= legend[1].top && legend[0].height > 0;
+        return legendFits && table.getBoundingClientRect().right <= width + 1 && document.documentElement.scrollWidth <= width + 1 &&
           rows.length === 7 && rows.every(row => Array.from(row.cells).every(cell => {
             const range = document.createRange();
             range.selectNodeContents(cell);
