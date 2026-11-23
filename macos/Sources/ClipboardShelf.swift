@@ -284,7 +284,98 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         cache.countLimit = 80
         return cache
     }()
-    var item: ClipboardRecord! { didSet { textPreview = nil; cachedFormat = nil } }
+    private static let fileIcons: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 256
+        return cache
+    }()
+    private static let iconQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 2
+        queue.qualityOfService = .utility
+        return queue
+    }()
+    private var iconRequest: Operation?
+    var item: ClipboardRecord! {
+        didSet {
+            textPreview = nil
+            cachedFormat = nil
+            if oldValue?.id != item?.id { loadFileIcons() }
+        }
+    }
+
+    private func loadFileIcons() {
+        iconRequest?.cancel()
+        iconRequest = nil
+        guard let item, item.kind == "files" else { return }
+        let paths = item.filePaths.prefix(compact ? 1 : 3).filter { Self.fileIcons.object(forKey: $0 as NSString) == nil }
+        guard !paths.isEmpty else { return }
+        let request = BlockOperation()
+        request.addExecutionBlock { [weak self, weak request] in
+            for path in paths {
+                guard request?.isCancelled == false else { return }
+                guard FileManager.default.fileExists(atPath: path) else { continue }
+                let image = NSWorkspace.shared.icon(forFile: path)
+                Self.fileIcons.setObject(image, forKey: path as NSString)
+            }
+            DispatchQueue.main.async {
+                if self?.item?.id == item.id { self?.needsDisplay = true }
+            }
+        }
+        iconRequest = request
+        Self.iconQueue.addOperation(request)
+    }
+
+    private func drawFileIcon(at index: Int, in rect: NSRect) {
+        let path = item.filePaths[index] as NSString
+        let ext = path.pathExtension.lowercased()
+        let symbol: String
+        if ext == "app" { symbol = "app" }
+        else if item.folderIndices?.contains(index) == true { symbol = "folder.fill" }
+        else if ["zip","7z","rar","gz","bz2","xz","tgz","tar","zst","dmg","pkg"].contains(ext) { symbol = "doc.zipper" }
+        else { symbol = "doc.text" }
+        let image = Self.fileIcons.object(forKey: path) ??
+            NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(
+                NSImage.SymbolConfiguration(paletteColors: [OpenAllTheme.muted]))
+        guard let image else { return }
+        let ratio = min(rect.width / max(1, image.size.width), rect.height / max(1, image.size.height))
+        let size = NSSize(width: image.size.width * ratio, height: image.size.height * ratio)
+        let fitted = NSRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height)
+        image.draw(in: fitted, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
+    private func drawFiles(in rect: NSRect) {
+        let paths = item.filePaths
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingMiddle
+        let count = min(3, paths.count)
+        let single = count == 1
+        let size: CGFloat = single ? 52 : 23
+        let height: CGFloat = single ? 80 : CGFloat(count) * 29 + (paths.count > count ? 18 : 0)
+        // NSButton 和承载它的列表可以使用不同的坐标方向。
+        func originY(_ offset: CGFloat, _ elementHeight: CGFloat) -> CGFloat {
+            isFlipped ? rect.midY - height / 2 + offset : rect.midY + height / 2 - offset - elementHeight
+        }
+        style.alignment = single ? .center : .left
+        for index in 0..<count {
+            let offset = CGFloat(index) * 29
+            let iconRect = NSRect(x: single ? rect.midX - size / 2 : rect.minX, y: originY(offset, size), width: size, height: size)
+            drawFileIcon(at: index, in: iconRect)
+            let x = single ? rect.minX : iconRect.maxX + 8
+            let label = NSRect(x: x, y: originY(single ? size + 7 : offset + 3, 20), width: rect.maxX - x, height: 20)
+            let name = (paths[index] as NSString).lastPathComponent
+            let text = NSMutableAttributedString(string: name, attributes: [.paragraphStyle: style, .foregroundColor: OpenAllTheme.ink, .font: NSFont.systemFont(ofSize: 14)])
+            if !searchTerm.isEmpty {
+                let match = (name as NSString).range(of: searchTerm, options: .caseInsensitive)
+                if match.location != NSNotFound { text.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match) }
+            }
+            text.draw(in: label)
+        }
+        if paths.count > count {
+            ("另 \(paths.count - count) 项" as NSString).draw(in: NSRect(x: rect.minX + 31, y: originY(CGFloat(count) * 29, 17), width: rect.width - 31, height: 17),
+                withAttributes: [.foregroundColor: OpenAllTheme.muted, .font: NSFont.systemFont(ofSize: 11)])
+        }
+    }
     private var cachedFormat: String?
     private var formatLabel: String {
         if let cachedFormat { return cachedFormat }
@@ -390,6 +481,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        item = nil
         previewImage = nil
         loadingImage = false
         imageURL = nil
@@ -452,7 +544,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         }
         let preview: String
         if item.kind == "files" {
-            preview = item.filePaths.prefix(4).map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: "、")
+            preview = item.filePaths.prefix(3).map { ($0 as NSString).lastPathComponent }.joined(separator: "、") + (item.filePaths.count > 3 ? " 等 \(item.filePaths.count) 项" : "")
         } else {
             let text = item.text.isEmpty ? item.title : item.text
             preview = text.prefix(260).split(whereSeparator: \.isNewline).joined(separator: " ")
@@ -464,11 +556,16 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             let match = (preview as NSString).range(of: searchTerm, options: .caseInsensitive)
             if match.location != NSNotFound { content.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match) }
         }
-        let textX: CGFloat = 122
+        var textX: CGFloat = 122
+        if item.kind == "files", !item.filePaths.isEmpty {
+            drawFileIcon(at: 0, in: NSRect(x: textX, y: floor(row.midY - 10), width: 20, height: 20))
+            textX += 28
+        }
         content.draw(in: NSRect(x: textX, y: floor(row.midY - 9), width: max(0, source.minX - textX - 12), height: 19))
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        guard item != nil else { return }
         if compact { drawListRow(); return }
         let bounds = self.bounds.insetBy(dx: 4, dy: 4)
         let card = NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12)
@@ -515,7 +612,9 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
                          respectFlipped: true, hints: nil)
         let preview = NSRect(x: 17, y: 17, width: bounds.width - 34, height: bounds.height - 57)
         var nextMoreRect: NSRect?
-        if item.kind == "image", let imageURL {
+        if item.kind == "files", !item.filePaths.isEmpty {
+            drawFiles(in: preview)
+        } else if item.kind == "image", let imageURL {
             let image = previewImage ?? Self.imageCache.object(forKey: imageURL.path as NSString)
             if image == nil { loadPreviewImage(from: imageURL) }
             if let image {
@@ -538,7 +637,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
                 image.draw(in: fitted, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
         } else {
-            let content = item.kind == "files" ? item.filePaths.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: "\n") : item.text
+            let content = item.text
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = item.kind == "link" ? .byCharWrapping : .byWordWrapping
             paragraph.lineSpacing = 2

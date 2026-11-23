@@ -27,6 +27,8 @@
     json:'M9 3H7c-2 0-2 2-2 4v2l-2 3 2 3v2c0 2 0 4 2 4h2M15 3h2c2 0 2 2 2 4v2l2 3-2 3v2c0 2 0 4-2 4h-2',
     comparison:'M3 3h18v18H3zM12 3v18M6 8h3M6 12h3M15 8h3M15 16h3',
     image:'M3 3h18v18H3zM3 17l6-6 4 4 4-6 4 6M7 7h.1',
+    folder:'M2.5 6.5h7l2-2h4l2 3h4v12h-19z',
+    archive:'M5 2h9l5 5v15H5zM14 2v6h5M9 3h2M10 6h2M9 9h2M10 12h2M9 15h3v3H9z',
     file:'M5 2h9l5 5v15H5zM14 2v6h5M8 12h8M8 16h8',
     application:'M3 3h18v18H3zM3 8h18M7 5h.1M10 5h.1',
     history:'M3 6v5h5M4 10a9 9 0 1 1 1 8M12 6v6l4 3',

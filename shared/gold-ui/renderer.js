@@ -132,7 +132,7 @@ function updateSummary(id, card, outlook) {
     summary = element('button', undefined, 'week-summary');
     summary.type = 'button';
     summary.append(
-      element('span', '7 日展望', 'week-label'),
+      element('span', '3 日展望', 'week-label'),
       element('b', '待生成', 'week-direction'),
       element('span', '', 'week-confidence'),
       element('span', '›', 'week-open'),
@@ -142,16 +142,16 @@ function updateSummary(id, card, outlook) {
   }
   const days = outlook?.days.filter(({ mid }) => Number.isFinite(mid)) ?? [];
   const last = days.at(-1);
-  $('.week-label', summary).textContent = last ? last.date.slice(5).replace('-', '/') + ' 展望' : '7 日展望';
+  $('.week-label', summary).textContent = last ? last.date.slice(5).replace('-', '/') + ' 展望' : '3 日展望';
   $('.week-direction', summary).textContent = last ? FORECAST_LABELS[last.direction] : '待生成';
   $('.week-confidence', summary).textContent = last ? `方向概率 ${last.confidence}%` : '';
   $('.week-confidence', summary).hidden = !last;
   summary.dataset.direction = last?.direction ?? '';
   summary.setAttribute('aria-label', last ?
-    `查看七日展望，${last.date} ${FORECAST_LABELS[last.direction]}，方向概率 ${last.confidence}%` : '查看七日展望');
+    `查看三日展望，${last.date} ${FORECAST_LABELS[last.direction]}，方向概率 ${last.confidence}%` : '查看三日展望');
   summary.title = last ?
     `截至 ${last.date} · ${FORECAST_LABELS[last.direction]} · 方向概率 ${last.confidence}%（未校准），不是价格命中率` :
-    '打开七日展望';
+    '打开三日展望';
 }
 
 function updateChanges(card, { daily, weekly } = {}) {
@@ -266,6 +266,16 @@ function displayValue(number, value) {
   return Number(number.format(value).replaceAll(',', ''));
 }
 
+function forecastDirectionIcon(direction) {
+  const label = FORECAST_LABELS[direction];
+  const icon = element('span', undefined, 'forecast-trend');
+  icon.dataset.direction = direction;
+  icon.setAttribute('role', 'img');
+  icon.setAttribute('aria-label', label);
+  icon.title = label + ' · 相对预测基准价';
+  return icon;
+}
+
 function renderForecastDays(data, today, number, unit, todayQuote) {
   const body = $('#forecast-rows');
   const focusedDate = document.activeElement.closest?.('.forecast-day-toggle')?.dataset.date;
@@ -287,7 +297,7 @@ function renderForecastDays(data, today, number, unit, todayQuote) {
   if (!scale.hidden) {
     scale.firstElementChild.textContent = number.format(min);
     scale.lastElementChild.textContent = number.format(max);
-    scale.setAttribute('aria-label', '七天共用刻度：' + number.format(min) + ' 至 ' + number.format(max) + ' ' + unit);
+    scale.setAttribute('aria-label', '三天共用刻度：' + number.format(min) + ' 至 ' + number.format(max) + ' ' + unit);
   }
   const tomorrow = Date.parse(today + 'T00:00:00Z') + DAY;
   const fragment = document.createDocumentFragment();
@@ -308,7 +318,18 @@ function renderForecastDays(data, today, number, unit, todayQuote) {
     toggle.append(time, element('span', next ? '明日' : name, 'weekday'));
     dateCell.append(toggle);
     const hasPrice = Number.isFinite(day.mid);
-    const price = element('td', hasPrice ? number.format(day.mid) : (day.closed ? '休市' : '暂无'), 'forecast-price');
+    const price = element('td', undefined, 'forecast-price');
+    const direction = !day.closed && !day.sparse && day.model && Number.isFinite(day.confidence) &&
+      Object.hasOwn(FORECAST_LABELS, day.direction) ? day.direction : null;
+    const label = hasPrice ? number.format(day.mid) : (day.closed ? '休市' : '暂无');
+    if (direction) {
+      const reading = element('span', undefined, 'forecast-reading');
+      reading.append(forecastDirectionIcon(direction), element('span', label));
+      price.append(reading);
+      toggle.setAttribute('aria-label', date + ' ' + name + '，' + FORECAST_LABELS[direction] + '，预测详情');
+    } else {
+      price.textContent = label;
+    }
     if (!hasPrice) price.classList.add('no-price');
     if (day.pointMethod === 'persistence') price.title = '沿用发行时的基准牌价';
     const range = element('td', undefined, 'forecast-range');
@@ -334,7 +355,7 @@ function renderForecastDays(data, today, number, unit, todayQuote) {
           track.append(mark);
         }
         range.append(track);
-        range.title = '七天共用价格刻度：' + number.format(min) + ' 至 ' + number.format(max) + ' ' + unit;
+        range.title = '三天共用价格刻度：' + number.format(min) + ' 至 ' + number.format(max) + ' ' + unit;
       }
     } else {
       range.textContent = '—';
@@ -421,6 +442,7 @@ function renderOutlook() {
   const title = $('#forecast-title');
   title.textContent = isCTF ? (hasQuote && quote.date !== today ? '最近周大福牌价' : '今日周大福牌价') : '国际现货基准价';
   const hasJoint = data?.days.some(day => day.pointMethod === 'joint-history' || day.sparseReason);
+  const hasSessionMedian = data?.days.some(day => day.pointMethod === 'session-median');
   const hasFixed = data?.days.some(day => day.pointMethod === 'persistence');
   const heading = $('#forecast-price-heading');
   heading.textContent = isCTF ? (hasFixed ? '基准参考价' : '每日参考价') : '参考估计';
@@ -444,7 +466,7 @@ function renderOutlook() {
       addPrice(isCTF ? '预测基准' : null, data.anchor.price, data.anchor.date, isCTF ? whole : number);
     }
     if (data.provisional || hasFixed) {
-      meta.append(element('span', [hasFixed && '旧版沿用基准价', data.provisional && '数据尚未就绪，暂估'].filter(Boolean).join(' · ')));
+      meta.append(element('span', [hasFixed && '旧版沿用基准价', data.provisional && '暂估 · 尚未存档'].filter(Boolean).join(' · ')));
     }
   } else {
     meta.append(element('span', isCTF ? '等待足够的预测数据' : '等待足够的最新历史报价或参考汇率'));
@@ -453,7 +475,7 @@ function renderOutlook() {
   $('#method-details').hidden = !data;
   renderForecastDays(data, today, number, unit, quote?.date === today ? quote.price : null);
 
-  const counts = Object.entries(verification.byHorizon).map(([horizon, score]) => score.total ?
+  const counts = Object.entries(verification.byHorizon).filter(([days]) => Number(days) <= 3).map(([horizon, score]) => score.total ?
     `${horizon} 日方向命中 ${score.hit}/${score.total}` : `${horizon} 日无到期样本`);
   $('#verification-status').textContent = '北京时间 10:00–10:15';
   const one = verification.byHorizon[1] || {};
@@ -463,7 +485,7 @@ function renderOutlook() {
     `区间覆盖 ${metricPercent.format(one.intervalCoverage)}（${one.intervalCount} 次）` : '区间暂无可验证样本';
   let verificationSummary = `${priceSummary} · ${intervalSummary}`;
   if (!one.priceCount && !one.intervalCount) {
-    verificationSummary = Object.values(verification.byHorizon).some(score => score.total) ?
+    verificationSummary = Object.entries(verification.byHorizon).some(([days, score]) => Number(days) <= 3 && score.total) ?
       '次日参考价暂无可核验的准时记录' : '暂无到期的准时报价可验证';
   }
   $('#verification-note').textContent = verificationSummary;
@@ -476,7 +498,7 @@ function renderOutlook() {
   const recent = verification.recent;
   const comparison = $('#verification-recent');
   comparison.hidden = !recent;
-  comparison.textContent = recent ? `${recent.target} 到期 ${recent.horizon} 日预测：参考估计较基准 ${percent.format(recent.predictedReturn)}，实际 ${percent.format(recent.actualReturn)}，价格误差 ${metricPercent.format(recent.errorRate)}（${recent.onSchedule ? '准时' : '迟到'}）。` : '';
+  comparison.textContent = recent ? `${recent.origin} 预测 ${recent.target}（${recent.horizon} 日）。参考估计较基准 ${percent.format(recent.predictedReturn)}，实际 ${percent.format(recent.actualReturn)}，价格误差 ${metricPercent.format(recent.errorRate)}（${recent.onSchedule ? '准时' : '迟到'}）。` : '';
 
   const drivers = $('#drivers');
   drivers.replaceChildren();
@@ -522,7 +544,7 @@ function renderOutlook() {
   $('#model-note').textContent = data ?
     '模型 ' + (data.version || verification.version || '—') + '。涨跌相对基准价，±0.2% 以内为维持。方向概率未校准，不是价格命中率。' +
       (hasJoint ? '周大福每日参考价结合近期牌价涨跌与基准日前的国际现货收盘走势，按各日期分别估算。' :
-        hasFixed ? '此档周大福参考价沿用发行时的基准牌价，方向与区间按期限估计。' : '参考估计来自历史情景。') +
+        hasFixed ? '此档周大福参考价沿用发行时的基准牌价，方向与区间按期限估计。' : hasSessionMedian ? '标注同交易跨度的参考价按历史交易日估算，方向概率单独计算。' : '参考估计来自历史情景。') +
       '各行情景区间采用相同刻度。实线标示当日参考价，虚线标示刻度内的今日实价。区间覆盖率用到期记录验证。市场因素和日历用于解读行情。' +
       (forecastInstrument === 'gold' && currency !== 'USD' ? ' 展望按当前汇率折算，方向基于美元金价。' : '') : '';
 }

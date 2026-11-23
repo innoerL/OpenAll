@@ -64,7 +64,7 @@ test('桌面数据源注册同时获取行情因素和事件的入口', async ()
   assert.deepEqual(context.calendar, {});
 });
 
-test('七日展望涵盖实际日历，休市留空，新闻只展示在市场背景', () => {
+test('三日展望涵盖实际日历，休市留空，新闻只展示在市场背景', () => {
   const now = Date.parse('2026-11-20T05:30:00Z');
   const today = dateAt(now);
   const history = Array.from({ length: 200 }, (_, index) => ({
@@ -73,10 +73,10 @@ test('七日展望涵盖实际日历，休市留空，新闻只展示在市场�
   const params = { instrument: 'gold', priceHistory: history, goldHistory: history, today, now, marketIsClosed };
   const calm = forecast(params);
   const risky = forecast({ ...params, news: [{ timestamp: now - DAY, tag: '供应风险' }] });
-  assert.equal(calm.days.length, 7);
+  assert.equal(calm.days.length, 3);
   assert.equal(calm.days[0].date, '2026-11-21');
   assert(calm.days[0].closed && calm.days[1].closed);
-  assert.equal(calm.days[2].model, '同期限历史频率');
+  assert.equal(calm.days[2].pointMethod, 'directional-median', '从周四历史基准至周一是四日跨度');
   assert.equal(calm.days[2].mid, 110);
   assert.equal(calm.days[2].direction, 'flat');
   assert(calm.days[2].confidence > 80 && calm.days[2].confidence < 100);
@@ -92,8 +92,8 @@ test('涨跌以当前基准的实际百分比划分，正负 0.2% 边界仍属�
   assert.equal(classifyReturn(Math.log1p(-.00201)), 'down');
 });
 
-test('周大福按七个自然日跨度分别估价，国际现货仍使用原历史模型', () => {
-  const now = Date.parse('2026-11-20T05:30:00Z');
+test('周大福与现货均只展望未来三个自然日，现货仅调整一日与三日点价', () => {
+  const now = Date.parse('2026-11-16T05:30:00Z');
   const today = dateAt(now);
   const history = Array.from({ length: 200 }, (_, index) => ({
     date: dateAt(now - (200 - index) * DAY), price: 800 * Math.exp(index * .003),
@@ -102,14 +102,23 @@ test('周大福按七个自然日跨度分别估价，国际现货仍使用原�
     quote: { date: today, price: 1500 }, marketIsClosed };
   const result = forecast(input);
   const available = result.days.filter(day => day.probabilities);
-  assert.equal(available.length, 7);
+  assert.deepEqual(available.map(day => day.date), ['2026-11-17', '2026-11-18', '2026-11-19']);
   assert.equal(result.version, '4.0.0');
   assert(available.every(day => day.pointMethod === 'joint-history' && day.mid > 1500));
-  assert.equal(new Set(available.map(day => Math.round(day.mid))).size, 7);
+  assert.equal(new Set(available.map(day => Math.round(day.mid))).size, 3);
   assert(available.every(day => day.direction === 'up' && day.low < day.mid && day.high > day.mid));
   const gold = forecast({ ...input, instrument: 'gold' });
-  assert.equal(gold.version, '3.0.0');
-  assert.deepEqual(gold, forecast({ ...input, instrument: 'gold', modelMode: 'history' }));
+  assert.equal(gold.version, '5.0.0');
+  const old = forecast({ ...input, instrument: 'gold', modelMode: 'history' });
+  assert.deepEqual(gold.days.map(day => day.date), available.map(day => day.date));
+  for (const [index, day] of gold.days.entries()) {
+    assert.deepEqual(day.probabilities, old.days[index].probabilities);
+    if (index === 1) assert.deepEqual(day, old.days[index]);
+    else {
+      assert.equal(day.pointMethod, 'session-median');
+      assert(day.mid < old.days[index].mid);
+    }
+  }
 });
 
 test('使用最多历史情景选出预计方向与可信度，预计价与方向保持一致', () => {
@@ -173,7 +182,16 @@ test('左右贴边时独立胶囊保持透明窗口，浮窗在原尺寸收起�
   assert.equal(edgeSide(input, area), 'right');
   assert.equal(edgeSide({ ...input, x: -995 }, area), 'left');
   assert.equal(railBounds(edgeBounds(input, area, 'left'), area, 'left').x, area.x);
+  dock.beginOpening();
   dock.checkPlacement();
+  cursor = { x: -650, y: 100 };
+  dock.poll();
+  now += 14999;
+  dock.poll();
+  assert.equal(win.visible, true, '主动打开后，鼠标在外也至少展示十五秒');
+  assert.equal(rail.visible, false);
+  now += 1;
+  dock.poll();
   assert.equal(win.getBounds().width, 462);
   assert.equal(win.visible, false);
   assert.equal(rail.visible, true);
@@ -196,6 +214,18 @@ test('左右贴边时独立胶囊保持透明窗口，浮窗在原尺寸收起�
   assert.equal(win.visible, true);
   assert.equal(win.onTop, false);
   assert.equal(win.getBounds().width, 462);
+
+  dock.beginOpening();
+  dock.setEnabled(true);
+  cursor = { x: -230, y: 100 };
+  now += 16000;
+  dock.poll();
+  assert.equal(win.visible, true, '阅读时限已过，鼠标仍在窗口内就继续显示');
+  cursor = { x: -650, y: 100 };
+  dock.poll();
+  now += 341;
+  dock.poll();
+  assert.equal(win.visible, false, '离开后按正常延时收回');
 });
 
 test('透明度曲线在首尾变缓，两个窗口在中点透明度相等', () => {

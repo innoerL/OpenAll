@@ -1,4 +1,4 @@
-const { app, BrowserWindow, net, powerMonitor, nativeTheme, shell } = require('electron');
+const { app, BrowserWindow, net, powerMonitor, nativeTheme, shell, Notification } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { palette } = require('./theme');
@@ -14,17 +14,19 @@ function hostTheme(settings) {
 
 // 行情服务属于 OpenAll 生命周期；关闭工具窗口后保留数据和定时更新。
 async function createGoldService({ dataDirectory, legacyDirectory, fixture = false, settings, sources: suppliedSources, clock: suppliedClock }) {
-  const { Store } = core('store');
   const { Scheduler } = core('scheduler');
   const { createSources, parseOfficialCtf } = core('sources');
   const { CURRENCIES } = core('currency');
   const { LINKS } = core('links');
-  const { migrateLegacyData } = core('migrate');
+  const { openGoldStore } = core('migrate');
   // 样例忽略传入的目录与旧库，避免继承真实路径时触碰用户记录。
   if (!fixture) fs.mkdirSync(dataDirectory, { recursive: true });
   const filename = fixture ? ':memory:' : path.join(dataDirectory, 'quotes.sqlite');
-  const imported = fixture ? false : await migrateLegacyData(filename, legacyDirectory);
-  const store = new Store(filename);
+  const { store, imported, warning } = openGoldStore(filename, fixture ? undefined : legacyDirectory);
+  if (warning) {
+    console.warn(warning);
+    if (Notification.isSupported()) new Notification({ title: 'OpenAll 金价', body: warning }).show();
+  }
   const sample = fixture ? core('fixture').createFixture() : null;
   const clock = sample?.clock ?? suppliedClock ?? Date.now;
   const lifetime = new AbortController();

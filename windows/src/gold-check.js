@@ -94,7 +94,7 @@ module.exports = async function verifyGold(searchWindow, output) {
     await until(async () => (await read()).pinned !== pinned, '置顶切换');
     check(gold.isAlwaysOnTop() === !pinned, '置顶设置同步原生窗口');
     await click('outlook-view');
-    await until(() => execute(gold, () => !document.querySelector('#outlook').hidden && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7), '七日展望');
+    await until(() => execute(gold, () => !document.querySelector('#outlook').hidden && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 3), '三日展望');
     const toolbar = () => execute(gold, () => ['layout', 'currency'].map(id => document.getElementById(id).getClientRects().length > 0));
     assert.deepEqual(await toolbar(), [false, true], '国际展望仅显示币种切换');
     await click('forecast-ctf');
@@ -113,7 +113,7 @@ module.exports = async function verifyGold(searchWindow, output) {
         header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
         document.querySelector('#forecast-price-heading').textContent.includes('参考价') &&
         document.querySelectorAll('#forecast-table thead th').length === 3 &&
-        buttons.length === 7 && days.length === 7 && buttons.every((button, i) => {
+        buttons.length === 3 && days.length === 3 && buttons.every((button, i) => {
           const day = days[i], row = button.closest('tr');
           return day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
             button.getAttribute('aria-expanded') === 'false' && row.querySelector('time').dateTime === day.date &&
@@ -121,7 +121,7 @@ module.exports = async function verifyGold(searchWindow, output) {
             [day.low, day.high].every(value => row.cells[2].textContent.includes(format.format(value))) &&
             !row.innerText.includes('%');
         });
-    }), '当日日期仅在窗口顶部，牌价与单位在表头，方法显示模型版本，七天逐行对应模型');
+    }), '当日日期仅在窗口顶部，牌价与单位在表头，方法显示模型版本，三天逐行对应模型');
     assert.deepEqual(await toolbar(), [false, false], '周大福展望隐藏无关控件');
     gold.show();
     gold.focus();
@@ -160,16 +160,16 @@ module.exports = async function verifyGold(searchWindow, output) {
           legend[i].left >= 0 && legend[i].right <= width && legend[i].width > 0 && key.scrollWidth <= key.clientWidth + 1) &&
           legend[0].bottom <= legend[1].top && legend[0].height > 0;
         return legendFits && table.getBoundingClientRect().right <= width + 1 && document.documentElement.scrollWidth <= width + 1 &&
-          rows.length === 7 && rows.every(row => Array.from(row.cells).every(cell => {
+          rows.length === 3 && rows.every(row => Array.from(row.cells).every(cell => {
             const range = document.createRange();
             range.selectNodeContents(cell);
             const bounds = cell.getBoundingClientRect(), text = range.getBoundingClientRect();
             return text.right <= bounds.right + 1 && text.left >= bounds.left - 1 && cell.scrollWidth <= cell.clientWidth + 1;
           })) && document.querySelector('#close').getBoundingClientRect().right <= width + 1;
-      }), '最窄窗口三列全部可见，七行日期、参考价和完整区间无裁切');
+      }), '最窄窗口三列全部可见，三行日期、参考价和完整区间无裁切');
       await capture('outlook-narrow-range');
       await execute(gold, () => document.querySelector('.forecast-day-toggle').focus());
-      for (const [keyCode,index] of [['Up',0],['Down',1],['End',6],['Down',6],['Up',5],['Home',0]]) {
+      for (const [keyCode,index] of [['Up',0],['Down',1],['End',2],['Down',2],['Up',1],['Home',0]]) {
         gold.webContents.sendInputEvent({type:'keyDown',keyCode});
         gold.webContents.sendInputEvent({type:'keyUp',keyCode});
         await until(() => execute(gold, i => document.activeElement === document.querySelectorAll('.forecast-day-toggle')[i]
@@ -255,7 +255,7 @@ module.exports = async function verifyGold(searchWindow, output) {
     } finally {
       gold.setContentSize(...normalSize);
     }
-    check(await execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true' && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7), '两品种七日展望切换');
+    check(await execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true' && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 3), '两品种三日展望切换');
     check(await execute(gold, () => !!document.querySelector('#verification-note').textContent && document.querySelector('#drivers').children.length > 0 && document.querySelector('#events').children.length > 0 && document.querySelector('#calendar').children.length > 0 && ['#market-breakdown > summary','#events','#calendar'].every(selector => document.querySelector(selector).getClientRects().length > 0)), '报价验证与市场因素可展开，国际事件与财经日历可直接阅读');
     check(await execute(gold, () => ['gold', 'goldHistory', 'ctf', 'ctfHistory', 'fx', 'news'].every(key => !!document.querySelector('[data-source="' + key + '"]'))), '报价与新闻来源链接保留');
     await execute(gold, () => { window.__goldDocument = document.documentElement; window.__goldForecast = document.querySelector('#forecast-ctf'); });
@@ -312,13 +312,16 @@ module.exports = async function verifyGold(searchWindow, output) {
     await capture('edge-rail', rail);
     await execute(searchWindow, () => openall.openTool('gold'));
     await until(() => execute(gold, () => document.body.dataset.edgeCollapsing === 'false'), '搜索重新展开贴边窗口');
-    await click('edge-setting'); await until(async () => !(await read()).edgeEnabled, '退出贴边模式');
     const retained = await read();
     await click('close'); await until(() => gold.isDestroyed(), '关闭金价窗口');
     check(!searchWindow.isDestroyed() && !app.isQuitting && (!rail || rail.isDestroyed()), '关闭金价只销毁工具与浮条，宿主继续运行');
     check((await execute(searchWindow, () => openall.search('金价'))).some(item => item.value === 'gold'), '关闭金价后宿主搜索仍可用');
     await execute(searchWindow, () => openall.openTool('gold')); await locate();
     const reopened = await read();
+    await pause(500);
+    check(reopened.edgeEnabled && gold.isVisible() && await execute(gold, () =>
+      document.body.dataset.edgeSide === 'left' && document.body.dataset.edgeCollapsing !== 'true'),
+      '关闭后从搜索重开，贴边位置完整可见');
     check(gold.id !== originalId && ['pinned', 'combined', 'currency', 'edgeEnabled'].every(key => reopened[key] === retained[key]), '重新打开金价保留设置与后台调度数据');
     check(reopened.theme.background === '#e6e2dc' && reopened.theme.accent === '#4455aa', '重新打开金价继续跟随宿主外观');
     check(!fs.existsSync(path.join(app.getPath('userData'), 'gold-desk/quotes.sqlite')), '离线金价样例只使用内存数据库');

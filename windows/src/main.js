@@ -6,6 +6,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { JSONStore, ClipboardStore, SnippetStore, normalizeSettings, expandSnippet, snippetExpansionParts } = require('./stores');
 const { commands, identity } = require('./search-engine');
+const { previewLimit, previewKinds, fileEntry, filePreview } = require('./clipboard-files');
 const { NativeBridge, WorkerClient, recognizeImage } = require('./native-services');
 const { Updater }=require('./native-updater');
 const { ShortcutRecording }=require('./native-shortcut-recording');
@@ -26,11 +27,11 @@ const native=new NativeBridge();
 const windows=new Map(),windowContexts=new Map();
 const workers=[];
 let goldServiceReady,goldWindowController;
-let searchWorker,backendWorker,imageWorker,tray,monitor,refreshTimer,searchStatus={},lastExternal={handle:'0',pid:0,name:''},pasteTarget=null,lastContentHash='',capturing=false,capturePausedUntil=0,ocrQueue=Promise.resolve(),shortcutsStatus={};
+let searchWorker,backendWorker,imageWorker,tray,monitor,refreshTimer,searchStatus={},lastExternal={handle:'0',pid:0,name:''},pasteTarget=null,lastContentHash='',captureWrites=Promise.resolve(),capturePausedUntil=0,ocrQueue=Promise.resolve(),shortcutsStatus={};
 let shortcutTestRegistration=false;
 const shortcutRecording=new ShortcutRecording({suspend:()=>globalShortcut.unregisterAll(),resume:()=>{if(!app.isQuitting){const failed=applyShortcuts(settings);if(failed.length)notifyError(Error('快捷键恢复失败：'+failed.join('、')));}}});
 const iconCache=new Map(),iconPending=new Map();
-async function fileIcon(file,application=false){if(!file)return '';const key=application?file.toLowerCase():path.extname(file).toLowerCase()||'<folder>';if(iconCache.has(key))return iconCache.get(key);if(iconPending.has(key))return iconPending.get(key);const request=app.getFileIcon(file,{size:'small'}).then(icon=>icon.isEmpty()?'':icon.toDataURL()).catch(()=>'').then(value=>{iconCache.set(key,value);iconPending.delete(key);if(iconCache.size>512)iconCache.delete(iconCache.keys().next().value);return value;});iconPending.set(key,request);return request;}
+async function fileIcon(file,application=false,size='small'){if(!file)return '';const key=size+':'+(application?file.toLowerCase():path.extname(file).toLowerCase()||'<folder>');if(iconCache.has(key))return iconCache.get(key);if(iconPending.has(key))return iconPending.get(key);const request=app.getFileIcon(file,{size}).then(icon=>icon.isEmpty()?'':icon.toDataURL()).catch(()=>'').then(value=>{iconCache.set(key,value);iconPending.delete(key);if(iconCache.size>512)iconCache.delete(iconCache.keys().next().value);return value;});iconPending.set(key,request);return request;}
 async function searchWithIcons(query){const results=await searchWorker.call('search',{query:String(query).slice(0,4096)});return Promise.all(results.map(async item=>['application','file'].includes(item.type)?{...item,icon:await fileIcon(item.value,item.type==='application')}:item));}
 const testClipboard={text:'',html:'',image:null,files:[]};
 const pageAliases={'金价':'gold','金价桌台':'gold','JSON 工具':'json','文本对比':'comparison','Markdown 编辑器':'markdown','结构化配置对比':'configDiff','SQL 参数还原':'sqlRestore','日志时间线':'logTimeline','执行计划阅读器':'explain','设置':'settings','剪贴板':'clipboard'};
@@ -115,32 +116,76 @@ function notifyError(error){broadcast('notice',error.message||String(error));}
 function updateSearch(){return searchWorker?.call('settings',{settings,ranking,snippets:snippetStore.items});}
 function saveRanking(){store.write('search-ranking',ranking);updateSearch();broadcast('search-updated',searchStatus);}
 function recordUsage(item){const key=identity(item),old=ranking.usage[key];ranking.usage[key]={count:Math.min(1000,(old?.count||0)+1),lastUsed:Date.now()};if(Object.keys(ranking.usage).length>3000)ranking.usage=Object.fromEntries(Object.entries(ranking.usage).sort((a,b)=>b[1].lastUsed-a[1].lastUsed).slice(0,2400));saveRanking();}
-async function captureClipboard(){
- if(testMode||capturing||Date.now()<capturePausedUntil)return;const pref=settings.clipboardPreferences;
- if(!pref.enabled||pref.pausedUntil&&Date.now()<new Date(pref.pausedUntil).getTime())return;
- const sourceName=BrowserWindow.getFocusedWindow()?'OpenAll':native.foreground.name||lastExternal.name||'';
- if(pref.ignoreApplications.some(x=>sourceName.toLowerCase().includes(path.basename(x).replace(/\.exe$/i,'').toLowerCase())))return;
- capturing=true;
- try{
-  const formats=clipboard.availableFormats(),image=clipboard.readImage(),text=clipboard.readText(),html=clipboard.readHTML();let entry;
-  if(formats.some(x=>/hdrop|filenamew|filedrop/i.test(x))){const files=native.ready?await native.request('files'):[];if(files.length)entry={kind:'files',files,value:files.join('\n'),text:files.join('\n'),title:files.map(x=>path.basename(x)).join('、')};}
-  if(!entry&&!image.isEmpty()){const bytes=image.toPNG();if(bytes.length>pref.maxItemBytes)return;const size=image.getSize(),thumbnail=image.resize({width:Math.min(480,size.width)}).toPNG().toString('base64');entry={kind:'image',value:bytes.toString('base64'),thumbnail,title:`图片 · ${size.width} × ${size.height}`,width:size.width,height:size.height};}
-  if(!entry&&text){if(Buffer.byteLength(text)>pref.maxItemBytes)return;entry={kind:/^https?:\/\/\S+$/i.test(text.trim())?'link':'text',value:text,text,html,rtf:formats.includes('Rich Text Format')?clipboard.readRTF():undefined};}
-  if(!entry)return;const hash=crypto.createHash('sha256').update(entry.kind+':'+entry.value).digest('hex');if(hash===lastContentHash)return;lastContentHash=hash;
-  const sourcePath=sourceName==='OpenAll'?process.execPath:native.foreground.exePath||lastExternal.exePath;const sourceIcon=await fileIcon(sourcePath,true);const record=await clips.add({...entry,sourceName,sourceIcon});if(record){changedClipboard();if(entry.kind==='image')queueOCR(record);}
- }catch(error){searchStatus.clipboardError=error.message;}finally{capturing=false;}
+function captureClipboard(change) {
+ const files = change?.files;
+ if (app.isQuitting || (!change && Date.now() < capturePausedUntil)) return;
+ const pref = settings.clipboardPreferences;
+ if (!pref.enabled || pref.pausedUntil && Date.now() < new Date(pref.pausedUntil).getTime()) return;
+ const sourceName = BrowserWindow.getFocusedWindow() ? 'OpenAll' : native.foreground.name || lastExternal.name || '';
+ if (pref.ignoreApplications.some(x => sourceName.toLowerCase().includes(path.basename(x).replace(/\.exe$/i, '').toLowerCase()))) return;
+ const sourcePath = sourceName === 'OpenAll' ? process.execPath : native.foreground.exePath || lastExternal.exePath;
+ try {
+  let entry = fileEntry(files);
+  if (!entry) {
+   const formats = clipboard.availableFormats();
+   if (formats.some(x => /hdrop|filenamew|filedrop/i.test(x))) return;
+   const image = clipboard.readImage();
+   if (!image.isEmpty()) {
+    const bytes = image.toPNG();
+    if (bytes.length > pref.maxItemBytes) return;
+    const size = image.getSize(), thumbnail = image.resize({width:Math.min(480, size.width)}).toPNG().toString('base64');
+    entry = {kind:'image', value:bytes.toString('base64'), thumbnail, title:`图片 · ${size.width} × ${size.height}`, width:size.width, height:size.height};
+   } else {
+    const text = clipboard.readText();
+    if (!text || Buffer.byteLength(text) > pref.maxItemBytes) return;
+    entry = {kind:/^https?:\/\/\S+$/i.test(text.trim()) ? 'link' : 'text', value:text, text, html:clipboard.readHTML(),
+      rtf:formats.includes('Rich Text Format') ? clipboard.readRTF() : undefined};
+   }
+  }
+  if (entry.kind === 'files' && Buffer.byteLength(entry.value) > pref.maxItemBytes) return;
+  const hash = crypto.createHash('sha256').update(entry.kind + ':' + entry.value).digest('hex');
+  if (hash === lastContentHash) return;
+  lastContentHash = hash;
+  // 先按通知顺序保存剪贴板快照。图标和文件类型查询可以晚于下一次复制完成。
+  captureWrites = captureWrites.then(async () => {
+   const record = await clips.add({...entry, sourceName});
+   if (!record) return;
+   changedClipboard();
+   if (record.kind === 'image') queueOCR(record);
+   Promise.all([fileIcon(sourcePath, true), record.kind === 'files' ? previewKinds(record.files) : undefined])
+    .then(([sourceIcon, fileKinds]) => {
+     if ((!sourceIcon && !fileKinds) || !clips.records.includes(record)) return;
+     clips.change([record.id], current => {
+      if (sourceIcon) current.sourceIcon = sourceIcon;
+      if (fileKinds) current.fileKinds = fileKinds;
+     });
+     changedClipboard();
+    }).catch(error => { searchStatus.clipboardError = error.message; });
+  }).catch(error => {
+   if (lastContentHash === hash) lastContentHash = '';
+   searchStatus.clipboardError = error.message;
+  });
+ } catch (error) { searchStatus.clipboardError = error.message; }
 }
 function queueOCR(record){ocrQueue=ocrQueue.catch(()=>{}).then(async()=>{if(!clips.records.some(x=>x.id===record.id))return;const full=await clips.full(record.id);let image=nativeImage.createFromBuffer(Buffer.from(full.value,'base64'));const size=image.getSize();if(Math.max(size.width,size.height)>4000)image=image.resize(size.width>size.height?{width:4000}:{height:4000});const result=await recognizeImage(image.toPNG());clips.change([record.id],x=>{x.ocrText=result.text;x.recognizedText=result.text;});changedClipboard();}).catch(error=>{searchStatus.ocrError=error.message;});}
 async function writeRecord(item,plain=false){
  const record=typeof item==='string'?await clips.full(item):item.hash?await clips.full(item.hash)||item:item;if(!record)return null;
- capturePausedUntil=Date.now()+600;
  if(record.kind==='image'){
   const image=nativeImage.createFromBuffer(Buffer.from(record.value,'base64'));if(testMode){testClipboard.image=image;testClipboard.text='';testClipboard.html='';testClipboard.files=[];}else clipboard.writeImage(image);
- }else if(record.kind==='files'&&!plain&&process.platform==='win32'&&!testMode)await native.request('writeFiles',{files:record.files});
+ }else if(record.kind==='files'&&!plain&&(testMode||process.platform==='win32')){
+  if(testMode){putText('');testClipboard.files=[...record.files];}
+  else await native.request('writeFiles',{files:record.files});
+ }
  else {const text=record.text??record.value??'';if(testMode)putText(text);else if(!plain&&record.html)clipboard.write({text,html:record.html,rtf:record.rtf||''});else putText(text);}
+ const text=record.text??record.value??'';
+ const kind=record.kind==='files'&&!plain?'files':record.kind==='image'?'image':/^https?:\/\/\S+$/i.test(text.trim())?'link':'text';
+ const value=kind==='files'?record.files.join('\n'):kind==='image'?record.value:text;
+ lastContentHash=crypto.createHash('sha256').update(kind+':'+value).digest('hex');
  return record;
 }
-async function pasteRecord(item,plain=settings.clipboardPreferences.plainTextByDefault){
+async function pasteRecord(item,plain){
+ const kind=typeof item==='string'?clips.records.find(row=>row.id===item)?.kind:item?.kind;
+ plain??=kind!=='files'&&settings.clipboardPreferences.plainTextByDefault;
  const record=await writeRecord(item,plain);if(!record)return false;
  const target=pasteTarget;windows.get('clipboard')?.hide();windows.get('search')?.hide();
  if(target?.windowId){const win=BrowserWindow.fromId(target.windowId);if(win&&!win.isDestroyed()){
@@ -215,11 +260,18 @@ async function windowAction(event,action,payload={}){
  case 'searchRule':{const item=payload.item;if(payload.action==='clearUsage')ranking.usage={};else if(item){const key=identity(item);if(payload.action==='reset')delete ranking.rules[key];else {const previous=ranking.rules[key]||{};const active=payload.action==='pin'?'pinned':'hidden';if(previous[active])delete ranking.rules[key];else ranking.rules[key]={...item,pinned:active==='pinned',hidden:active==='hidden'};}}saveRanking();return true;}
  case 'rescan':case 'refreshIndex':searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError);return true;
  case 'testShortcuts':if(!testMode)throw Error('仅测试模式可用');return {failed:applyShortcuts(settings,{force:true}),registered:{...shortcutsStatus}};
- case 'smokeFixture':{if(!testMode)throw Error('仅测试模式可用');if(payload.clipboard){for(const entry of payload.clipboard)await clips.add({...entry,sourceName:'OpenAll 测试'});changedClipboard();}if(payload.search)await searchWorker.call('fixtures',{data:payload.search});if(payload.native&&process.platform==='win32'){if(!native.child)native.start();await native.waitUntilReady();}return true;}
+ case 'smokeFixture':{if(!testMode)throw Error('仅测试模式可用');if(payload.fileDrops){for(const files of payload.fileDrops){if(fileEntry(files))captureClipboard({files});}await captureWrites;}if(payload.readFiles)return testClipboard.files;if(payload.clipboard){for(const entry of payload.clipboard)await clips.add({...entry,sourceName:'OpenAll 测试'});changedClipboard();}if(payload.search)await searchWorker.call('fixtures',{data:payload.search});if(payload.native&&process.platform==='win32'){if(!native.child)native.start();await native.waitUntilReady();}return true;}
  case 'menu':{const item=payload.item;Menu.buildFromTemplate([{label:'打开',click:()=>openItem(item,event).catch(notifyError)},{label:'置顶 / 取消置顶',click:()=>windowAction(event,'searchRule',{action:'pin',item})},{label:'隐藏此结果',click:()=>windowAction(event,'searchRule',{action:'hide',item})},...(item?.type==='file'||item?.type==='application'?[{label:'在资源管理器中显示',click:()=>shell.showItemInFolder(item.value)},{label:'指定应用打开…',click:()=>fileAction(event,'openWith',{path:item.value})}]:[])]).popup({window:win});return true;}
  default:throw Error('未知窗口操作');}
 }
 async function clipboardAction(event,action,payload={}){
+ if(action==='fileIcon'){
+   if(event.sender!==windows.get('clipboard')?.webContents||event.senderFrame!==event.sender.mainFrame)return null;
+   const record=clips.records.find(item=>item.id===payload.id), index=payload.index;
+   if(record?.kind!=='files'||!Array.isArray(record.files)||!Number.isInteger(index)||index<0||index>=Math.min(previewLimit,record.files.length))return null;
+   const file=record.files[index], {kind,systemIcon}=await filePreview(file,record.fileKinds?.[index]);
+   return {kind,icon:systemIcon?await fileIcon(file,true,'normal'):''};
+ }
  if(action==='setLayout'){
    if(!['cards','list'].includes(payload.layout))throw Error('未知的剪贴板布局');
    const previous=settings.clipboardPreferences.shelfLayout;
@@ -234,7 +286,7 @@ async function clipboardAction(event,action,payload={}){
  case 'favorite':clips.change(ids,x=>{x.favorite=payload.value??!x.favorite;if(x.favorite&&!x.tags.includes('收藏'))x.tags.push('收藏');if(!x.favorite)x.tags=x.tags.filter(t=>t!=='收藏');});changedClipboard();return clips.list();
  case 'newTag':case 'renameTag':case 'deleteTag':case 'tagColor':{const pref=settings.clipboardPreferences,tag=String(payload.tag||'').trim(),name=String(payload.name||payload.tag||'').trim();if(action!=='deleteTag'&&(!name||name.length>30))throw Error('标签名称须为 1 至 30 个字');if(action==='newTag'){if(!pref.pinboards.includes(name))pref.pinboards.push(name);pref.pinboardColors[name]=payload.color||'blue';}else if(action==='renameTag'){if(pref.pinboards.includes(name)&&name!==tag)throw Error('标签已存在');pref.pinboards=pref.pinboards.map(x=>x===tag?name:x);pref.pinboardColors[name]=pref.pinboardColors[tag]||'blue';delete pref.pinboardColors[tag];clips.change(clips.records.map(x=>x.id),x=>{x.tags=x.tags.map(t=>t===tag?name:t);});}else if(action==='deleteTag'){pref.pinboards=pref.pinboards.filter(x=>x!==tag);delete pref.pinboardColors[tag];clips.change(clips.records.map(x=>x.id),x=>{x.tags=x.tags.filter(t=>t!==tag);x.favorite=x.tags.length>0;});}else pref.pinboardColors[tag]=String(payload.color||'blue');await store.write('settings',settings);broadcast('settings-changed',settings);changedClipboard();return settings;}
  case 'tag':clips.change(ids,x=>{x.tags=payload.remove?x.tags.filter(t=>t!==payload.tag):[...new Set([...x.tags,String(payload.tag)])];x.favorite=x.tags.length>0;});changedClipboard();return clips.list();
- case 'copy':case 'paste':{let record;if(selected.length===1)record=await clips.full(selected[0].id);else if(selected.length>1){const all=await Promise.all(selected.map(x=>clips.full(x.id)));if(all.every(x=>x.kind==='files')){const files=[...new Set(all.flatMap(x=>x.files||[]))];record={kind:'files',files,text:files.join('\n'),value:files.join('\n')};}else{const text=all.map(x=>x.text||x.value).join(payload.separator??'\n');record={kind:'text',text,value:text};}}if(!record)return false;if(action==='paste'&&settings.clipboardPreferences.directPaste)return pasteRecord(record,!!payload.plain||settings.clipboardPreferences.plainTextByDefault);await writeRecord(record,!!payload.plain);return true;}
+ case 'copy':case 'paste':{let record;if(selected.length===1)record=await clips.full(selected[0].id);else if(selected.length>1){const all=await Promise.all(selected.map(x=>clips.full(x.id)));if(all.every(x=>x.kind==='files')){const files=[...new Set(all.flatMap(x=>x.files||[]))];record={kind:'files',files,text:files.join('\n'),value:files.join('\n')};}else{const text=all.map(x=>x.text||x.value).join(payload.separator??'\n');record={kind:'text',text,value:text};}}if(!record)return false;if(action==='paste'&&settings.clipboardPreferences.directPaste)return pasteRecord(record,payload.plain?true:undefined);await writeRecord(record,!!payload.plain);return true;}
  case 'merge':{const records=await Promise.all(selected.map(x=>clips.full(x.id)));if(records.length<2||records.some(x=>x.kind==='image'))throw Error('请选择至少两条文本记录');const text=records.map(x=>x.text??x.value??'').join(payload.separator??'\n');const record=await clips.add({kind:'text',text,value:text,sourceName:'OpenAll',sourceIcon:await fileIcon(process.execPath,true)});if(!record)throw Error('合并内容超过剪贴板单条大小限制');changedClipboard();return record;}
  case 'editPaste':{const text=String(payload.text??'');if(Buffer.byteLength(text)>settings.clipboardPreferences.maxItemBytes)throw Error('文本超过剪贴板单条大小限制');return pasteRecord({kind:'text',text,value:text},true);}
  case 'selection':{const record=await clips.full(ids[0]);if(!record)return false;await createWindow('selection',record.kind==='image'?{kind:'image',dataUrl:'data:image/png;base64,'+record.value}:record.kind==='files'?{kind:'files',files:record.files}:{kind:'text',text:record.text??record.value});return true;}
@@ -299,15 +351,15 @@ app.whenReady().then(async()=>{
  searchWorker.on('index',status=>{searchStatus=status;broadcast('search-updated',status);});
  native.on('foreground',value=>{if(value.pid!==process.pid&&value.pid!==native.child?.pid&&value.handle!=='0')lastExternal=value;});
  native.on('ready',()=>{if(settings.searchShortcutMode==='double')shortcutsStatus.search=true;});
- native.on('clipboard',()=>captureClipboard());
+ if(!testMode)native.on('clipboard',captureClipboard);
  native.on('doubleTap',modifier=>{if(shortcutRecording.allowsDoubleTap()&&settings.searchShortcutMode==='double'&&modifier===settings.doubleTap)togglePage('search').catch(notifyError);});
  registerIPC();
  const initialIndex=searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode});if(testMode)await initialIndex;else initialIndex.catch(notifyError);
  if(smokeMode){const win=await createWindow('search','',{hidden:true}),errors=[];win.webContents.on('preload-error',(_event,_file,error)=>errors.push(error.message));win.webContents.on('render-process-gone',(_event,details)=>errors.push(details.reason));const timeout=setTimeout(()=>app.exit(1),180000);try{win.show();await require('./ci-smoke')(win,path.resolve(process.env.OPENALL_SMOKE_OUTPUT||path.join(app.getPath('userData'),'smoke')),app.getVersion(),errors);clearTimeout(timeout);app.exit(0);}catch(error){console.error(error.stack);clearTimeout(timeout);app.exit(1);}return;}
- if(!testMode){native.start();applyShortcuts(settings);monitor=setInterval(captureClipboard,500);refreshTimer=setInterval(()=>searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError),90000);}
+ if(!testMode){native.start();applyShortcuts(settings);monitor=setInterval(()=>{if(!native.ready)captureClipboard();},500);refreshTimer=setInterval(()=>searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError),90000);}
  const icon=nativeImage.createFromPath(path.join(__dirname,'../assets/icon.png')).resize({width:16,height:16});tray=new Tray(icon);tray.setToolTip('OpenAll');tray.setContextMenu(Menu.buildFromTemplate([{label:'打开搜索',click:()=>showPage('search')},{label:'剪贴板抽屉',click:()=>showPage('clipboard')},{label:'复制堆栈',click:()=>stackAction('start')},{label:'对选中内容操作',click:()=>captureSelection().catch(notifyError)},{type:'separator'},{label:'设置…',click:()=>createWindow('settings')},{label:'退出 OpenAll',click:()=>{app.isQuitting=true;app.quit();}}]));tray.on('click',()=>showPage('search'));
  await createWindow('search');
 }).catch(error=>{console.error(error.stack);app.exit(1);});
 app.on('window-all-closed',()=>{});
-let flushedBeforeQuit=false;app.on('before-quit',event=>{app.isQuitting=true;if(!flushedBeforeQuit){event.preventDefault();Promise.allSettled([store.flush(),goldServiceReady?.then(service=>{goldWindowController?.dispose();service.dispose();})]).finally(()=>{flushedBeforeQuit=true;app.quit();});}});
+let flushedBeforeQuit=false;app.on('before-quit',event=>{app.isQuitting=true;if(!flushedBeforeQuit){event.preventDefault();Promise.allSettled([captureWrites.then(()=>store.flush()),goldServiceReady?.then(service=>{goldWindowController?.dispose();service.dispose();})]).finally(()=>{flushedBeforeQuit=true;app.quit();});}});
 app.on('will-quit',()=>{clearInterval(monitor);clearInterval(refreshTimer);globalShortcut.unregisterAll();native.stop();for(const worker of workers)worker.close();});

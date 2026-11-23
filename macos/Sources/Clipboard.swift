@@ -45,6 +45,7 @@ struct ClipboardRecord: Codable {
     var title: String
     var text: String
     var filePaths: [String]
+    var folderIndices: [Int]? = nil
     var imageName: String?
     var richTextName: String?
     var htmlName: String? = nil
@@ -61,7 +62,7 @@ enum ClipboardFormat {
         if record.kind == "image" { return "图片" }
         if record.kind == "link" { return "链接" }
         if record.kind == "files" {
-            let extensions = Set(record.filePaths.map { URL(fileURLWithPath: $0).pathExtension.lowercased() })
+            let extensions = Set(record.filePaths.map { ($0 as NSString).pathExtension.lowercased() })
             if extensions == ["json"] { return "JSON 文件" }
             if extensions.isSubset(of: ["md", "markdown"]) && !extensions.isEmpty { return "Markdown 文件" }
             return "文件"
@@ -77,6 +78,7 @@ enum ClipboardFormat {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !term.isEmpty else { return true }
         if record.title.localizedCaseInsensitiveContains(term) || record.text.localizedCaseInsensitiveContains(term)
+            || (record.kind == "files" && record.filePaths.contains { ($0 as NSString).lastPathComponent.localizedCaseInsensitiveContains(term) })
             || record.sourceName.localizedCaseInsensitiveContains(term)
             || record.recognizedText?.localizedCaseInsensitiveContains(term) == true { return true }
         let formatTerms = ["图片", "照片", "image", "png", "链接", "网址", "url", "文件", "路径", "file",
@@ -230,8 +232,10 @@ final class ClipboardStore {
         let types = Set(board.types?.map(\.rawValue) ?? [])
         if types.contains("org.nspasteboard.ConcealedType") || types.contains("com.agilebits.onepassword") { return }
 
-        let paths = board.pasteboardItems?.compactMap { $0.string(forType: .fileURL) }
-            .compactMap { URL(string: $0)?.path } ?? []
+        let fileURLs = board.pasteboardItems?.compactMap { $0.string(forType: .fileURL) }
+            .compactMap { URL(string: $0) }.filter(\.isFileURL) ?? []
+        let paths = fileURLs.map(\.path)
+        let folderIndices = fileURLs.prefix(3).indices.filter { fileURLs[$0].hasDirectoryPath }
         let text = board.string(forType: .string) ?? ""
         guard text.utf8.count <= preferences.maxItemBytes,
               paths.joined(separator: "\n").utf8.count <= preferences.maxItemBytes else { return }
@@ -242,7 +246,7 @@ final class ClipboardStore {
         var title = text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         if !paths.isEmpty {
             kind = "files"
-            title = paths.count == 1 ? URL(fileURLWithPath: paths[0]).lastPathComponent : "\(paths.count) 个文件"
+            title = paths.count == 1 ? (paths[0] as NSString).lastPathComponent : "\(paths.count) 个文件"
         } else if let image = NSImage(pasteboard: board),
                   let tiff = image.tiffRepresentation,
                   let bitmap = NSBitmapImageRep(data: tiff),
@@ -282,7 +286,7 @@ final class ClipboardStore {
         if let htmlData, let htmlName { try? htmlData.write(to: directory.appendingPathComponent(htmlName), options: .atomic) }
         records.insert(ClipboardRecord(id: id, date: Date(), kind: kind,
                                        title: String(title.prefix(500)), text: text,
-                                       filePaths: paths, imageName: imageName, richTextName: richName, htmlName: htmlName,
+                                       filePaths: paths, folderIndices: folderIndices.isEmpty ? nil : folderIndices, imageName: imageName, richTextName: richName, htmlName: htmlName,
                                        sourceName: bundleID == Bundle.main.bundleIdentifier ? (previous?.sourceName ?? "未知应用") : (source?.localizedName ?? "未知应用"),
                                        sourceBundleID: bundleID == Bundle.main.bundleIdentifier ? previous?.sourceBundleID : source?.bundleIdentifier,
                                        digest: digest,

@@ -8,7 +8,7 @@ function placement(service, current) {
   const area = display.workArea, state = service.snapshot();
   const width = Math.min(current?.width ?? 462, area.width);
   const height = Math.min(state.view === 'outlook' ? 735 : state.combined ? 612 : 826, area.height);
-  const x = Math.min(Math.max(current?.x ?? previous?.x ?? area.x + area.width - width - 28, area.x), area.x + area.width - width);
+  const x = Math.min(Math.max(current?.x ?? previous?.x ?? area.x + area.width - width - (state.edgeEnabled ? 0 : 28), area.x), area.x + area.width - width);
   const y = Math.min(Math.max(current?.y ?? previous?.y ?? area.y + 32, area.y), area.y + area.height - height);
   return { x, y, width, height };
 }
@@ -55,6 +55,7 @@ function attachGoldWindow(window, service, onAuxiliary) {
     rail, ready, dispose,
     expand: () => dock.expand(),
     async show() {
+      if (!visible || dock.collapsed) dock.beginOpening();
       if (window.isMinimized()) window.restore();
       dock.expand(); window.show(); window.focus();
       if (!visible) { visible = true; if (await ready && !stopped) dock.setEnabled(service.getSetting('edgeEnabled') ?? true); }

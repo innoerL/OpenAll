@@ -27,14 +27,14 @@ for (const pending of ['ctf', 'gold']) {
     assert.equal(store.db.prepare("SELECT count(*) AS n FROM forecast_checks WHERE instrument='ctf'").get().n, 0);
     complete(); await running;
     assert.equal(current.outlook.forecasts.ctf.provisional, false);
-    assert.equal(store.db.prepare("SELECT count(*) AS n FROM forecast_checks WHERE instrument='ctf'").get().n, 7);
+    assert.equal(store.db.prepare("SELECT count(*) AS n FROM forecast_checks WHERE instrument='ctf'").get().n, 3);
     const saved = current.outlook.forecasts.ctf.days;
     scheduler.forecastCache = null;
     assert.deepEqual(scheduler.snapshot().outlook.forecasts.ctf.days, saved);
   });
 }
 
-test('七日预测补入前日实采牌价，排除非当日采集和旧单一备用来源', async context => {
+test('三日预测补入前日实采牌价，排除非当日采集和旧单一备用来源', async context => {
   const store = new Store(':memory:');
   context.after(() => store.close());
   const fixture = createFixture();
@@ -58,4 +58,23 @@ test('七日预测补入前日实采牌价，排除非当日采集和旧单一�
     goldHistory: goldHistory.filter(row => row.date >= dateBeforeYear(today)) });
   assert.ok(expected.days.every(day => day.pointMethod === 'joint-history'));
   assert.deepEqual(snapshot.outlook.forecasts.ctf.days, expected.days);
+});
+
+test('周日沿用现货原始的周五报价，暂估不进入正式档案', async context => {
+  const store = new Store(':memory:');
+  context.after(() => store.close());
+  const fixture = createFixture();
+  const sunday = '2026-11-22';
+  const scheduler = new Scheduler({ store, sources: fixture.sources, clock: () => scheduledAt(sunday),
+    online: () => true, publish() {} });
+  context.after(() => scheduler.stop());
+  await scheduler.tick('startup');
+  const snapshot = scheduler.snapshot();
+  assert.equal(snapshot.instruments.gold.quote.date, '2026-11-20');
+  const estimate = snapshot.outlook.forecasts.gold;
+  assert.equal(estimate.anchor.date, '2026-11-20');
+  assert.equal(estimate.provisional, true);
+  assert.deepEqual(estimate.days.map(day => day.date), ['2026-11-23', '2026-11-24', '2026-11-25']);
+  assert.equal(estimate.days[0].pointMethod, 'session-median');
+  assert.equal(store.db.prepare("SELECT count(*) AS n FROM forecast_checks WHERE instrument='gold'").get().n, 0);
 });

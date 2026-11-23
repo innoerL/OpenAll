@@ -172,7 +172,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let width = min(current?.width ?? 462, area.width)
         let height = min(view == "outlook" ? 735 : boolean("combined") ? 612 : 826, area.height)
-        let x = min(max(current?.minX ?? previous?.minX ?? area.maxX - width - 28, area.minX), area.maxX - width)
+        let x = min(max(current?.minX ?? previous?.minX ?? area.maxX - width - (boolean("edgeEnabled", default: true) ? 0 : 28), area.minX), area.maxX - width)
         let storedY = previous.map { usesAppKitCoordinates ? $0.minY : $0.maxY - height }
         let y = min(max(current.map { $0.maxY - height } ?? storedY ?? area.maxY - height - 32, area.minY), area.maxY - height)
         return NSRect(x: x, y: y, width: width, height: height)
@@ -421,7 +421,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
                 instruments[$0]?["quote"] is [String: Any] && (instruments[$0]?["history"] as? [Any] ?? []).count >= 365
             }, "双品种报价与近一年曲线")
             let forecasts = (state["outlook"] as? [String: Any])?["forecasts"] as? [String: [String: Any]] ?? [:]
-            try check(["gold", "ctf"].allSatisfy { (forecasts[$0]?["days"] as? [Any] ?? []).count == 7 }, "双品种七日展望")
+            try check(["gold", "ctf"].allSatisfy { (forecasts[$0]?["days"] as? [Any] ?? []).count == 3 }, "双品种三日展望")
             try check(try await tool.execute("return typeof require === 'undefined' && typeof goldDesk === 'undefined' && !!window.openallGold;") as? Bool == true,
                 "WebKit 页面只暴露 OpenAll 金价桥接")
             tool.show()
@@ -442,11 +442,11 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             try check(tool.boolean("pinned", default: true) != pinned && panel.level == (pinned ? .normal : .floating), "置顶偏好同步 AppKit 窗口层级")
             try await capture("gold-combined")
             _ = try await tool.execute("document.querySelector('#outlook-view').click(); return true;")
-            try await tool.until("七日展望页面") { try await tool.execute("return !document.querySelector('#outlook').hidden;") as? Bool == true }
+            try await tool.until("三日展望页面") { try await tool.execute("return !document.querySelector('#outlook').hidden;") as? Bool == true }
             _ = try await tool.execute("document.querySelector('#forecast-ctf').click(); return true;")
-            try check(try await tool.execute("return document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 7 && !!document.querySelector('#verification-note').textContent;") as? Bool == true,
-                "七日表格与实际报价验证展示")
-            try check(try await tool.execute("return ['#market-breakdown > summary','#events','#calendar'].every(selector=>document.querySelector(selector).textContent.trim().length>0 && document.querySelector(selector).getClientRects().length>0);") as? Bool == true, "市场因素入口、近期国际事件与未来七日财经日历直接可见")
+            try check(try await tool.execute("return document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 3 && !!document.querySelector('#verification-note').textContent;") as? Bool == true,
+                "三日表格与实际报价验证展示")
+            try check(try await tool.execute("return ['#market-breakdown > summary','#events','#calendar'].every(selector=>document.querySelector(selector).textContent.trim().length>0 && document.querySelector(selector).getClientRects().length>0);") as? Bool == true, "市场因素入口、近期国际事件与未来三日财经日历直接可见")
             let checkPrices = """
             const state = await openallGold.read();
             const quote = state.instruments.ctf.quote;
@@ -461,7 +461,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
               header.querySelector('strong').textContent.includes(actual) && header.textContent.includes('/克') &&
               document.querySelector('#forecast-price-heading').textContent.includes('参考价') &&
               document.querySelectorAll('#forecast-table thead th').length === 3 &&
-              buttons.length === 7 && days.length === 7 && buttons.every((button, i) => {
+              buttons.length === 3 && days.length === 3 && buttons.every((button, i) => {
                 const day = days[i], row = button.closest('tr');
                 return day.pointMethod === 'joint-history' && Number.isFinite(day.mid) &&
                   button.getAttribute('aria-expanded') === 'false' && row.querySelector('time').dateTime === day.date &&
@@ -470,7 +470,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
                   !row.innerText.includes('%');
               });
             """
-            try check(try await tool.execute(checkPrices) as? Bool == true, "周大福当日牌价表头与七个目标日参考价对应模型输出")
+            try check(try await tool.execute(checkPrices) as? Bool == true, "周大福当日牌价表头与三个目标日参考价对应模型输出")
             // 用 WebKit 的原生键盘事件操作折叠区及日期，截图前恢复首屏。
             guard let browser = tool.webView else { throw componentError("未出现金价内容视图") }
             _ = panel.makeFirstResponder(browser)
@@ -496,7 +496,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("document.activeElement.blur(); document.querySelector('main').scrollTop=0; window.scrollTo(0,0); return true;")
             let originalFrame = panel.frame
             panel.setFrame(NSRect(origin: originalFrame.origin, size: NSSize(width: 345, height: originalFrame.height)), display: true)
-            try await tool.until("窄窗七日参考价布局") {
+            try await tool.until("窄窗三日参考价布局") {
                 try await tool.execute("return innerWidth <= 345 && document.querySelector('#forecast-table').getBoundingClientRect().right <= document.querySelector('#outlook').getBoundingClientRect().right;") as? Bool == true
             }
             try await capture("gold-outlook-narrow")
@@ -512,7 +512,7 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
               legend[i].left >= 0 && legend[i].right <= width && legend[i].width > 0 && key.scrollWidth <= key.clientWidth + 1) &&
               legend[0].bottom <= legend[1].top && legend[0].height > 0;
             return legendFits && table.getBoundingClientRect().right <= width + 1 && document.documentElement.scrollWidth <= width + 1 &&
-              rows.length === 7 && rows.every(row => Array.from(row.cells).every(cell => {
+              rows.length === 3 && rows.every(row => Array.from(row.cells).every(cell => {
                 const range = document.createRange();
                 range.selectNodeContents(cell);
                 const bounds = cell.getBoundingClientRect(), text = range.getBoundingClientRect();
@@ -522,15 +522,15 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             try check(try await tool.execute(narrowPrices) as? Bool == true, "窄窗三列的日期、参考价和区间没有裁切")
             try await capture("gold-outlook-narrow-range")
             _ = try await tool.execute("document.querySelector('.forecast-day-toggle').focus(); return true;")
-            let dayKeys: [(String, UInt16, Int)] = [("\u{F700}", 126, 0), ("\u{F701}", 125, 1), ("\u{F72B}", 119, 6),
-                ("\u{F701}", 125, 6), ("\u{F700}", 126, 5), ("\u{F729}", 115, 0)]
+            let dayKeys: [(String, UInt16, Int)] = [("\u{F700}", 126, 0), ("\u{F701}", 125, 1), ("\u{F72B}", 119, 2),
+                ("\u{F701}", 125, 2), ("\u{F700}", 126, 1), ("\u{F729}", 115, 0)]
             for (characters, code, index) in dayKeys {
                 try pressKey(characters, code: code)
                 try await tool.until("方向键或首尾键定位到第 \(index + 1) 天") {
                     try await tool.execute("return document.activeElement===document.querySelectorAll('.forecast-day-toggle')[\(index)] && !document.querySelector('.forecast-day-toggle[aria-expanded=true]');") as? Bool == true
                 }
             }
-            try check(true, "方向键及 Home、End 在七天间移动焦点，到首尾保持原位")
+            try check(true, "方向键及 Home、End 在三天间移动焦点，到首尾保持原位")
             try pressKey()
             try await tool.until("回车后首日详情可见") {
                 try await tool.execute("""
@@ -688,7 +688,6 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             try await tool.until("右侧贴边收起") { dock.side == "right" && dock.collapsed && !panel.isVisible }
             tool.show()
             try check(!dock.collapsed && panel.isVisible, "搜索唤回已贴边收起窗口")
-            _ = try await tool.execute("return await openallGold.action('edge');")
             _ = try await tool.execute("return await openallGold.action('minimize');")
             try await tool.until("最小化") { panel.isMiniaturized }
             tool.show()
@@ -699,7 +698,19 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             try check(!panel.isVisible && !dock.rail.isVisible && tool.ready, "关闭时隐藏面板与贴边条，后台继续运行")
             _ = try await tool.execute("return await openallGold.read();")
             try check((tool.latest["outlook"] as? [String: Any])?["forecasts"] != nil, "窗口关闭后后台快照与预测继续可读")
+            let reopenedAt = ProcessInfo.processInfo.systemUptime
             tool.show()
+            let outside = NSPoint(x: panel.frame.minX - 20, y: panel.frame.midY)
+            let inside = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+            dock.checkHoverForDesign(at: outside, now: reopenedAt)
+            dock.checkHoverForDesign(at: outside, now: reopenedAt + 14.99)
+            try check(dock.side == "right" && !dock.collapsed && panel.isVisible && !dock.rail.isVisible,
+                "关闭后主动重开，鼠标在外仍完整展示十五秒")
+            dock.checkHoverForDesign(at: inside, now: reopenedAt + 15.1)
+            try check(!dock.collapsed, "十五秒后鼠标在窗口内可继续阅读")
+            dock.checkHoverForDesign(at: outside, now: reopenedAt + 15.2)
+            dock.checkHoverForDesign(at: outside, now: reopenedAt + 15.6)
+            try check(dock.collapsed, "首次展示期结束后离开即按正常延时收回")
             try check(["pinned", "combined", "currency", "edgeEnabled"].allSatisfy { String(describing: tool.snapshot()[$0]) == String(describing: retained[$0]) },
                 "重新打开保留偏好与行情")
             try check(tool.panel === originalWindow, "隐藏后重新打开保留原生窗口与网页状态")

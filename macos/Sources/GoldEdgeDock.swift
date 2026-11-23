@@ -37,7 +37,7 @@ final class GoldEdgeDock {
     private(set) var side: String?
     private(set) var collapsed = false
     private(set) var enabled = false
-    private(set) var suspended = false
+    private(set) var suspended = true
     private(set) var updatingFrame = false
     var pinned: () -> Bool = { true }
     var persistPosition: ((NSRect) -> Void)?
@@ -49,6 +49,7 @@ final class GoldEdgeDock {
     private var leftSince: TimeInterval?
     private var lastMove: TimeInterval?
     private var requireExit = false
+    private var openingUntil: TimeInterval?
 
     init(window: NSPanel) {
         self.window = window
@@ -114,13 +115,14 @@ final class GoldEdgeDock {
         guard enabled, !collapsed, !suspended, !window.isMiniaturized else { return }
         side = Self.edgeSide(window.frame, area: Self.area(for: window.frame), distance: side == nil ? 18 : 34)
         leftSince = nil
-        if side != nil { collapse(first: true) }
-        else { syncOnTop(); onMotion?(nil, false) }
+        if side != nil && openingUntil == nil { collapse(first: true) }
+        else { syncOnTop(); onMotion?(side, false) }
     }
 
     func setEnabled(_ enabled: Bool) {
         self.enabled = enabled
         if !enabled {
+            openingUntil = nil
             if collapsed { expand() }
             side = nil
             leftSince = nil
@@ -220,6 +222,7 @@ final class GoldEdgeDock {
 
     func suspend() {
         suspended = true
+        openingUntil = nil
         animation?.invalidate()
         animation = nil
         collapsed = false
@@ -231,7 +234,13 @@ final class GoldEdgeDock {
         hoverSince = nil
     }
 
-    func resume() { suspended = false; leftSince = nil }
+    func resume() {
+        guard suspended || collapsed else { return }
+        openingUntil = ProcessInfo.processInfo.systemUptime + 15
+        suspended = false
+        leftSince = nil
+        checkPlacement()
+    }
 
     private func poll() {
         guard !suspended, !window.isMiniaturized else { return }
@@ -251,6 +260,7 @@ final class GoldEdgeDock {
     }
 
     private func checkHover(at point: NSPoint, now: TimeInterval) {
+        if let deadline = openingUntil, now >= deadline { openingUntil = nil }
         guard side != nil, !suspended, !window.isMiniaturized else { return }
         if collapsed {
             let inside = rail.frame.insetBy(dx: -2, dy: 0).contains(point)
@@ -259,7 +269,7 @@ final class GoldEdgeDock {
             if let hoverSince, now - hoverSince >= 0.080 { expand() }
         } else if window.isVisible {
             leftSince = window.frame.insetBy(dx: -5, dy: -5).contains(point) ? nil : leftSince ?? now
-            if let leftSince, now - leftSince >= 0.340 { collapse() }
+            if openingUntil == nil, let leftSince, now - leftSince >= 0.340 { collapse() }
         }
     }
 

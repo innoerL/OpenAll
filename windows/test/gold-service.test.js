@@ -11,6 +11,12 @@ const nativeTheme = Object.assign(new EventEmitter(), { shouldUseDarkColors: tru
 const powerMonitor = new EventEmitter();
 const failExternal = () => { throw Error('离线回归禁止访问网络或外部应用'); };
 const electron = { app: { isPackaged: false }, BrowserWindow: failExternal, net: { fetch: failExternal, isOnline: failExternal }, powerMonitor, nativeTheme, shell: { openExternal: failExternal } };
+const notices = [];
+electron.Notification = class {
+  static isSupported() { return true; }
+  constructor(options) { this.options = options; }
+  show() { notices.push(this.options); }
+};
 const moduleObject = { exports: {} };
 vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { module: moduleObject, exports: moduleObject.exports, require: name => name === 'electron' ? electron : localRequire(name), __dirname: path.dirname(filename), AbortController, AbortSignal, setTimeout, clearTimeout, console });
 
@@ -51,7 +57,7 @@ vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { module: moduleObject, ex
     await assert.rejects(service.openEvent('https://example.test/'));
     assert.equal(await service.openSource('gold'), true);
     const forecast = service.snapshot().outlook.forecasts.gold;
-    assert.equal(forecast.days.length, 7);
+    assert.equal(forecast.days.length, 3);
     unsubscribe();
     const before = updates;
     service.update('pin');
@@ -90,6 +96,37 @@ vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { module: moduleObject, ex
     assert.equal(second.snapshot().theme.background, '#f2f2ef');
     assert.equal(second.snapshot().instruments.gold.quote.price, retained.instruments.gold.quote.price);
     assert.equal(second.snapshot().instruments.ctf.quote.price, retained.instruments.ctf.quote.price);
+    second.dispose();
+
+    // 从正式入口验证旧文件损坏时仍可打开，文件修复后重启会导入缺失记录。
+    const legacyDirectory = path.join(directory, 'GoldDesk');
+    const recoveredDirectory = path.join(directory, 'recovered');
+    fs.mkdirSync(legacyDirectory);
+    const oldFilename = path.join(legacyDirectory, 'quotes.sqlite');
+    fs.writeFileSync(oldFilename, sentinelBytes);
+    const openRecovered = () => moduleObject.exports.createGoldService({ dataDirectory: recoveredDirectory, legacyDirectory, sources, clock: sample.clock, settings: () => settings });
+    service = await openRecovered();
+    await service.ready;
+    assert.equal(service.snapshot().imported, false);
+    assert.ok(service.snapshot().instruments.gold.quote);
+    assert.match(notices[0].body, /重试/);
+    service.update('currency', 'EUR');
+    service.dispose();
+    assert.deepEqual(fs.readFileSync(oldFilename), sentinelBytes);
+    fs.renameSync(oldFilename, oldFilename + '.saved');
+    const { Store } = localRequire('../../shared/gold-core/store.cjs');
+    const old = new Store(oldFilename);
+    try {
+      old.db.exec('DROP TABLE forecast_checks');
+      old.setSetting('currency', 'CNY');
+      old.setSetting('pinned', false);
+    } finally { old.close(); }
+    second = await openRecovered();
+    await second.ready;
+    assert.equal(second.snapshot().imported, true);
+    assert.equal(second.snapshot().pinned, false);
+    assert.equal(second.snapshot().currency, 'EUR');
+    assert.equal(notices.length, 1);
     console.log('金价宿主服务回归通过：内存样例与哨兵保护、主题同步、参数边界、正式分支持久化与资源释放');
   } finally {
     second?.dispose(); service?.dispose();

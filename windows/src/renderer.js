@@ -176,6 +176,26 @@
   window.OpenAllPages.clipboard=async(host,ctx)=>{
     let all=await api.history(),filtered=[],selected=new Set(),current=0,activeBoard='历史',disposed=false,filter='全部';const dragContent=new Map();const p=ctx.settings.clipboardPreferences||{};
     const shelf=h('div',{class:'clipboard-shelf'}),search=h('input',{class:'clipboard-search',placeholder:'搜索剪贴板',type:'text',autocomplete:'off','aria-label':'搜索剪贴板'}),tabs=h('div',{class:'clipboard-tabs'}),track=h('div',{class:'clip-track',role:'listbox','aria-label':'剪贴板记录','aria-multiselectable':'true'});
+    const iconResults = new Map();
+    const fileObserver = new IntersectionObserver(entries => {
+      for (const {target, isIntersecting} of entries) {
+        if (!isIntersecting) continue;
+        fileObserver.unobserve(target);
+        const id = target.dataset.fileRecord, index = Number(target.dataset.fileIndex);
+        const key = id + ':' + index;
+        let request = iconResults.get(key);
+        if (!request) {
+          request = api.clipboardAction('fileIcon', {id, index}).catch(() => { iconResults.delete(key); return null; });
+          iconResults.set(key, request);
+          if (iconResults.size > 160) iconResults.delete(iconResults.keys().next().value);
+        }
+        request.then(value => {
+          if (!target.isConnected || disposed || !value) return;
+          target.dataset.kind = value.kind;
+          target.replaceChildren(value.icon ? h('img', {src:value.icon, alt:''}) : icon(value.kind));
+        });
+      }
+    }, {root:track});
     const info = h('span', {class:'clip-count', role:'status', 'aria-atomic':'true'});
     const hint = h('div', {class:'clip-key-hints'});
     const previewButton = button('预览卡片', preview);
@@ -279,6 +299,7 @@
       finishSelection(focus);
     }
     function paint(focus=false) {
+      fileObserver.disconnect();
       const q=search.value.trim().toLowerCase();filtered=all.filter(r=>(activeBoard==='历史'||activeBoard==='收藏'&&(r.favorite||r.pinned)||(r.tags||[]).includes(activeBoard)||r.pinboard===activeBoard)&&(filter==='全部'||type(r)===filter||filter==='文本'&&['文本','JSON','Markdown','HTML','富文本'].includes(type(r)))&&(!q||[r.title,r.kind==='image'?'':(r.text||r.value),r.sourceName,r.ocrText,r.recognizedText,type(r),...(r.files||[])].filter(Boolean).join(' ').toLowerCase().includes(q)));
       const hadCardFocus = document.activeElement?.matches('.clip-card');
       const available=new Set(filtered.map(id));selected=new Set([...selected].filter(x=>available.has(x)));current=Math.min(current,Math.max(0,filtered.length-1));
@@ -290,15 +311,28 @@
         if (r.kind === 'image') {
           content.append(h('img', {src:r.dataUrl || 'data:image/png;base64,' + (r.thumbnail || r.value), alt:r.title || '剪贴板图片', loading:'lazy'}));
           content.append(h('span', {class:'clip-list-image-title'}, r.title || '剪贴板图片'));
+        } else if (r.kind === 'files' && r.files?.length) {
+          content.classList.add('clip-files');
+          content.classList.toggle('single-file', r.files.length === 1);
+          r.files.slice(0, 3).forEach((path, index) => {
+            const name = path.split(/[\\/]/).filter(Boolean).pop() || path;
+            const kind = r.fileKinds?.[index] || 'file';
+            const slot = h('span', {class:'clip-file-icon', 'data-file-record':id(r), 'data-file-index':index, 'data-kind':kind, 'aria-hidden':'true'}, icon(kind));
+            fileObserver.observe(slot);
+            content.append(h('span', {class:'clip-file-row', title:path}, slot,
+              h('span', {class:'clip-file-name'}, markFirst(name, pattern))));
+          });
+          if (r.files.length > 3) content.append(h('span', {class:'clip-file-rest'}, '另 ' + (r.files.length - 3) + ' 项'));
+          if (r.files.length > 1) content.append(h('span', {class:'clip-file-total'}, '共 ' + r.files.length + ' 项'));
         } else {
-          const body = r.kind === 'files' ? (r.files || []).map(x => x.split(/[\\/]/).pop()).join('\n') : r.text || r.value || r.title || '';
+          const body = r.text || r.value || r.title || '';
           const excerpt = markFirst(body.slice(0, 1800), pattern);
           if (format === 'JSON') content.append(h('pre', {}, excerpt));
           else content.append(...excerpt);
         }
         const card=h('article',{draggable:true,onpointerdown:()=>{if(r.truncated&&!dragContent.has(id(r)))api.clipboardAction('read',{ids:[id(r)]}).then(full=>dragContent.set(id(r),Array.isArray(full)?full[0]:full)).catch(()=>{});},ondragstart:e=>{if(['files','image'].includes(r.kind)){e.preventDefault();api.clipboardAction('drag',{ids:selected.has(id(r))?[...selected]:[id(r)]}).catch(error=>notify(error.message,true));return;}const data=dragContent.get(id(r))||r;if(data.truncated){e.preventDefault();notify('正在读取全文，请稍后重新拖动');return;}e.dataTransfer.setData('text/plain',data.text||data.value||'');if(data.html)e.dataTransfer.setData('text/html',data.html);e.dataTransfer.effectAllowed='copy';},class:'clip-card'+(selected.has(id(r))?' selected':''),tabIndex:index === current ? 0 : -1,'data-index':index,role:'option','aria-selected':String(selected.has(id(r))),onclick:e=>{if(e.shiftKey){const low=Math.min(current,index),high=Math.max(current,index);for(let n=low;n<=high;n++)selected.add(id(filtered[n]));}else if(e.ctrlKey||e.metaKey){if(selected.has(id(r)))selected.delete(id(r));else selected.add(id(r));}else selected=new Set([id(r)]);current=index;syncSelection(true);},ondblclick:e=>{if(!e.target.closest('button'))paste();},oncontextmenu:e=>{e.preventDefault();if(!selected.has(id(r)))selected=new Set([id(r)]);current=index;syncSelection(true);cardMenu(e);}},content);
-        if((r.text||r.value||'').length>110&&r.kind!=='image')card.append(button('查看全文 ↗',e=>{e.stopPropagation();current=index;selected=new Set([id(r)]);syncSelection(true);preview();},'clip-preview-link'));
-        const source=r.icon?h('img',{src:r.icon,class:'clip-source',alt:r.sourceName||''}):h('span',{class:'clip-source',title:r.sourceName||r.source||''},icon(r.kind==='files'?'file':'application',16));card.append(h('div',{class:'clip-type-bar','data-format':r.kind==='files'?'文件':format},h('strong',{},format),h('time',{},UI.relativeTime(r.time||r.date)),h('span',{class:'clip-origin',title:r.sourceName||r.source||''},source,h('span',{class:'clip-origin-name'},r.sourceName||r.source||''))));fragment.append(card);});
+        if((r.text||r.value||'').length>110&&!['image','files'].includes(r.kind))card.append(button('查看全文 ↗',e=>{e.stopPropagation();current=index;selected=new Set([id(r)]);syncSelection(true);preview();},'clip-preview-link'));
+        const source=(r.sourceIcon||r.icon)?h('img',{src:r.sourceIcon||r.icon,class:'clip-source',alt:r.sourceName||''}):h('span',{class:'clip-source',title:r.sourceName||r.source||''},icon(r.kind==='files'?'file':'application',16));card.append(h('div',{class:'clip-type-bar','data-format':r.kind==='files'?'文件':format},h('strong',{},format),h('time',{},UI.relativeTime(r.time||r.date)),h('span',{class:'clip-origin',title:r.sourceName||r.source||''},source,h('span',{class:'clip-origin-name'},r.sourceName||r.source||''))));fragment.append(card);});
       const empty = hasFilter() ? '没有匹配的记录' : activeBoard === '历史' ? '复制内容后会出现在这里' : '这个标签还没有记录';
       track.replaceChildren(filtered.length ? fragment : h('div', {class:'empty'}, empty));
       finishSelection(focus || hadCardFocus);
@@ -327,7 +361,7 @@
     };
     window.addEventListener('keydown',keydown);const off=api.onClipboard(items=>{all=Array.isArray(items)?items:items?.items||all;if(!disposed)paint();});
     showLayout(layout);boards();paint();
-    return {focus:()=>search.focus(),dispose(){disposed=true;window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(prefs){
+    return {focus:()=>search.focus(),dispose(){disposed=true;fileObserver.disconnect();iconResults.clear();window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(prefs){
       const next = (prefs || settings).clipboardPreferences?.shelfLayout === 'list' ? 'list' : 'cards';
       if (!pendingLayout && layout !== next) showLayout(next);
       boards();paint();

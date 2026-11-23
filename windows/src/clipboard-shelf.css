@@ -164,3 +164,25 @@
  .clipboard-shelf[data-layout=list] .clip-card { grid-template-columns:62px minmax(0,1fr) 20px 16px 61px; gap:5px; }
  .clipboard-shelf[data-layout=list] .clip-origin-name { display:none; }
 }
+
+.clip-content.clip-files {
+  display:flex; flex-direction:column; justify-content:center; align-items:stretch; gap:5px;
+  min-width:0; white-space:normal;
+}
+.clip-file-row { display:flex; align-items:center; gap:8px; min-width:0; }
+.clip-file-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
+.clip-file-icon { display:grid; place-items:center; flex:none; width:23px; height:23px; color:var(--muted); }
+.clip-file-icon[data-kind=folder] { color:var(--accent-text); }
+.clip-files .clip-file-icon :is(svg,img) { width:100%; height:100%; object-fit:contain; }
+.clip-files.single-file .clip-file-row { flex-direction:column; gap:8px; }
+.clip-files.single-file .clip-file-icon { width:50px; height:50px; }
+.clip-files.single-file .clip-file-name { max-width:100%; }
+.clip-file-rest, .clip-file-total { color:var(--muted); font-size:11px; }
+.clip-file-rest { margin-left:31px; }
+.clip-file-total { display:none; }
+.clipboard-shelf[data-layout=list] .clip-content.clip-files { flex-direction:row; justify-content:flex-start; align-items:center; gap:8px; }
+.clipboard-shelf[data-layout=list] .clip-files .clip-file-row { flex-direction:row; gap:8px; }
+.clipboard-shelf[data-layout=list] .clip-files .clip-file-icon { width:20px; height:20px; }
+.clipboard-shelf[data-layout=list] .clip-file-icon :is(svg,img) { width:100%; height:100%; object-fit:contain; }
+.clipboard-shelf[data-layout=list] :is(.clip-file-row ~ .clip-file-row,.clip-file-rest) { display:none; }
+.clipboard-shelf[data-layout=list] .clip-file-total { display:inline; flex:none; }

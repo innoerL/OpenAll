@@ -31,4 +31,7 @@ xcrun swiftc -O "$testRoot/BackendChecks.swift" "$sourceRoot/BackendModels.swift
 print "检查文件搜索定语与临时文件索引"
 xcrun swiftc -O "$testRoot/FileSearchQualifierChecks.swift" "$sourceRoot/FileSearch.swift" "$testRoot/Support/FileSearchPreview.swift" -o "$buildRoot/FileSearchQualifierChecks"
 "$buildRoot/FileSearchQualifierChecks"
-print "macOS 纯模型检查全部通过"
+print "检查文件剪贴板与历史回写"
+xcrun swiftc -O "$testRoot/ClipboardFileChecks.swift" "$sourceRoot/Clipboard.swift" -o "$buildRoot/ClipboardFileChecks" -framework AppKit -framework Vision
+"$buildRoot/ClipboardFileChecks"
+print "macOS 模型与剪贴板检查全部通过"

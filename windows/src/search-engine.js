@@ -3,7 +3,7 @@ const crypto = require('node:crypto');
 const { pinyin } = require('pinyin-pro');
 const { expandSnippet } = require('./stores');
 const commands = [
- ['gold','金价桌台',['金价','金价桌台','gold','gold price'],'国际金价、周大福牌价、历史走势与七日展望','chart'],
+ ['gold','金价桌台',['金价','金价桌台','gold','gold price'],'国际金价、周大福牌价、历史走势与三日展望','chart'],
  ['translate','翻译',['翻译','translate'],'打开有道翻译 · 输入 翻译 内容','translate'],
  ['comparison','文本对比',['文本对比','文本','wenben','diff','diff2','文本对比 V2','diff v2'],'左右直接编辑，并在原处查看差异','columns'],
  ['json','JSON 工具',['json','json格式化'],'校验、键名自然排序与转义','braces'],

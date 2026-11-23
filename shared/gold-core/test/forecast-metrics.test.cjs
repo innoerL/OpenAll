@@ -160,6 +160,35 @@ test('历史更新期间只展示暂估，首次就绪才存档，已发行内�
   assert.equal(store.db.prepare('SELECT count(*) AS count FROM forecast_checks').get().count, 1);
 });
 
+for (const instrument of ['gold', 'ctf']) {
+  test(`${instrument} 旧七日存档只返回前三日，七日到期仍可按原版结算`, context => {
+    const store = new Store(':memory:');
+    context.after(() => store.close());
+    const origin = '2026-10-01', started = scheduledAt(origin);
+    const version = instrument === 'gold' ? '3.0.0' : '4.0.0';
+    const save = store.db.prepare(`INSERT INTO forecast_checks
+      (model_version, instrument, origin, target, issued_at, origin_fetched_at, origin_price, estimate)
+      VALUES (?, ?, ?, ?, ?, ?, 100, ?)`);
+    const days = Array.from({ length: 7 }, (_, index) => estimate({ date: dateAfter(origin, index + 1), mid: 105 }));
+    for (const day of days) save.run(version, instrument, origin, day.date, started, started, JSON.stringify(day));
+    const restored = store.issueForecast(instrument, origin, null, null, started, false);
+    assert.equal(restored.version, version);
+    assert.deepEqual(restored.days, days.slice(0, 3));
+    store.saveQuote(instrument, origin, quote(origin, 100), started);
+    const current = { anchor: { date: origin, price: 100, fromQuote: true }, days: days.map(day => ({ ...day, mid: 103 })) };
+    const issued = store.issueForecast(instrument, origin, store.latestQuote(instrument), current, started + 1000);
+    assert.equal(issued.version, modelVersionFor(instrument));
+    assert.deepEqual(issued.days, (instrument === 'gold' ? current.days : days).slice(0, 3));
+    assert.equal(store.db.prepare('SELECT count(*) AS n FROM forecast_checks').get().n, instrument === 'gold' ? 10 : 7);
+    for (const horizon of [2, 7]) {
+      const date = dateAfter(origin, horizon);
+      store.saveQuote(instrument, date, quote(date, 110), scheduledAt(date));
+      assert.equal(store.forecastStats(instrument, version).byHorizon[horizon].mae, 5);
+    }
+    if (instrument === 'gold') assert.equal(store.forecastStats('gold').byHorizon[2].mae, 7);
+  });
+}
+
 test('显式版本统计与当前默认版本各自独立，版本查询不改写存档', context => {
   const store = new Store(':memory:');
   context.after(() => store.close());

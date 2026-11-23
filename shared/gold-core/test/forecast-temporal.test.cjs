@@ -95,6 +95,16 @@ test('同一目标日独立估算，调换顺序或只估单日得到同一参�
   assert.deepEqual(forecast({ ...input, offsets: [2] }).days, [full.days[1]]);
 });
 
+test('国际现货匹配开市跨度的样本不足时回退，历史七日也沿用原点价', () => {
+  const input = { ...sample(), instrument: 'gold' };
+  const sparse = { ...input, priceHistory: input.priceHistory.filter((_, index) => index % 3 === 0), offsets: [3] };
+  const previous = forecast({ ...sparse, modelMode: 'history' });
+  assert.equal(previous.days[0].pointMethod, 'directional-median');
+  assert.deepEqual(forecast(sparse).days, previous.days);
+  const seven = { ...input, offsets: [7] };
+  assert.deepEqual(forecast(seven).days, forecast({ ...seven, modelMode: 'history' }).days);
+});
+
 test('当周大福与国际金价走势均平坦时，逐日计算可以自然同价', () => {
   const input = sample();
   const flat = input.priceHistory.map(row => ({ ...row, price: 1068 }));

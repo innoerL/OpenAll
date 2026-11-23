@@ -9,7 +9,8 @@ const RISE_THRESHOLD = Math.log1p(0.002);
 const FALL_THRESHOLD = Math.log1p(-0.002);
 const DIRECTIONS = ['up', 'down', 'flat'];
 const MODEL_VERSION = '4.0.0';
-const modelVersionFor = (instrument) => instrument === 'ctf' ? MODEL_VERSION : '3.0.0';
+const modelVersionFor = (instrument) => instrument === 'gold' ? '5.0.0' : MODEL_VERSION;
+const FORECAST_OFFSETS = [1, 2, 3];
 const dateAfter = (date, days) => dateAt(scheduledAt(date) + days * DAY);
 
 function quantile(values, rank) {
@@ -212,8 +213,31 @@ function priceDay(date, price, estimate, model, pointMethod, sample) {
   };
 }
 
+// 按北京时间取价时段累计开市日，周末沿用原始报价日。
+function sessionCalendar(first, last, marketIsClosed) {
+  const calendar = new Map();
+  let sessions = 0;
+  for (let day = first; day <= last; day = dateAfter(day, 1)) {
+    if (!marketIsClosed(scheduledAt(day))) sessions++;
+    calendar.set(day, sessions);
+  }
+  return calendar;
+}
+
+function spotScenarios(points, origin, target, calendar) {
+  const sessions = calendar.get(target) - calendar.get(origin);
+  if (!sessions) return [];
+  const changes = [];
+  for (let i = sessions; i < points.length; i++) {
+    const from = points[i - sessions], to = points[i];
+    const observed = calendar.get(to.date) - calendar.get(from.date);
+    if (observed === sessions) changes.push(Math.log(to.price / from.price));
+  }
+  return changes.slice(-84);
+}
+
 function forecast({
-  instrument, priceHistory, goldHistory, quote, macro, today, marketIsClosed, modelMode = 'auto', offsets = [1, 2, 3, 4, 5, 6, 7],
+  instrument, priceHistory, goldHistory, quote, macro, today, marketIsClosed, modelMode = 'auto', offsets = FORECAST_OFFSETS,
 }) {
   const points = priceHistory.filter(({ date, price }) =>
     date < today && Number.isFinite(price) && price > 0 && (instrument !== 'gold' || !marketIsClosed(scheduledAt(date))));
@@ -234,6 +258,7 @@ function forecast({
   ];
   const current = effectiveMode === 'history' ? [] : features(anchor.date);
   const days = [];
+  let calendar;
   const ctfHasSundays = instrument === 'ctf' &&
     points.filter((point) => new Date(point.date).getUTCDay() === 0).length > 5;
   for (const offset of offsets) {
@@ -262,10 +287,22 @@ function forecast({
     const mid = model ? clamp(model.predict(current), -.07, .07) : 0;
     const estimate = estimateDirection(mid, model?.residuals ?? recent, horizon,
       effectiveMode === 'history' ? 'directional' : 'median');
+    // 留出期仅支持一日、三日点价。取相同开市跨度的中位收益，并向当前价收缩一半。
+    if (instrument === 'gold' && modelMode === 'auto' && (horizon === 1 || horizon === 3)) {
+      calendar ??= sessionCalendar(points[0].date, dateAfter(today, Math.max(...offsets)), marketIsClosed);
+      const scenarios = spotScenarios(points, anchor.date, date, calendar);
+      if (scenarios.length >= 30) {
+        estimate.mid = .5 * quantile(scenarios, .5);
+        estimate.low = Math.min(estimate.low, estimate.mid);
+        estimate.high = Math.max(estimate.high, estimate.mid);
+        days.push(priceDay(date, anchor.price, estimate, '同交易跨度参考价与同期限方向频率', 'session-median', recent.length));
+        continue;
+      }
+    }
     days.push(priceDay(date, anchor.price, estimate, model?.label ?? '同期限历史频率',
       effectiveMode === 'history' ? 'directional-median' : 'median', model?.residuals.length ?? recent.length));
   }
   return { version: modelVersionFor(instrument), anchor: { date: anchor.date, price: anchor.price }, factors, days };
 }
 
-module.exports = { MODEL_VERSION, modelVersionFor, DIRECTIONS, forecast, classifyReturn, estimateDirection, dateAfter };
+module.exports = { MODEL_VERSION, modelVersionFor, FORECAST_OFFSETS, DIRECTIONS, forecast, classifyReturn, estimateDirection, dateAfter };

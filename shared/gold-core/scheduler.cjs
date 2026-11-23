@@ -93,15 +93,11 @@ class Scheduler {
           instrument: id, priceHistory, goldHistory: gold.history,
           quote: data.quote, today, marketIsClosed, macro: context.macro,
         });
-        const ready = data.status === 'done' && goldReady &&
-          (id === 'gold' || hasRecentHistory(data.historyStatus, priceHistory));
-        if (value) {
-          value.anchor.fromQuote = data.quote?.date === value.anchor.date && data.quote?.price === value.anchor.price;
-          value.provisional = !ready;
-        }
+        const ready = data.status === 'done' && goldReady && (id === 'gold' ?
+          !marketIsClosed(scheduledAt(today)) : hasRecentHistory(data.historyStatus, priceHistory));
+        if (value) value.anchor.fromQuote = data.quote?.date === value.anchor.date && data.quote?.price === value.anchor.price;
         // 所需历史加载期间只展示暂估，同一品种、模型和基准日的正式预测只发行一次。
-        forecasts[id] = id === 'gold' && marketIsClosed(scheduledAt(today)) ? value :
-          this.store.issueForecast(id, today, data.quote, value, now, ready);
+        forecasts[id] = this.store.issueForecast(id, today, data.quote, value, now, ready);
         verification[id] = this.store.forecastStats(id, forecasts[id]?.version ?? modelVersionFor(id));
       }
       const events = (context.news ?? []).filter((event) => event.timestamp <= now && now - event.timestamp <= 4 * DAY)

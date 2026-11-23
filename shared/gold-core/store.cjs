@@ -1,6 +1,6 @@
 const { DatabaseSync } = require('node:sqlite');
 const { dateAt } = require('./time.cjs');
-const { modelVersionFor, classifyReturn } = require('./outlook.cjs');
+const { modelVersionFor, FORECAST_OFFSETS, classifyReturn, dateAfter } = require('./outlook.cjs');
 const { onSchedule, summarizeChecks } = require('./forecast-verification.cjs');
 
 class Store {
@@ -117,14 +117,17 @@ class Store {
 
   issueForecast(instrument, origin, quote, forecast, issuedAt, canIssue = true) {
     const currentVersion = modelVersionFor(instrument);
+    const lastTarget = dateAfter(origin, FORECAST_OFFSETS.at(-1));
+    const visible = (day) => day.date > origin && day.date <= lastTarget;
+    const days = forecast?.days.filter(visible);
     let version = currentVersion;
-    // 周大福新模型可在升级当日独立发行；若无法试算，优先找本版已发行的记录。
-    if (instrument !== 'ctf' || !forecast) {
+    // 新模型可在升级当日独立发行；若无法试算，优先找本版已发行的记录。
+    if (!forecast) {
       const archived = this.db.prepare(`
         SELECT model_version AS version FROM forecast_checks
         WHERE instrument = ? AND origin = ?
         ORDER BY (model_version = ?) DESC, issued_at, rowid LIMIT 1
-      `).get(instrument, origin, instrument === 'ctf' ? currentVersion : '');
+      `).get(instrument, origin, currentVersion);
       version = archived?.version ?? currentVersion;
     }
     const getIssued = this.db.prepare(`
@@ -134,7 +137,7 @@ class Store {
     const get = () => getIssued.all(version, instrument, origin);
     let existing = get();
     const ready = canIssue && quote?.date === origin && quote.slot === origin && dateAt(quote.fetchedAt) === origin &&
-      dateAt(issuedAt) === origin && forecast?.anchor.fromQuote && forecast.days.some((day) => day.probabilities);
+      dateAt(issuedAt) === origin && forecast?.anchor.fromQuote && days.some((day) => day.probabilities);
     if (!existing.length && ready) {
       this.commit(() => {
         const save = this.db.prepare(`
@@ -142,24 +145,25 @@ class Store {
           (model_version, instrument, origin, target, issued_at, origin_fetched_at, origin_price, estimate)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        for (const day of forecast.days) {
+        for (const day of days) {
           save.run(version, instrument, origin, day.date, issuedAt, quote.fetchedAt, quote.price, JSON.stringify(day));
         }
       });
       existing = get();
     }
-    if (!existing.length) return forecast ? { ...forecast, provisional: true } : forecast;
+    if (!existing.length) return forecast ? { ...forecast, days, provisional: true } : forecast;
     return {
       ...forecast,
       version, provisional: false,
       anchor: { date: origin, price: existing[0].price, fromQuote: existing[0].price === quote?.price && quote?.date === origin },
       factors: forecast?.factors ?? [],
-      days: existing.map((row) => JSON.parse(row.estimate)),
+      // 旧版七日预测继续按实际目标日结算，当前快照只显示未来三天。
+      days: existing.map((row) => JSON.parse(row.estimate)).filter(visible),
     };
   }
 
   forecastStats(instrument, version = modelVersionFor(instrument)) {
-    const offsets = [1, 3, 7];
+    const offsets = [...FORECAST_OFFSETS, 7];
     const rows = this.db.prepare(`
       SELECT origin, target, issued_at AS issuedAt, origin_fetched_at AS originFetchedAt, estimate, actual,
         origin_price AS originPrice, target_price AS targetPrice,

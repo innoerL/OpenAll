@@ -3,6 +3,7 @@ const RAIL_HEIGHT = 68;
 const SNAP_DISTANCE = 18;
 const HOVER_DELAY = 80;
 const HIDE_DELAY = 340;
+const OPENING_HOLD = 15000;
 const RAIL_INSET = 2;
 
 function edgeSide(bounds, area, distance = SNAP_DISTANCE) {
@@ -45,6 +46,7 @@ class EdgeDock {
     this.hoverSince = null;
     this.leftSince = null;
     this.moving = false;
+    this.openingUntil = null;
 
     window.on('will-move', () => {
       if (this.collapsed) return;
@@ -73,22 +75,28 @@ class EdgeDock {
     return this.screen.getDisplayMatching(bounds).workArea;
   }
 
+  beginOpening() {
+    this.openingUntil = this.clock() + OPENING_HOLD;
+    this.leftSince = null;
+  }
+
   checkPlacement() {
     if (!this.enabled || this.collapsed || this.window.isMinimized()) return;
     const bounds = this.window.getBounds();
     this.side = edgeSide(bounds, this.area(bounds), this.side ? 34 : SNAP_DISTANCE);
     this.leftSince = null;
-    if (this.side) {
+    if (this.side && this.openingUntil === null) {
       this.collapse(true);
     } else {
       this.syncOnTop();
-      this.motion?.(null, false);
+      this.motion?.(this.side, false);
     }
   }
 
   setEnabled(value) {
     this.enabled = value;
     if (!value) {
+      this.openingUntil = null;
       if (this.collapsed) this.expand();
       this.side = null;
       this.leftSince = null;
@@ -179,9 +187,10 @@ class EdgeDock {
   }
 
   poll() {
+    const now = this.clock();
+    if (this.openingUntil !== null && now >= this.openingUntil) this.openingUntil = null;
     if (!this.side || this.moving || this.window.isDestroyed() || this.window.isMinimized()) return;
     const cursor = this.screen.getCursorScreenPoint();
-    const now = this.clock();
     if (this.collapsed) {
       const inside = contains(cursor, this.rail.getBounds(), RAIL_INSET, 0);
       if (!inside) this.requireExit = false;
@@ -190,7 +199,7 @@ class EdgeDock {
     } else {
       const inside = contains(cursor, this.window.getBounds(), 5);
       this.leftSince = inside ? null : this.leftSince ?? now;
-      if (this.leftSince !== null && now - this.leftSince >= HIDE_DELAY) this.collapse();
+      if (this.openingUntil === null && this.leftSince !== null && now - this.leftSince >= HIDE_DELAY) this.collapse();
     }
   }
 

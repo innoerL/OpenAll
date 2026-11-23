@@ -28,6 +28,7 @@ public static class OpenAllNative {
  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h,StringBuilder b,int n);
  [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
+ [DllImport("user32.dll")] public static extern bool IsClipboardFormatAvailable(uint format);
  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public InputUnion u; }
  [StructLayout(LayoutKind.Explicit)] public struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
  [StructLayout(LayoutKind.Sequential)] public struct MOUSEINPUT { public int dx,dy;public uint mouseData,dwFlags,time;public UIntPtr dwExtraInfo; }
@@ -42,6 +43,19 @@ public static class OpenAllNative {
 '@
 Emit @{event='boot';data=@{stage='interop';elapsedMS=$bootClock.ElapsedMilliseconds}}
 function WaitModifiers { for($attempt=0;$attempt -lt 40;$attempt++){if((([OpenAllNative]::GetAsyncKeyState(17) -bor [OpenAllNative]::GetAsyncKeyState(18) -bor [OpenAllNative]::GetAsyncKeyState(16)) -band 0x8000) -eq 0){break};Start-Sleep -Milliseconds 20} }
+function ReadClipboardChange($sequence) {
+ $change=@{sequence=$sequence}
+ if([OpenAllNative]::IsClipboardFormatAvailable(15)){
+  $change.files=[string[]][Windows.Forms.Clipboard]::GetFileDropList()
+  if($change.files.Length -eq 0){return $null}
+ }
+ if($sequence -eq [OpenAllNative]::GetClipboardSequenceNumber()){return $change}
+}
+function WriteClipboardFiles([string[]]$paths) {
+ $collection=[Collections.Specialized.StringCollection]::new()
+ $collection.AddRange($paths)
+ [Windows.Forms.Clipboard]::SetFileDropList($collection)
+}
 # 独立验证只在隔离 CI 中调用，原剪贴板在 finally 中恢复。
 function TestNative {
  $original=[Windows.Forms.Clipboard]::GetDataObject();$saved=[Windows.Forms.DataObject]::new()
@@ -56,15 +70,21 @@ function TestNative {
   $textBox.Select(8,6);[void][OpenAllNative]::Key(0x43)
   for($i=0;$i -lt 30;$i++){[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 20;if([Windows.Forms.Clipboard]::GetText() -eq 'Native'){break}}
   if([Windows.Forms.Clipboard]::GetText() -ne 'Native'){throw 'SendInput 选区复制验证失败'}
-  $files=[Collections.Specialized.StringCollection]::new();[void]$files.Add($file);[Windows.Forms.Clipboard]::SetFileDropList($files)
-  if([Windows.Forms.Clipboard]::GetFileDropList()[0] -ne $file){throw '文件剪贴板验证失败'}
+  [string[]]$paths=@($file)
+  foreach($count in 1,2){
+   if($count -eq 2){$paths+=[IO.Path]::GetDirectoryName($file)}
+   WriteClipboardFiles $paths
+   $change=ReadClipboardChange ([OpenAllNative]::GetClipboardSequenceNumber())
+   $wire=($change | ConvertTo-Json -Compress) | ConvertFrom-Json
+   if($wire.files -isnot [Array] -or $wire.files.Length -ne $paths.Length -or ($wire.files -join '|') -ne ($paths -join '|')){throw 'CF_HDROP 文件数组回写验证失败'}
+  }
   $bitmap=[Drawing.Bitmap]::new(760,160);$graphics=[Drawing.Graphics]::FromImage($bitmap);$font=[Drawing.Font]::new('Arial',32,[Drawing.FontStyle]::Regular)
   try {$graphics.Clear([Drawing.Color]::White);$graphics.DrawString('OPENALL WINDOWS OCR 12345',$font,[Drawing.Brushes]::Black,[Drawing.PointF]::new(12,45));[Windows.Forms.Clipboard]::SetImage($bitmap);$fromClipboard=[Windows.Forms.Clipboard]::GetImage();if($fromClipboard.Width -ne 760){throw '图片剪贴板验证失败'};$fromClipboard.Dispose();$stream=[IO.MemoryStream]::new();try{$bitmap.Save($stream,[Drawing.Imaging.ImageFormat]::Png);$png=[Convert]::ToBase64String($stream.ToArray())}finally{$stream.Dispose()}}finally{$graphics.Dispose();$font.Dispose();$bitmap.Dispose()}
   return @{paste=$true;selection=$true;files=$true;image=$true;ocrImage=$png;inputSize=[Runtime.InteropServices.Marshal]::SizeOf([type][OpenAllNative+INPUT])}
  } finally {$form.Close();$form.Dispose();[IO.File]::Delete($file);if($original){[Windows.Forms.Clipboard]::SetDataObject($saved,$true)}else{[Windows.Forms.Clipboard]::Clear()}}
 }
 $lastHandle = [IntPtr]::Zero
-$lastSequence = [OpenAllNative]::GetClipboardSequenceNumber()
+$lastSequence = $null
 $keys = @{ Alt=18; Control=17; Shift=16; Super=91 }
 $down = @{}; $released=@{}; $used=@{}
 [OpenAllNative]::StartReader()
@@ -90,13 +110,13 @@ while ($true) {
       if(-not [OpenAllNative]::Key(0x43)){throw '无法发送复制按键'}
       for($attempt=0;$attempt -lt 30;$attempt++){Start-Sleep -Milliseconds 20;if([OpenAllNative]::GetClipboardSequenceNumber() -ne $before){break}}
       if([OpenAllNative]::GetClipboardSequenceNumber() -eq $before){$result=@{kind='text';text=''}}
-      elseif([Windows.Forms.Clipboard]::ContainsFileDropList()){$result=@{kind='files';files=@([Windows.Forms.Clipboard]::GetFileDropList())}}
+      elseif([Windows.Forms.Clipboard]::ContainsFileDropList()){$result=@{kind='files';files=[string[]][Windows.Forms.Clipboard]::GetFileDropList()}}
       elseif([Windows.Forms.Clipboard]::ContainsImage()){$image=[Windows.Forms.Clipboard]::GetImage();$stream=[IO.MemoryStream]::new();try{$image.Save($stream,[Drawing.Imaging.ImageFormat]::Png);$result=@{kind='image';dataUrl='data:image/png;base64,'+[Convert]::ToBase64String($stream.ToArray())}}finally{$stream.Dispose();$image.Dispose()}}
       else{$result=@{kind='text';text=[Windows.Forms.Clipboard]::GetText()}}
-     } finally {if($original){[Windows.Forms.Clipboard]::SetDataObject($saved,$true)}else{[Windows.Forms.Clipboard]::Clear()}}
+     } finally {if($original){[Windows.Forms.Clipboard]::SetDataObject($saved,$true)}else{[Windows.Forms.Clipboard]::Clear()};$lastSequence=[OpenAllNative]::GetClipboardSequenceNumber()}
     }
-    'files' { $result=@([Windows.Forms.Clipboard]::GetFileDropList()) }
-    'writeFiles' { $collection=[Collections.Specialized.StringCollection]::new();foreach($file in $payload.files){[void]$collection.Add([string]$file)};[Windows.Forms.Clipboard]::SetFileDropList($collection);$result=$true }
+    'files' { $result=[string[]][Windows.Forms.Clipboard]::GetFileDropList() }
+    'writeFiles' { WriteClipboardFiles $payload.files;$result=$true }
     'quit' { Emit @{id=$request.id;result=$true};exit }
     default { throw '未知原生操作' }
    }
@@ -107,7 +127,16 @@ while ($true) {
  $h=[OpenAllNative]::GetForegroundWindow()
  if($h -ne $lastHandle){$lastHandle=$h;Emit @{event='foreground';data=@{handle=$h.ToInt64().ToString();pid=[OpenAllNative]::ProcessId($h);name=[OpenAllNative]::ProcessName($h);exePath=[OpenAllNative]::ProcessPath($h)}}}
  $seq=[OpenAllNative]::GetClipboardSequenceNumber()
- if($seq -ne $lastSequence){$lastSequence=$seq;Emit @{event='clipboard';data=$seq}}
+ if($seq -ne $lastSequence){
+  # 在同一次变更中读取 CF_HDROP，避免稍后查询时路径已被下一次复制覆盖。
+  try {
+   $change=ReadClipboardChange $seq
+   if($null -ne $change){
+    Emit @{event='clipboard';data=$change}
+    $lastSequence=$seq
+   }
+  } catch { }
+ }
  $now=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
  foreach($name in $keys.Keys){
   $pressed=([OpenAllNative]::GetAsyncKeyState($keys[$name]) -band 0x8000) -ne 0

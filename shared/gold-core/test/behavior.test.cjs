@@ -147,7 +147,7 @@ test('保存第一次同日报价展望，只有准确目标日的取价能回�
   const first = { date: '2026-11-21', direction: 'up', probabilities, confidence: 60 };
   const forecast = {
     anchor: { date: origin, price: 100, fromQuote: true },
-    days: [first, { date: '2026-11-22', sparse: true }, { ...first, date: '2026-11-23' }, { ...first, date: '2026-11-27' }],
+    days: [first, { date: '2026-11-22', sparse: true }, { ...first, date: '2026-11-23' }],
   };
   store.saveQuote('ctf', origin, initial, started);
   store.issueForecast('ctf', origin, store.latestQuote('ctf'), forecast, started + 5000);
@@ -161,13 +161,12 @@ test('保存第一次同日报价展望，只有准确目标日的取价能回�
   save('2026-11-21', 1, 80, 5000);
   save('2026-11-22', 2, 120);
   save('2026-11-23', 3, 99, HALF_HOUR);
-  save('2026-11-27', 7, 100);
   const result = store.forecastStats('ctf');
   assert.equal(result.byHorizon[1].hit, 1);
   assert.equal(result.byHorizon[1].meanConfidence, .6);
   assert(Math.abs(result.byHorizon[1].brier - .24) < 1e-10);
   assert.equal(result.byHorizon[3].total, 0);
-  assert.equal(result.byHorizon[7].hit, 0);
+  assert.equal(result.byHorizon[7].total, 0);
   assert.equal(result.late, 1);
   assert.equal(store.db.prepare('SELECT actual FROM forecast_checks WHERE target = ?').get('2026-11-22').actual, null);
 });

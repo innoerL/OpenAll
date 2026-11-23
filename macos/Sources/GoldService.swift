@@ -325,6 +325,43 @@ final class GoldDatabase {
 
     private func failure() -> NSError { goldError(handle.map { String(cString: sqlite3_errmsg($0)) } ?? "无法打开金价数据库") }
 
+    private static func validateLegacyCopy(_ db: OpaquePointer) throws {
+        func values(_ sql: String) throws -> [String] {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { throw goldError("旧数据库结构无效") }
+            defer { sqlite3_finalize(statement) }
+            var rows: [String] = []
+            var status = sqlite3_step(statement)
+            while status == SQLITE_ROW {
+                guard let value = sqlite3_column_text(statement, 0) else { throw goldError("旧数据库结构无效") }
+                rows.append(String(cString: value))
+                status = sqlite3_step(statement)
+            }
+            guard status == SQLITE_DONE else { throw goldError("无法校验旧数据库") }
+            return rows
+        }
+        guard try values("PRAGMA quick_check") == ["ok"] else { throw goldError("旧库未通过 SQLite 完整性检查") }
+        // 按列顺序核对已发布库的列名、声明类型及复合主键序号。早期四表库尚无预测表。
+        let layouts = [
+            "jobs": "kind TEXT 1, instrument TEXT 2, slot TEXT 3, status TEXT 0, retry_at INTEGER 0, detail TEXT 0",
+            "quotes": "instrument TEXT 1, slot TEXT 2, fetched_at INTEGER 0, price REAL 0, date TEXT 0, quote_time TEXT 0, source TEXT 0, note TEXT 0",
+            "history": "instrument TEXT 1, date TEXT 2, price REAL 0, source TEXT 0",
+            "settings": "key TEXT 1, value TEXT 0",
+            "forecast_checks": "model_version TEXT 1, instrument TEXT 2, origin TEXT 3, target TEXT 4, issued_at INTEGER 0, origin_fetched_at INTEGER 0, origin_price REAL 0, estimate TEXT 0, target_fetched_at INTEGER 0, target_price REAL 0, actual TEXT 0"
+        ]
+        let tables = Set(try values("SELECT name FROM sqlite_master WHERE type='table'"))
+        for (table, expected) in layouts {
+            if table == "forecast_checks", !tables.contains(table) { continue }
+            let columns = try values("SELECT name || ' ' || type || ' ' || pk FROM pragma_table_info('\(table)') ORDER BY cid")
+            guard tables.contains(table), columns.joined(separator: ", ") == expected else { throw goldError("旧库的 \(table) 表结构不兼容") }
+        }
+        guard try values("SELECT 1 FROM settings WHERE NOT json_valid(value) LIMIT 1").isEmpty else { throw goldError("旧库设置包含损坏的 JSON") }
+        if tables.contains("forecast_checks") {
+            guard try values("SELECT 1 FROM forecast_checks WHERE CASE WHEN json_valid(estimate) THEN json_type(estimate) <> 'object' ELSE 1 END LIMIT 1").isEmpty
+            else { throw goldError("旧库预测包含损坏的记录") }
+        }
+    }
+
     static func importLegacy(destination: URL, legacyDirectory: URL?) throws -> Bool {
         let manager = FileManager.default
         guard !manager.fileExists(atPath: destination.path), let legacyDirectory else { return false }
@@ -340,12 +377,6 @@ final class GoldDatabase {
         }
         do {
             guard sqlite3_open_v2(source.path, &old, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK, let old else { throw goldError("无法只读打开旧数据库") }
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(old, "SELECT name FROM sqlite_master WHERE type = 'table'", -1, &statement, nil) == SQLITE_OK, let statement else { throw goldError("旧数据库结构无效") }
-            var names = Set<String>()
-            while sqlite3_step(statement) == SQLITE_ROW { names.insert(String(cString: sqlite3_column_text(statement, 0))) }
-            sqlite3_finalize(statement)
-            guard Set(["jobs", "quotes", "history", "settings", "forecast_checks"]).isSubset(of: names) else { throw goldError("旧数据库不是兼容的金价桌台记录") }
             guard sqlite3_open_v2(temporary.path, &copied, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
                   let copied, let backup = sqlite3_backup_init(copied, "main", old, "main") else { throw goldError("无法创建旧记录副本") }
             let deadline = Date().addingTimeInterval(5)
@@ -356,6 +387,8 @@ final class GoldDatabase {
             } while (status == SQLITE_OK || status == SQLITE_BUSY || status == SQLITE_LOCKED) && Date() < deadline
             let finish = sqlite3_backup_finish(backup)
             guard status == SQLITE_DONE, finish == SQLITE_OK else { throw goldError("旧数据库忙碌或无法完成一致性备份") }
+            // 校验即将发布的同一份快照，原应用仍可继续写入自己的 WAL。
+            try validateLegacyCopy(copied)
             // 先把副本收束为单文件，避免发布后仍依赖临时路径的 WAL / SHM。
             guard sqlite3_exec(copied, "PRAGMA journal_mode=DELETE", nil, nil, nil) == SQLITE_OK else { throw goldError("无法收束导入副本") }
             // 原子发布且不覆盖另一个启动实例刚创建的记录。

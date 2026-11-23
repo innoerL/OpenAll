@@ -109,6 +109,8 @@ jobs:
           $env:OPENALL_TOOL_SCREEN_DIR = Join-Path $PWD 'artifacts/tools'
           npx electron test/tool-ui.test.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx electron test/clipboard-files-electron.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node test/native-windows.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node test/native-file-search-windows.js
