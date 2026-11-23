@@ -236,7 +236,7 @@ final class GoldEdgeDock {
 
     func resume() {
         guard suspended || collapsed else { return }
-        openingUntil = ProcessInfo.processInfo.systemUptime + 15
+        openingUntil = ProcessInfo.processInfo.systemUptime + 3
         suspended = false
         leftSince = nil
         checkPlacement()

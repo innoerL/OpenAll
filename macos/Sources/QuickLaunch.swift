@@ -697,7 +697,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             default: break
             }
         }
-        clipboardWindow.onOpenActions = { [weak self] item in self?.showClipboardItemActions(item) }
+        clipboardWindow.onOpenActions = { [weak self] content in self?.selectionWindow.show(content) }
         clipboardWindow.onCompareText = { [weak self] left, right in self?.comparer.show(left, right: right) }
         snippets.onChange = { [weak self] in self?.update() }
         _ = clipboardStore.addObserver { [weak self] in self?.syncStackPasteHotkey() }
@@ -1627,7 +1627,7 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     }
     @objc private func showSelectionActions() {
         if let item = clipboardWindow.currentCard {
-            showClipboardItemActions(item)
+            clipboardWindow.openContentActions(for: item)
             return
         }
         if selectionWindow.isVisible { selectionWindow.hide(); return }
@@ -1705,19 +1705,6 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
                 try? process.run()
             }
         }
-    }
-
-    private func showClipboardItemActions(_ item: ClipboardRecord) {
-        let content: SelectedContent
-        switch item.kind {
-        case "image":
-            guard let url = clipboardStore.imageURL(for: item), let image = NSImage(contentsOf: url) else { return }
-            content = .image(image)
-        case "files": content = .files(item.filePaths.map { URL(fileURLWithPath: $0) })
-        default: content = .text(item.text)
-        }
-        clipboardWindow.dismiss()
-        selectionWindow.show(content)
     }
 
     @objc private func showSearchResultActions() {
@@ -2816,12 +2803,24 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
             note.font = .systemFont(ofSize: 11)
             note.textColor = .secondaryLabelColor
             body.addSubview(note)
+            body.addSubview(settingLabel("卡片字号", y: 66))
+            let cardTextSize = NSPopUpButton(frame: NSRect(x: 324, y: 60, width: 240, height: 28))
+            for option in ClipboardCardTextSize.allCases {
+                cardTextSize.addItem(withTitle: option.title)
+                cardTextSize.lastItem?.representedObject = option.rawValue
+            }
+            cardTextSize.selectItem(withTitle: preferences.cardTextSize.title)
+            cardTextSize.target = self
+            cardTextSize.action = #selector(clipboardCardTextSizeChanged(_:))
+            cardTextSize.setAccessibilityLabel("卡片字号")
+            WindowChrome.stylePopUp(cardTextSize)
+            body.addSubview(cardTextSize)
             let open = NSButton(title: "打开剪贴板历史", target: self, action: #selector(showClipboard))
-            open.frame = NSRect(x: 28, y: 54, width: 220, height: 28)
+            open.frame = NSRect(x: 28, y: 22, width: 220, height: 28)
             WindowChrome.styleAction(open)
             body.addSubview(open)
             let clear = NSButton(title: "清理历史…  ▾", target: self, action: #selector(showClearMenu(_:)))
-            clear.frame = NSRect(x: 260, y: 54, width: 142, height: 28)
+            clear.frame = NSRect(x: 260, y: 22, width: 142, height: 28)
             WindowChrome.styleAction(clear)
             clear.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.07).cgColor
             clear.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.22).cgColor
@@ -3265,6 +3264,13 @@ final class Launcher: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTable
     @objc private func clipboardSizeChanged(_ sender: NSPopUpButton) {
         var next = clipboardStore.preferences
         next.maxItemBytes = (sender.selectedItem?.representedObject as? Int ?? 20) * 1_000_000
+        clipboardStore.updatePreferences(next)
+    }
+
+    @objc private func clipboardCardTextSizeChanged(_ sender: NSPopUpButton) {
+        guard let raw = sender.selectedItem?.representedObject as? String, let size = ClipboardCardTextSize(rawValue: raw) else { return }
+        var next = clipboardStore.preferences
+        next.cardTextSize = size
         clipboardStore.updatePreferences(next)
     }
     @objc private func showExcludedApplications(_ sender: NSButton) {

@@ -8,6 +8,28 @@ enum ClipboardShelfLayout: String, Codable {
     case cards, list
 }
 
+enum ClipboardCardTextSize: String, Codable, CaseIterable {
+    case large, medium, small
+
+    var title: String {
+        switch self {
+        case .large: return "大"
+        case .medium: return "中"
+        case .small: return "小"
+        }
+    }
+
+    var points: CGFloat {
+        switch self {
+        case .large: return 14
+        case .medium: return 13
+        case .small: return 12
+        }
+    }
+
+    var monospacedPoints: CGFloat { points - 2 }
+}
+
 struct ClipboardPreferences: Codable {
     var enabled = true
     var maxItems = 300
@@ -17,6 +39,7 @@ struct ClipboardPreferences: Codable {
     var ignoreApplications: [String] = []
     var plainTextByDefault = false
     var shelfLayout: ClipboardShelfLayout = .cards
+    var cardTextSize: ClipboardCardTextSize = .large
     var pausedUntil: Date? = nil
     var pinboards: [String] = ["收藏"]
     var pinboardColors: [String: String] = ["收藏": "blue"]
@@ -32,6 +55,7 @@ struct ClipboardPreferences: Codable {
         ignoreApplications = try values.decodeIfPresent([String].self, forKey: .ignoreApplications) ?? []
         plainTextByDefault = try values.decodeIfPresent(Bool.self, forKey: .plainTextByDefault) ?? false
         shelfLayout = (try? values.decode(ClipboardShelfLayout.self, forKey: .shelfLayout)) ?? .cards
+        cardTextSize = (try? values.decode(ClipboardCardTextSize.self, forKey: .cardTextSize)) ?? .large
         pausedUntil = try values.decodeIfPresent(Date.self, forKey: .pausedUntil)
         pinboards = try values.decodeIfPresent([String].self, forKey: .pinboards) ?? ["收藏"]
         pinboardColors = try values.decodeIfPresent([String: String].self, forKey: .pinboardColors) ?? ["收藏": "blue"]

@@ -264,10 +264,13 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         panel?.appearance = OpenAllTheme.appearance
         displayToken += 1
         self.content = content
-        actions = content.map { orderStore.sorted(Self.availableActions(for: $0), category: $0.category) } ?? []
-        otherRecognizedActions = recognized ? actions.filter { $0.kind != .copy && $0.kind != .translate } : []
+        table.deselectAll(nil)
+        let available = content.map { orderStore.sorted(Self.availableActions(for: $0), category: $0.category) } ?? []
+        otherRecognizedActions = recognized ? available.filter { $0.kind != .copy && $0.kind != .translate } : []
+        actions = otherRecognizedActions.isEmpty ? available : available.filter { $0.kind == .copy || $0.kind == .translate }
+        // 改变窗口尺寸会同步请求行视图，先让表格接收新内容的行数。
+        table.reloadData()
         if !otherRecognizedActions.isEmpty {
-            actions = actions.filter { $0.kind == .copy || $0.kind == .translate }
             moreButton.removeAllItems()
             moreButton.addItem(withTitle: "更多操作")
             for (index, action) in otherRecognizedActions.enumerated() {
@@ -340,8 +343,6 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
         status.isHidden = loading
         status.stringValue = loading ? "Esc 取消 · 识别完成后自动显示文字与可用操作" :
             (message ?? (actions.isEmpty ? "Esc 关闭" : "↑↓ 选择　双击或回车执行　Esc 关闭"))
-        table.deselectAll(nil)
-        table.reloadData()
         emptyState.isHidden = !actions.isEmpty
         emptyState.stringValue = loading ? "正在从图片中提取文字…" : "请在原应用中选择文本、图片或文件后重试"
         progress.isHidden = !loading
@@ -542,6 +543,7 @@ final class SelectionActionWindow: NSObject, NSTableViewDataSource, NSTableViewD
     func numberOfRows(in tableView: NSTableView) -> Int { actions.count }
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? { SelectionRowView() }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard actions.indices.contains(row) else { return nil }
         let action = actions[row]
         let cell = NSTableCellView(frame: NSRect(x: 0, y: 0, width: 560, height: 41))
         let iconNames: [SelectionActionKind: String] = [

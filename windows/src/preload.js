@@ -17,6 +17,46 @@ if (process.isMainFrame !== false && process.argv.includes('--openall-page=gold'
 } else if (process.isMainFrame !== false) {
 const backend = require('./backend');
 const diff = require('../assets/diff-core');
+// 每个窗口依次读取和解码可见图片，避免快速滚动时同时保留多张原图。
+let nextFileIcon = Promise.resolve(), thumbnailWorker;
+const { pathToFileURL } = require('node:url');
+const thumbnailWorkerURL = pathToFileURL(require('node:path').join(__dirname, 'clipboard-thumbnail-worker.js'));
+function decodeThumbnail(image, edge) {
+  thumbnailWorker ??= new Worker(thumbnailWorkerURL);
+  const worker = thumbnailWorker;
+  return new Promise(resolve => {
+    const timer = setTimeout(failed, 15000);
+    function finish(value) {
+      clearTimeout(timer);
+      worker.onmessage = worker.onerror = null;
+      resolve(value);
+    }
+    function failed() {
+      worker.terminate();
+      thumbnailWorker = undefined;
+      finish('');
+    }
+    worker.onmessage = event => finish(event.data);
+    worker.onerror = failed;
+    const {bytes, mime} = image;
+    try { worker.postMessage({bytes, mime, edge}, [bytes.buffer]); } catch { failed(); }
+  });
+}
+async function readFileIcon(payload) {
+  const result = await ipcRenderer.invoke('clipboard-action', 'fileIcon', payload);
+  if (!result) return null;
+  let thumbnail = '';
+  if (result.image) {
+    try { thumbnail = await decodeThumbnail(result.image, result.edge); } catch { }
+  }
+  return {kind:result.kind, icon:result.icon, thumbnail};
+}
+function clipboardAction(action, payload) {
+  if (action !== 'fileIcon') return ipcRenderer.invoke('clipboard-action', action, payload);
+  const request = nextFileIcon.then(() => readFileIcon(payload));
+  nextFileIcon = request.catch(() => {});
+  return request;
+}
 contextBridge.exposeInMainWorld('openall', {
   diff:{align:diff.align},
   backend:{configDiff:backend.configDiff,parseLogs:backend.parseLogs,logFields:backend.logFields,logGroups:backend.logGroups,restoreSQL:backend.restoreSQL,explain:backend.explain},
@@ -26,7 +66,7 @@ contextBridge.exposeInMainWorld('openall', {
   openTool:(page,initialValue)=>ipcRenderer.invoke('open-tool',page,initialValue),
   windowAction:(action,payload)=>ipcRenderer.invoke('window-action',action,payload),
   history:()=>ipcRenderer.invoke('get-clipboard'),copyItem:item=>ipcRenderer.invoke('copy-item',item),deleteItem:hash=>ipcRenderer.invoke('delete-item',hash),
-  clipboardAction:(action,payload)=>ipcRenderer.invoke('clipboard-action',action,payload),
+  clipboardAction,
   copyText:text=>ipcRenderer.invoke('copy-text',text),readText:()=>ipcRenderer.invoke('read-text'),chooseFile:()=>ipcRenderer.invoke('choose-file'),
   fileAction:(action,payload)=>ipcRenderer.invoke('file-action',action,payload),
   stack:(action,payload)=>ipcRenderer.invoke('stack-action',action,payload),selection:(action,payload)=>ipcRenderer.invoke('selection-action',action,payload),

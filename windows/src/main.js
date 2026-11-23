@@ -6,7 +6,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { JSONStore, ClipboardStore, SnippetStore, normalizeSettings, expandSnippet, snippetExpansionParts } = require('./stores');
 const { commands, identity } = require('./search-engine');
-const { previewLimit, previewKinds, fileEntry, filePreview } = require('./clipboard-files');
+const { previewLimit, previewKinds, fileEntry, filePreview, imageTypes, readPreviewImage } = require('./clipboard-files');
 const { NativeBridge, WorkerClient, recognizeImage } = require('./native-services');
 const { Updater }=require('./native-updater');
 const { ShortcutRecording }=require('./native-shortcut-recording');
@@ -24,6 +24,10 @@ const snippetStore=new SnippetStore(store);
 const updater=new Updater(store,app.getVersion(),{launch:async file=>{if(testMode)throw Error('测试模式禁止启动安装器');if(process.platform!=='win32')throw Error('安装器仅适用于 Windows');const error=await shell.openPath(file);if(error)throw Error(error);}});
 let ranking=store.read('search-ranking',{usage:{},rules:{}});
 const native=new NativeBridge();
+const inspectClipboardFile = process.platform === 'win32' ? file => {
+ if (!native.child && testMode) native.start();
+ return native.request('localPreviewType', {path:file});
+} : undefined;
 const windows=new Map(),windowContexts=new Map();
 const workers=[];
 let goldServiceReady,goldWindowController;
@@ -46,7 +50,8 @@ function currentContext(win){return windowContexts.get(win?.id)||{};}
 function windowState(win){return {maximized:win.isMaximized(),resizable:win.isResizable()};}
 function canReceivePaste(page){return page !== 'clipboardPreview' && !transient.has(page);}
 function rememberTarget(){const focused=BrowserWindow.getFocusedWindow();const ctx=currentContext(focused);if(focused&&canReceivePaste(ctx.page)){pasteTarget={windowId:focused.id};return;}if(native.foreground.pid&&native.foreground.pid!==process.pid){lastExternal=native.foreground;pasteTarget={...lastExternal};}}
-function dimensions(page){const sizes={search:[720,76],clipboard:[screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea.width,330],stack:[340,174],clipboardPreview:[700,270],translate:[580,320],selection:[640,510],json:[960,600],comparison:[1040,600],configFormat:[960,420],sqlFormat:[960,420],markdown:[980,540],manual:[980,540],unicode:[800,380],id:[660,520],image:[900,540],converter:[980,610],settings:[930,560],configDiff:[1000,680],sqlRestore:[1000,530],logTimeline:[1000,680],explain:[1000,680]};return sizes[page]||[980,540];}
+const clipboardShelfHeight = 300;
+function dimensions(page){const sizes={search:[720,76],clipboard:[screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea.width,clipboardShelfHeight],stack:[340,174],clipboardPreview:[700,270],translate:[580,320],selection:[640,510],json:[960,600],comparison:[1040,600],configFormat:[960,420],sqlFormat:[960,420],markdown:[980,540],manual:[980,540],unicode:[800,380],id:[660,520],image:[900,540],converter:[980,610],settings:[930,560],configDiff:[1000,680],sqlRestore:[1000,530],logTimeline:[1000,680],explain:[1000,680]};return sizes[page]||[980,540];}
 function position(win,page){const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;const [width,height]=win.getSize();if(page==='clipboard')win.setBounds({x:area.x,y:area.y+area.height-height,width:area.width,height});else if(page==='stack')win.setPosition(area.x+area.width-width-24,area.y+24);else if(page==='search')win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+Math.max(80,area.height*.22)));else win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+(area.height-height)/2));}
 async function getGoldService(){
  if(app.isQuitting)throw Error('OpenAll 正在退出');
@@ -75,7 +80,7 @@ async function createWindow(rawPage,initialValue,options={}){
  const [width,defaultHeight]=dimensions(page),isTransient=transient.has(page);
  const unicodeInput = page === 'unicode' ? (typeof initialValue === 'string' ? initialValue : initialValue?.text || '') : '';
  const height = page === 'unicode' ? (unicodeInput.length <= 240 && unicodeInput.split('\n',4).length <= 3 ? 306 : 440) : defaultHeight;
- const win=new BrowserWindow({width,height,...(gold?goldPlacement(gold):{}),minWidth:gold?345:page==='search'?720:page==='clipboard'?400:page==='stack'?340:page==='translate'?580:480,minHeight:gold?396:page==='search'?76:page==='clipboard'?330:page==='stack'?174:page==='selection'||page==='clipboardPreview'?180:page==='translate'?320:300,
+ const win=new BrowserWindow({width,height,...(gold?goldPlacement(gold):{}),minWidth:gold?345:page==='search'?720:page==='clipboard'?400:page==='stack'?340:page==='translate'?580:480,minHeight:gold?396:page==='search'?76:page==='clipboard'?clipboardShelfHeight:page==='stack'?174:page==='selection'||page==='clipboardPreview'?180:page==='translate'?320:300,
    frame:false,transparent:isTransient,backgroundColor:gold?gold.snapshot().theme.background:isTransient?'#00000000':settings.backgroundHex,show:false,title:gold?'OpenAll · 金价':page==='search'?'OpenAll':(commands.find(x=>x.id===page)?.title||'OpenAll'),
    skipTaskbar:isTransient,alwaysOnTop:gold?gold.snapshot().pinned:isTransient,resizable:!isTransient,hasShadow:true,icon:path.join(__dirname,'../assets/icon.png'),
    webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:!!gold,backgroundThrottling:false,additionalArguments:gold?['--openall-page=gold']:[]}});
@@ -152,7 +157,7 @@ function captureClipboard(change) {
    if (!record) return;
    changedClipboard();
    if (record.kind === 'image') queueOCR(record);
-   Promise.all([fileIcon(sourcePath, true), record.kind === 'files' ? previewKinds(record.files) : undefined])
+   Promise.all([fileIcon(sourcePath, true), record.kind === 'files' ? previewKinds(record.files, inspectClipboardFile) : undefined])
     .then(([sourceIcon, fileKinds]) => {
      if ((!sourceIcon && !fileKinds) || !clips.records.includes(record)) return;
      clips.change([record.id], current => {
@@ -266,11 +271,22 @@ async function windowAction(event,action,payload={}){
 }
 async function clipboardAction(event,action,payload={}){
  if(action==='fileIcon'){
-   if(event.sender!==windows.get('clipboard')?.webContents||event.senderFrame!==event.sender.mainFrame)return null;
-   const record=clips.records.find(item=>item.id===payload.id), index=payload.index;
+   const detail = event.sender === windows.get('clipboardPreview')?.webContents;
+   if ((!detail && event.sender !== windows.get('clipboard')?.webContents) || event.senderFrame !== event.sender.mainFrame) return null;
+   const record=clips.records.find(item=>item.id===payload?.id), index=payload?.index;
    if(record?.kind!=='files'||!Array.isArray(record.files)||!Number.isInteger(index)||index<0||index>=Math.min(previewLimit,record.files.length))return null;
-   const file=record.files[index], {kind,systemIcon}=await filePreview(file,record.fileKinds?.[index]);
-   return {kind,icon:systemIcon?await fileIcon(file,true,'normal'):''};
+   const file = record.files[index];
+   if (detail) {
+     const bound = currentContext(windowFor(event)).initialValue;
+     if (bound?.id !== record.id || bound.kind !== 'files' || record.files.length !== 1) return null;
+     if (!imageTypes[path.extname(file).toLowerCase()]) return {kind:'file', icon:'', thumbnail:''};
+   }
+   const {kind,systemIcon,mime} = await filePreview(file,record.fileKinds?.[index],inspectClipboardFile);
+   const [icon, image] = await Promise.all([
+     !detail && systemIcon ? fileIcon(file,true,'normal') : '',
+     mime ? readPreviewImage(file,mime) : null,
+   ]);
+   return {kind, icon, image, edge:detail ? 1280 : 320};
  }
  if(action==='setLayout'){
    if(!['cards','list'].includes(payload.layout))throw Error('未知的剪贴板布局');
@@ -289,7 +305,23 @@ async function clipboardAction(event,action,payload={}){
  case 'copy':case 'paste':{let record;if(selected.length===1)record=await clips.full(selected[0].id);else if(selected.length>1){const all=await Promise.all(selected.map(x=>clips.full(x.id)));if(all.every(x=>x.kind==='files')){const files=[...new Set(all.flatMap(x=>x.files||[]))];record={kind:'files',files,text:files.join('\n'),value:files.join('\n')};}else{const text=all.map(x=>x.text||x.value).join(payload.separator??'\n');record={kind:'text',text,value:text};}}if(!record)return false;if(action==='paste'&&settings.clipboardPreferences.directPaste)return pasteRecord(record,payload.plain?true:undefined);await writeRecord(record,!!payload.plain);return true;}
  case 'merge':{const records=await Promise.all(selected.map(x=>clips.full(x.id)));if(records.length<2||records.some(x=>x.kind==='image'))throw Error('请选择至少两条文本记录');const text=records.map(x=>x.text??x.value??'').join(payload.separator??'\n');const record=await clips.add({kind:'text',text,value:text,sourceName:'OpenAll',sourceIcon:await fileIcon(process.execPath,true)});if(!record)throw Error('合并内容超过剪贴板单条大小限制');changedClipboard();return record;}
  case 'editPaste':{const text=String(payload.text??'');if(Buffer.byteLength(text)>settings.clipboardPreferences.maxItemBytes)throw Error('文本超过剪贴板单条大小限制');return pasteRecord({kind:'text',text,value:text},true);}
- case 'selection':{const record=await clips.full(ids[0]);if(!record)return false;await createWindow('selection',record.kind==='image'?{kind:'image',dataUrl:'data:image/png;base64,'+record.value}:record.kind==='files'?{kind:'files',files:record.files}:{kind:'text',text:record.text??record.value});return true;}
+ case 'selection':{
+  const sender = windowFor(event);
+  const context = currentContext(sender);
+  const fromPreview = context.page === 'clipboardPreview';
+  const record = fromPreview ? context.initialValue : await clips.full(ids[0]);
+  if (!record?.kind || (fromPreview && record.id !== ids[0] && record.hash !== ids[0])) return false;
+  let content;
+  if (record.kind === 'files') content = {kind:'files', files:record.files};
+  else if (record.kind === 'image') content = {kind:'image', dataUrl:record.dataUrl || 'data:image/png;base64,' + record.value};
+  else content = {kind:'text', text:record.text ?? record.value};
+  await createWindow('selection', content);
+  if (fromPreview && currentContext(sender) === context) {
+   windows.get('clipboard')?.hide();
+   sender.close();
+  }
+  return true;
+ }
  case 'drag':case 'startDrag':{const records=await Promise.all(selected.map(x=>clips.full(x.id)));const files=[];for(const record of records){if(record.kind==='files')files.push(...record.files);else if(record.kind==='image'){const file=path.join(clips.directory,record.hash+'.png');if(!fs.existsSync(file))await fsp.writeFile(file,Buffer.from(record.value,'base64'));files.push(file);}}if(!files.length)return false;const icon=nativeImage.createFromPath(path.join(__dirname,'../assets/icon.png')).resize({width:32,height:32});event.sender.startDrag({files:[...new Set(files)],icon});return true;}
  case 'preview':{const record=await clips.full(ids[0]);if(record)await createWindow('clipboardPreview',record);return !!record;}
  case 'pastePreview':{
@@ -326,7 +358,10 @@ function registerIPC(){
  ipcMain.handle('openall:gold-rail-read',async event=>{authorizeGold(event,'gold-rail');return (await getGoldService()).snapshot().theme;});
  ipcMain.handle('openall:gold-rail-expand',event=>{authorizeGold(event,'gold-rail');goldWindowController.expand();return true;});
  ipcMain.handle('get-settings',()=>settings);
- ipcMain.handle('set-settings',async(_event,next)=>{const old=settings,merged=normalizeSettings({...settings,...next});const failed=applyShortcuts(merged);if(failed.length){applyShortcuts(old);return {ok:false,failed};}settings=merged;await store.write('settings',settings);if(!testMode)app.setLoginItemSettings({openAtLogin:!!settings.launchAtLogin});clips.cleanup();for(const open of windows.values())if(!transient.has(currentContext(open).page)&&!['gold','gold-rail'].includes(currentContext(open).page))open.setBackgroundColor(settings.backgroundHex);await goldServiceReady?.then(service=>service.publish());broadcast('settings-changed',settings);const changed=['chromeBookmarks','chromeHistory','chromePath','searchFiles','fileSearchFolders'].some(k=>JSON.stringify(old[k])!==JSON.stringify(settings[k]));if(changed)searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError);else updateSearch();return {ok:true};});
+ ipcMain.handle('set-settings',async(_event,next)=>{
+   const old=settings, merged=normalizeSettings({...settings, ...next,
+     clipboardPreferences:{...settings.clipboardPreferences, ...next?.clipboardPreferences}});
+   const failed=applyShortcuts(merged);if(failed.length){applyShortcuts(old);return {ok:false,failed};}settings=merged;await store.write('settings',settings);if(!testMode)app.setLoginItemSettings({openAtLogin:!!settings.launchAtLogin});clips.cleanup();for(const open of windows.values())if(!transient.has(currentContext(open).page)&&!['gold','gold-rail'].includes(currentContext(open).page))open.setBackgroundColor(settings.backgroundHex);await goldServiceReady?.then(service=>service.publish());broadcast('settings-changed',settings);const changed=['chromeBookmarks','chromeHistory','chromePath','searchFiles','fileSearchFolders'].some(k=>JSON.stringify(old[k])!==JSON.stringify(settings[k]));if(changed)searchWorker.call('init',{settings,ranking,snippets:snippetStore.items,testMode}).catch(notifyError);else updateSearch();return {ok:true};});
  ipcMain.handle('search',(_event,query)=>searchWithIcons(query));
  ipcMain.handle('open',(event,item)=>openItem(item,event));
  ipcMain.handle('open-tool',(_event,page,value)=>createWindow(page,value).then(()=>true));

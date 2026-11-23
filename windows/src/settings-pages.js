@@ -47,7 +47,7 @@
     const input=(value,placeholder='')=>h('input',{value:value??'',placeholder,spellcheck:'false'});
     const checkbox=(text,checked,fn)=>{const e=h('input',{type:'checkbox',checked,onchange:()=>fn(e.checked)});return h('label',{class:'checkbox-label'},e,text);};
     async function save(patch,quiet=false) {const r=await api.saveSettings(patch);if(r?.ok===false)throw Error(r.error||('快捷键已占用或设置无效：'+(r.failed||[]).join('、')));prefs=await api.settings();window.OpenAllApp?.applyTheme(prefs);if(!quiet)notify('设置已保存');return prefs;}
-    const saveClip=patch=>save({clipboardPreferences:{...prefs.clipboardPreferences,...patch}});
+    const saveClip=patch=>save({clipboardPreferences:patch});
     function heading(title,subtitle) {content.append(h('h1',{},title));if(subtitle)content.append(h('p',{class:'settings-lead'},subtitle));}
     function bind(input,fn) {input.addEventListener('change',()=>Promise.resolve(fn(input.value)).catch(e=>notify(e.message,true)));return input;}
     function shortcut(key) {
@@ -171,6 +171,8 @@
         });
         content.append(h('div',{class:'recording-settings'},enabled,recording,row('记录安排',pause)),h('hr'),
           checkbox('默认粘贴为纯文本',!!p.plainTextByDefault,value=>saveClip({plainTextByDefault:value})),h('p',{class:'hint small recording-hint'},'关闭时保留复制内容的原有格式。'),h('hr'));
+        const fontSize = select([['large','大'],['medium','中'],['small','小']], p.cardFontSize, value => saveClip({cardFontSize:value}));
+        content.append(row('卡片字号', fontSize));
         content.append(row('保留时间',select([[7,'一周'],[30,'一月'],[90,'三月'],[365,'一年']],p.retentionDays||30,value=>saveClip({retentionDays:Number(value)}))),row('单条内容大小上限',select([5,10,20,50].map(n=>[n,n+' MB']),(p.maxItemBytes||20000000)/1000000,value=>saveClip({maxItemBytes:Number(value)*1000000}))));
         const exclusions = button('编辑排除列表', () => {
           const draft = [...(prefs.clipboardPreferences.ignoreApplications || [])];
@@ -213,7 +215,7 @@
             if (filename.value.trim() && !add()) return;
             apply.disabled = true;
             try {
-              await save({clipboardPreferences:{...prefs.clipboardPreferences,ignoreApplications:draft}},true);
+              await save({clipboardPreferences:{ignoreApplications:draft}},true);
               summary.textContent = draft.length ? '已排除 '+draft.length+' 个应用' : '暂未排除应用';
               panel.close();
             } finally { apply.disabled = false; }

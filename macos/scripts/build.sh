@@ -11,7 +11,7 @@ mkdir -p "$appPath/Contents/MacOS" "$appPath/Contents/Resources"
 # main.swift 只在构建目录生成，原始入口保持不变。
 cp "$sourceRoot/QuickLaunch.swift" "$buildRoot/main.swift"
 sources=("$buildRoot/main.swift")
-for name in Enhancements Clipboard ClipboardShelf PasteStack DoubleTapMonitor Pinyin JSONTool JSONFolding GoldService GoldTool GoldEdgeDock TextCompareV2 UnicodeTool AliasEditor SettingsUI FileSearch ExpressionParser MarkdownTool IDGenerator Snippets SnippetEditor Diagnostics Updater SearchRanking SelectionActions TimeResults CommandCenter CommandAliasEditor DeveloperConverter CronExpression BackendModels BackendLogsSQL BackendWorkbench ImageTool ButtonPressFeedback WindowChrome; do
+for name in Enhancements Clipboard ClipboardFilePreview ClipboardShelf PasteStack DoubleTapMonitor Pinyin JSONTool JSONFolding GoldService GoldTool GoldEdgeDock TextCompareV2 UnicodeTool AliasEditor SettingsUI FileSearch ExpressionParser MarkdownTool IDGenerator Snippets SnippetEditor Diagnostics Updater SearchRanking SelectionActions TimeResults CommandCenter CommandAliasEditor DeveloperConverter CronExpression BackendModels BackendLogsSQL BackendWorkbench ImageTool ButtonPressFeedback WindowChrome; do
     sources+=("$sourceRoot/$name.swift")
 done
 frameworks=(-framework AppKit -framework WebKit -framework Carbon -framework ApplicationServices -framework Vision -framework ImageIO -framework UniformTypeIdentifiers -framework JavaScriptCore -framework Network -lsqlite3)
@@ -47,8 +47,8 @@ cat > "$appPath/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>OpenAll</string>
 <key>CFBundleIconFile</key><string>OpenAll.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.29.0</string>
-<key>CFBundleVersion</key><string>93</string>
+<key>CFBundleShortVersionString</key><string>0.29.1</string>
+<key>CFBundleVersion</key><string>94</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>

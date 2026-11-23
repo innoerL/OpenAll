@@ -186,9 +186,9 @@ test('左右贴边时独立胶囊保持透明窗口，浮窗在原尺寸收起�
   dock.checkPlacement();
   cursor = { x: -650, y: 100 };
   dock.poll();
-  now += 14999;
+  now += 2999;
   dock.poll();
-  assert.equal(win.visible, true, '主动打开后，鼠标在外也至少展示十五秒');
+  assert.equal(win.visible, true, '主动打开后，鼠标在外也至少展示三秒');
   assert.equal(rail.visible, false);
   now += 1;
   dock.poll();
@@ -218,7 +218,7 @@ test('左右贴边时独立胶囊保持透明窗口，浮窗在原尺寸收起�
   dock.beginOpening();
   dock.setEnabled(true);
   cursor = { x: -230, y: 100 };
-  now += 16000;
+  now += 3100;
   dock.poll();
   assert.equal(win.visible, true, '阅读时限已过，鼠标仍在窗口内就继续显示');
   cursor = { x: -650, y: 100 };

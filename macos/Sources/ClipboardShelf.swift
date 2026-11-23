@@ -56,6 +56,12 @@ final class ShelfPanel: NSPanel {
 }
 
 final class ShelfPreviewWindow: NSWindow {
+    var onClose: (() -> Void)?
+    override func close() {
+        super.close()
+        onClose?()
+        onClose = nil
+    }
     override func cancelOperation(_ sender: Any?) { performClose(nil) }
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { performClose(nil); return }
@@ -284,49 +290,49 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         cache.countLimit = 80
         return cache
     }()
-    private static let fileIcons: NSCache<NSString, NSImage> = {
-        let cache = NSCache<NSString, NSImage>()
-        cache.countLimit = 256
-        return cache
-    }()
-    private static let iconQueue: OperationQueue = {
+    private static let filePreviewQueue: OperationQueue = {
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 2
         queue.qualityOfService = .utility
         return queue
     }()
-    private var iconRequest: Operation?
+    private var fileRequest: Operation?
+    private var filePreviews: [Int: ClipboardFilePreview] = [:]
     var item: ClipboardRecord! {
         didSet {
             textPreview = nil
             cachedFormat = nil
-            if oldValue?.id != item?.id { loadFileIcons() }
+            setFilePreviewVisible(false)
         }
     }
 
-    private func loadFileIcons() {
-        iconRequest?.cancel()
-        iconRequest = nil
-        guard let item, item.kind == "files" else { return }
-        let paths = item.filePaths.prefix(compact ? 1 : 3).filter { Self.fileIcons.object(forKey: $0 as NSString) == nil }
-        guard !paths.isEmpty else { return }
+    func setFilePreviewVisible(_ visible: Bool) {
+        guard visible else {
+            fileRequest?.cancel()
+            fileRequest = nil
+            filePreviews.removeAll()
+            return
+        }
+        guard fileRequest == nil, let item, item.kind == "files", !item.filePaths.isEmpty else { return }
+        let paths = Array(item.filePaths.prefix(3))
+        let maxPixels = !compact && paths.count == 1 ? 448 : 64
         let request = BlockOperation()
         request.addExecutionBlock { [weak self, weak request] in
-            for path in paths {
+            for (index, path) in paths.enumerated() {
                 guard request?.isCancelled == false else { return }
-                guard FileManager.default.fileExists(atPath: path) else { continue }
-                let image = NSWorkspace.shared.icon(forFile: path)
-                Self.fileIcons.setObject(image, forKey: path as NSString)
-            }
-            DispatchQueue.main.async {
-                if self?.item?.id == item.id { self?.needsDisplay = true }
+                guard let preview = ClipboardFilePreview.load(path: path, maxPixels: maxPixels) else { continue }
+                DispatchQueue.main.async { [weak self, weak request] in
+                    guard let self, let request, self.fileRequest === request, !request.isCancelled else { return }
+                    self.filePreviews[index] = preview
+                    self.needsDisplay = true
+                }
             }
         }
-        iconRequest = request
-        Self.iconQueue.addOperation(request)
+        fileRequest = request
+        Self.filePreviewQueue.addOperation(request)
     }
 
-    private func drawFileIcon(at index: Int, in rect: NSRect) {
+    private func drawFilePreview(at index: Int, in rect: NSRect) {
         let path = item.filePaths[index] as NSString
         let ext = path.pathExtension.lowercased()
         let symbol: String
@@ -334,7 +340,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         else if item.folderIndices?.contains(index) == true { symbol = "folder.fill" }
         else if ["zip","7z","rar","gz","bz2","xz","tgz","tar","zst","dmg","pkg"].contains(ext) { symbol = "doc.zipper" }
         else { symbol = "doc.text" }
-        let image = Self.fileIcons.object(forKey: path) ??
+        let image = filePreviews[index]?.image ??
             NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(
                 NSImage.SymbolConfiguration(paletteColors: [OpenAllTheme.muted]))
         guard let image else { return }
@@ -344,14 +350,27 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         image.draw(in: fitted, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
+    private func drawFileName(at index: Int, in rect: NSRect, style: NSParagraphStyle) {
+        let name = (item.filePaths[index] as NSString).lastPathComponent
+        let font = NSFont.systemFont(ofSize: compact ? 14 : cardTextSize.points, weight: compact && selected ? .medium : .regular)
+        let text = NSMutableAttributedString(string: name, attributes: [
+            .paragraphStyle: style, .foregroundColor: OpenAllTheme.ink, .font: font])
+        if !searchTerm.isEmpty {
+            let match = (name as NSString).range(of: searchTerm, options: .caseInsensitive)
+            if match.location != NSNotFound { text.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match) }
+        }
+        text.draw(in: rect)
+    }
+
     private func drawFiles(in rect: NSRect) {
         let paths = item.filePaths
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingMiddle
         let count = min(3, paths.count)
         let single = count == 1
-        let size: CGFloat = single ? 52 : 23
-        let height: CGFloat = single ? 80 : CGFloat(count) * 29 + (paths.count > count ? 18 : 0)
+        let largeThumbnail = single && filePreviews[0]?.isThumbnail == true
+        let size: CGFloat = single ? (largeThumbnail ? rect.height - 25 : 52) : 24
+        let height: CGFloat = single ? size + 25 : CGFloat(count) * 29 + (paths.count > count ? 18 : 0)
         // NSButton 和承载它的列表可以使用不同的坐标方向。
         func originY(_ offset: CGFloat, _ elementHeight: CGFloat) -> CGFloat {
             isFlipped ? rect.midY - height / 2 + offset : rect.midY + height / 2 - offset - elementHeight
@@ -359,17 +378,12 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
         style.alignment = single ? .center : .left
         for index in 0..<count {
             let offset = CGFloat(index) * 29
-            let iconRect = NSRect(x: single ? rect.midX - size / 2 : rect.minX, y: originY(offset, size), width: size, height: size)
-            drawFileIcon(at: index, in: iconRect)
+            let width = largeThumbnail ? rect.width : size
+            let iconRect = NSRect(x: single ? rect.midX - width / 2 : rect.minX, y: originY(offset, size), width: width, height: size)
+            drawFilePreview(at: index, in: iconRect)
             let x = single ? rect.minX : iconRect.maxX + 8
-            let label = NSRect(x: x, y: originY(single ? size + 7 : offset + 3, 20), width: rect.maxX - x, height: 20)
-            let name = (paths[index] as NSString).lastPathComponent
-            let text = NSMutableAttributedString(string: name, attributes: [.paragraphStyle: style, .foregroundColor: OpenAllTheme.ink, .font: NSFont.systemFont(ofSize: 14)])
-            if !searchTerm.isEmpty {
-                let match = (name as NSString).range(of: searchTerm, options: .caseInsensitive)
-                if match.location != NSNotFound { text.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match) }
-            }
-            text.draw(in: label)
+            let label = NSRect(x: x, y: originY(single ? size + 5 : offset + 3, 20), width: rect.maxX - x, height: 20)
+            drawFileName(at: index, in: label, style: style)
         }
         if paths.count > count {
             ("另 \(paths.count - count) 项" as NSString).draw(in: NSRect(x: rect.minX + 31, y: originY(CGFloat(count) * 29, 17), width: rect.width - 31, height: 17),
@@ -385,6 +399,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
     }
     var searchTerm = ""
     var compact = false
+    var cardTextSize: ClipboardCardTextSize = .large
     private var textPreview: (text: String, truncated: Bool)?
     private static let jsonKey = try! NSRegularExpression(pattern: #""(?:[^"\\]|\\.)*"(?=\s*:)"#)
     private static let markdownHeading = try! NSRegularExpression(pattern: #"(?m)^#{1,6}[^\n]*"#)
@@ -502,6 +517,29 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             age < 86400 ? "\(Int(age / 3600)) 小时前" : "\(Int(age / 86400)) 天前"
     }
 
+    private func drawListFiles(in rect: NSRect) {
+        let paths = item.filePaths
+        let count = min(3, paths.count)
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingMiddle
+        let font = NSFont.systemFont(ofSize: 14, weight: selected ? .medium : .regular)
+        let suffix = paths.count > count ? "另 \(paths.count - count) 项" as NSString : "" as NSString
+        let suffixStyle: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: OpenAllTheme.muted]
+        let suffixWidth = ceil(suffix.size(withAttributes: suffixStyle).width)
+        let end = rect.maxX - suffixWidth
+        var x = rect.minX
+        for index in 0..<count {
+            let available = max(0, (end - x) / CGFloat(count - index))
+            let iconSize = min(24, available)
+            drawFilePreview(at: index, in: NSRect(x: x, y: floor(rect.midY - iconSize / 2), width: iconSize, height: iconSize))
+            let name = (paths[index] as NSString).lastPathComponent as NSString
+            let width = min(ceil(name.size(withAttributes: [.font: font]).width) + 1, max(0, available - iconSize - 14))
+            drawFileName(at: index, in: NSRect(x: x + iconSize + 5, y: floor(rect.midY - 9), width: width, height: 19), style: style)
+            x += iconSize + 14 + width
+        }
+        suffix.draw(at: NSPoint(x: min(x, end), y: floor(rect.midY - 7)), withAttributes: suffixStyle)
+    }
+
     private func drawListRow() {
         let row = bounds.insetBy(dx: 1, dy: 1)
         if selected || hovering {
@@ -542,13 +580,13 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             (item.sourceName as NSString).draw(in: NSRect(x: source.maxX + 6, y: source.minY, width: 104, height: 17), withAttributes: [
                 .font: NSFont.systemFont(ofSize: 12), .foregroundColor: OpenAllTheme.muted, .paragraphStyle: style])
         }
-        let preview: String
-        if item.kind == "files" {
-            preview = item.filePaths.prefix(3).map { ($0 as NSString).lastPathComponent }.joined(separator: "、") + (item.filePaths.count > 3 ? " 等 \(item.filePaths.count) 项" : "")
-        } else {
-            let text = item.text.isEmpty ? item.title : item.text
-            preview = text.prefix(260).split(whereSeparator: \.isNewline).joined(separator: " ")
+        let contentRect = NSRect(x: 122, y: floor(row.midY - 9), width: max(0, source.minX - 134), height: 19)
+        if item.kind == "files", !item.filePaths.isEmpty {
+            drawListFiles(in: contentRect)
+            return
         }
+        let text = item.text.isEmpty ? item.title : item.text
+        let preview = text.prefix(260).split(whereSeparator: \.isNewline).joined(separator: " ")
         let content = NSMutableAttributedString(string: preview, attributes: [
             .font: NSFont.systemFont(ofSize: 14, weight: selected ? .medium : .regular),
             .foregroundColor: OpenAllTheme.ink, .paragraphStyle: style])
@@ -556,12 +594,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             let match = (preview as NSString).range(of: searchTerm, options: .caseInsensitive)
             if match.location != NSNotFound { content.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match) }
         }
-        var textX: CGFloat = 122
-        if item.kind == "files", !item.filePaths.isEmpty {
-            drawFileIcon(at: 0, in: NSRect(x: textX, y: floor(row.midY - 10), width: 20, height: 20))
-            textX += 28
-        }
-        content.draw(in: NSRect(x: textX, y: floor(row.midY - 9), width: max(0, source.minX - textX - 12), height: 19))
+        content.draw(in: contentRect)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -642,7 +675,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
             paragraph.lineBreakMode = item.kind == "link" ? .byCharWrapping : .byWordWrapping
             paragraph.lineSpacing = 2
             let format = formatLabel
-            let attrs: [NSAttributedString.Key: Any] = [.font: format == "JSON" ? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) : NSFont.systemFont(ofSize: 14),
+            let attrs: [NSAttributedString.Key: Any] = [.font: format == "JSON" ? NSFont.monospacedSystemFont(ofSize: cardTextSize.monospacedPoints, weight: .regular) : NSFont.systemFont(ofSize: cardTextSize.points),
                                                         .foregroundColor: OpenAllTheme.ink,
                                                         .paragraphStyle: paragraph]
             if textPreview == nil {
@@ -677,7 +710,7 @@ final class ClipCard: NSButton, NSDraggingSource, WindowThemeRefreshing {
                 }
             } else if format == "Markdown" {
                 Self.markdownHeading.matches(in: display, range: full).forEach {
-                    styled.addAttributes([.font: NSFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: OpenAllTheme.accentText], range: $0.range)
+                    styled.addAttributes([.font: NSFont.systemFont(ofSize: cardTextSize.points, weight: .semibold), .foregroundColor: OpenAllTheme.accentText], range: $0.range)
                 }
             }
             if !searchTerm.isEmpty, searchTerm.utf16.count <= 300 {
@@ -746,7 +779,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     private let store: ClipboardStore
     var snippets: SnippetStore?
     var onSendToTool: ((String, String) -> Void)?
-    var onOpenActions: ((ClipboardRecord) -> Void)?
+    var onOpenActions: ((SelectedContent) -> Void)?
     private var panel: ShelfPanel?
     private var searchOutline: NSView!
     private var search: ShelfSearchField!
@@ -769,6 +802,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     private var localDestination: ClipboardLocalDestination?
     private var presentingDialog = false
     private var closing = false
+    private let shelfHeight: CGFloat = 300
     private var shelfFrame = NSRect.zero
     private var newBoardField: NSTextField?
     private var pendingRenameBoard: String?
@@ -781,6 +815,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     private var editAction: ClipboardEditAction?
     private var editPopover: NSPopover?
     private let rowHeight: CGFloat = 34
+    private let cardHeight: CGFloat = 182
     private let cardWidth: CGFloat = 240
     private var cardStep: CGFloat { cardWidth + 12 }
     private var isCompact: Bool { store.preferences.shelfLayout == .list }
@@ -966,7 +1001,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         editor.unmarkText()
         editor.insertText("", replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
 
-        let rename = BoardRenameField(frame: NSRect(x: 400, y: 280, width: 150, height: 24))
+        let rename = BoardRenameField(frame: NSRect(x: 400, y: shelfHeight - 50, width: 150, height: 24))
         rename.stringValue = "标签名"
         panel.contentView?.addSubview(rename)
         defer { rename.removeFromSuperview() }
@@ -1128,9 +1163,19 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         previewRecord = nil
         let outsideIgnored = visibleCards[0]?.clickFullTextForDesign(startOutside: true) == true && previewRecord == nil
         let fullTextOpens = visibleCards[0]?.clickFullTextForDesign() == true && previewRecord?.id == displayedItems[0].id
+        let expectedText = displayedItems[0].text
+        let previousHandler = onOpenActions
+        var deliveredText: String?
+        onOpenActions = { if case .text(let text) = $0 { deliveredText = text } }
+        defer { onOpenActions = previousHandler }
+        // 预览打开后切换抽屉选区，操作按钮仍应投递预览原文。
+        select(displayedItems[1], paste: false)
+        let action = previewWindow?.contentView?.subviews.compactMap { $0 as? NSButton }.first { $0.title == "对内容操作" }
+        action?.performClick(nil)
+        let openedActions = previewWindow == nil && deliveredText == expectedText
         previewWindow?.close()
         return navigated && shiftStatus && singleStatus && firstSelected && emptyCleared &&
-            resetSelection && keptMultiple && contextStatus && outsideIgnored && fullTextOpens
+            resetSelection && keptMultiple && contextStatus && outsideIgnored && fullTextOpens && openedActions
     }
 
     func dismiss() { hide() }
@@ -1165,9 +1210,22 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         if !presentingDialog { hide() }
     }
 
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        updateVisibleFilePreviews()
+    }
+
+    private func updateVisibleFilePreviews() {
+        guard let scroll else { return }
+        let shown = DesignPreview.enabled || panel?.occlusionState.contains(.visible) == true
+        let viewport = scroll.contentView.bounds
+        for card in visibleCards.values {
+            card.setFilePreviewVisible(shown && viewport.intersects(card.frame))
+        }
+    }
+
     // 用户确认的布局：底部通栏、大卡片、彩色类型栏；细节优化保留这些结构。
     private func build() {
-        let w = ShelfPanel(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 330),
+        let w = ShelfPanel(contentRect: NSRect(x: 0, y: 0, width: 1200, height: shelfHeight),
                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         w.delegate = self
         w.isFloatingPanel = false
@@ -1192,7 +1250,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         surface.layer?.backgroundColor = OpenAllTheme.sidebar.withAlphaComponent(0.98).cgColor
         root.addSubview(surface)
         ButtonPressFeedback.install(on: w)
-        search = ShelfSearchField(frame: NSRect(x: 18, y: 282, width: 220, height: 28))
+        search = ShelfSearchField(frame: NSRect(x: 18, y: shelfHeight - 48, width: 220, height: 28))
         search.placeholderString = "搜索剪贴板"
         search.font = .systemFont(ofSize: 13)
         search.isBezeled = false
@@ -1213,18 +1271,18 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         searchOutline.addSubview(search)
         root.addSubview(searchOutline)
         search.refreshWindowTheme()
-        tabs = NSStackView(frame: NSRect(x: 254, y: 280, width: 810, height: 32))
+        tabs = NSStackView(frame: NSRect(x: 254, y: shelfHeight - 50, width: 810, height: 32))
         tabs.orientation = .horizontal
         tabs.spacing = 6
         tabs.wantsLayer = true
         tabs.layer?.masksToBounds = true
         root.addSubview(tabs)
         layoutButton = NSButton(title: "", target: self, action: #selector(toggleShelfLayout))
-        layoutButton.frame = NSRect(x: 1007, y: 280, width: 30, height: 28)
+        layoutButton.frame = NSRect(x: 1007, y: shelfHeight - 50, width: 30, height: 28)
         ClipboardShelfStyle.action(layoutButton)
         layoutButton.imagePosition = .imageOnly
         root.addSubview(layoutButton)
-        typeFilter = NSPopUpButton(frame: NSRect(x: 1044, y: 280, width: 96, height: 28), pullsDown: false)
+        typeFilter = NSPopUpButton(frame: NSRect(x: 1044, y: shelfHeight - 50, width: 96, height: 28), pullsDown: false)
         for title in ["全部", "文本", "链接", "图片", "文件"] { typeFilter.addItem(withTitle: title) }
         typeFilter.toolTip = "按内容类型筛选"
         typeFilter.isBordered = false
@@ -1237,9 +1295,9 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         close.setAccessibilityLabel("关闭剪贴板")
         close.isBordered = false
         close.font = .systemFont(ofSize: 23, weight: .light)
-        close.frame = NSRect(x: 1150, y: 280, width: 32, height: 32)
+        close.frame = NSRect(x: 1150, y: shelfHeight - 50, width: 32, height: 32)
         root.addSubview(close)
-        scroll = NSScrollView(frame: NSRect(x: 18, y: 60, width: 1164, height: 208))
+        scroll = NSScrollView(frame: NSRect(x: 18, y: 46, width: 1164, height: shelfHeight - 102))
         scroll.hasHorizontalScroller = true
         scroll.hasVerticalScroller = false
         scroll.drawsBackground = false
@@ -1280,7 +1338,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         guard let screen else { return }
         let width = screen.frame.width
-        shelfFrame = NSRect(x: screen.frame.minX, y: screen.frame.minY, width: width, height: 330)
+        shelfFrame = NSRect(x: screen.frame.minX, y: screen.frame.minY, width: width, height: shelfHeight)
         panel.setFrame(NSRect(x: shelfFrame.minX, y: shelfFrame.minY - shelfFrame.height,
                               width: width, height: shelfFrame.height), display: false)
         let root = panel.contentView!
@@ -1530,7 +1588,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         if isCompact {
             return NSRect(x: 2, y: CGFloat(index) * rowHeight, width: max(0, cards.bounds.width - 4), height: rowHeight)
         }
-        return NSRect(x: CGFloat(index) * cardStep + 4, y: 1, width: cardWidth, height: 182)
+        return NSRect(x: CGFloat(index) * cardStep + 4, y: cards.bounds.height - cardHeight - 1, width: cardWidth, height: cardHeight)
     }
 
     private func reload(keepingItems: Bool = false) {
@@ -1568,7 +1626,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         if compact {
             cards.frame.size = NSSize(width: scroll.contentSize.width, height: max(scroll.contentSize.height, CGFloat(displayedItems.count) * rowHeight))
         } else {
-            cards.frame.size = NSSize(width: max(scroll.contentSize.width, CGFloat(displayedItems.count) * cardStep + 8), height: 190)
+            cards.frame.size = NSSize(width: max(scroll.contentSize.width, CGFloat(displayedItems.count) * cardStep + 8), height: max(cardHeight + 1, scroll.contentSize.height))
         }
         if changedLayout || layoutButton.toolTip == nil {
             let nextLayout = compact ? "大卡片" : "紧凑列表"
@@ -1626,6 +1684,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             let item = displayedItems[index]
             let card = reusableCards.popLast() ?? ClipCard(frame: .zero)
             card.compact = compact
+            card.cardTextSize = store.preferences.cardTextSize
             card.frame = itemFrame(at: index)
             card.item = item
             card.searchTerm = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1662,6 +1721,7 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
             cards.addSubview(card)
             visibleCards[index] = card
         }
+        updateVisibleFilePreviews()
     }
 
     private func sourceIcon(for item: ClipboardRecord) -> NSImage? {
@@ -1769,6 +1829,12 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         let window = ShelfPreviewWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 460),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
+        window.onClose = { [weak self, weak window] in
+            guard let self, self.previewWindow === window else { return }
+            self.previewWindow = nil
+            self.previewRecord = nil
+            self.previewHint = nil
+        }
         window.isReleasedWhenClosed = false
         WindowChrome.apply(window, title: "剪贴板卡片预览")
         window.minSize = NSSize(width: 480, height: 200)
@@ -1821,7 +1887,9 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         let hint = NSTextField(labelWithString: "Esc 关闭预览")
         hint.font = .systemFont(ofSize: 12)
         hint.textColor = OpenAllTheme.muted
-        hint.frame = NSRect(x: 24, y: 14, width: 448, height: 20)
+        hint.frame = NSRect(x: 24, y: 14, width: 356, height: 20)
+        hint.lineBreakMode = .byTruncatingTail
+        hint.allowsExpansionToolTips = true
         hint.autoresizingMask = [.width]
         root.addSubview(hint)
         previewHint = hint
@@ -1835,36 +1903,55 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
         copy.autoresizingMask = [.minXMargin]
         ClipboardShelfStyle.action(copy)
         root.addSubview(copy)
+        let actions = NSButton(title: "对内容操作", target: self, action: #selector(openPreviewedActions))
+        actions.frame = NSRect(x: 390, y: 10, width: 98, height: 28)
+        actions.autoresizingMask = [.minXMargin]
+        ClipboardShelfStyle.action(actions)
+        root.addSubview(actions)
         WindowChrome.installControls(on: window)
+        let fileImageURL: URL?
+        if item.kind == "files", item.filePaths.count == 1, let path = item.filePaths.first,
+           ClipboardFilePreview.isImageCandidate(path) {
+            fileImageURL = URL(fileURLWithPath: path, isDirectory: false)
+        } else { fileImageURL = nil }
+        let imageURL = item.kind == "image" ? store.imageURL(for: item) : fileImageURL
         if item.kind == "image" {
-            let imageView = NSImageView(frame: scroll.frame)
-            imageView.autoresizingMask = [.width, .height]
-            imageView.imageScaling = .scaleProportionallyUpOrDown
-            imageView.setAccessibilityLabel("剪贴板图片")
-            root.addSubview(imageView)
-            text.string = "正在载入图片…"
-            if let url = store.imageURL(for: item) {
-                // 独立预览仅解码适合窗口的缩略图，原图仍用于复制和粘贴。
-                DispatchQueue.global(qos: .userInitiated).async { [weak imageView, weak text] in
-                    let options = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                                   kCGImageSourceCreateThumbnailWithTransform: true,
-                                   kCGImageSourceThumbnailMaxPixelSize: 2048] as CFDictionary
-                    let source = CGImageSourceCreateWithURL(url as CFURL, nil)
-                    let thumbnail = source.flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, options) }
-                    DispatchQueue.main.async {
-                        if let thumbnail {
-                            text?.string = ""
-                            imageView?.image = NSImage(cgImage: thumbnail, size: .zero)
-                        } else { text?.string = "无法载入这张图片" }
-                    }
-                }
-            } else { text.string = "无法载入这张图片" }
+            text.string = imageURL == nil ? "无法载入这张图片" : "正在载入图片…"
         }
         let estimatedLines = String(text.string.prefix(12_000)).components(separatedBy: "\n").reduce(0) { $0 + max(1, Int(ceil(Double($1.count) / 65))) }
-        window.setContentSize(NSSize(width: 760, height: item.kind == "image" ? 500 : min(690, max(208, 166 + estimatedLines * 22))))
+        let textHeight = min(690, max(208, 166 + estimatedLines * 22))
+        window.setContentSize(NSSize(width: 760, height: item.kind == "image" || fileImageURL != nil ? 500 : textHeight))
         previewWindow = window
         WindowChrome.present(window)
         WindowChrome.activate()
+        guard let imageURL else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, weak window] in
+            let thumbnail = ClipboardFilePreview.thumbnail(at: imageURL, maxPixels: 2048)
+            DispatchQueue.main.async {
+                guard let window, self?.previewWindow === window else { return }
+                guard let thumbnail else {
+                    if fileImageURL == nil { text.string = "无法载入这张图片" }
+                    return
+                }
+                var frame = scroll.frame
+                if let fileImageURL {
+                    // 文件路径仍可选中、复制和滚动；缩略图只占用其上方的空间。
+                    scroll.autoresizingMask = [.width]
+                    scroll.frame.size.height = 44
+                    text.textContainerInset = NSSize(width: 14, height: 4)
+                    text.scrollRangeToVisible(NSRange(location: text.string.utf16.count, length: 0))
+                    frame.origin.y += 50
+                    frame.size.height = max(0, frame.height - 50)
+                    scroll.toolTip = fileImageURL.path
+                } else { text.string = "" }
+                let imageView = NSImageView(frame: frame)
+                imageView.autoresizingMask = [.width, .height]
+                imageView.imageScaling = .scaleProportionallyUpOrDown
+                imageView.setAccessibilityLabel(fileImageURL?.lastPathComponent ?? "剪贴板图片")
+                imageView.image = NSImage(cgImage: thumbnail, size: .zero)
+                root.addSubview(imageView)
+            }
+        }
     }
     @objc private func copyPreviewed() {
         guard let record = previewRecord else { return }
@@ -2090,7 +2177,32 @@ final class ClipboardShelfWindow: NSObject, NSSearchFieldDelegate, NSWindowDeleg
     }
     @objc private func openSelectedActions() {
         guard let item = selectedRecord() else { return }
-        onOpenActions?(item)
+        openContentActions(for: item)
+    }
+    @objc private func openPreviewedActions() {
+        guard let item = previewRecord else { return }
+        openContentActions(for: item)
+    }
+    func openContentActions(for item: ClipboardRecord) {
+        guard let onOpenActions else { return }
+        let content: SelectedContent
+        switch item.kind {
+        case "image":
+            guard let url = store.imageURL(for: item), let image = NSImage(contentsOf: url) else {
+                if previewRecord?.id == item.id { previewHint?.stringValue = "无法载入这张图片" }
+                else { message("无法载入这张图片") }
+                return
+            }
+            content = .image(image)
+        case "files": content = .files(item.filePaths.map { URL(fileURLWithPath: $0) })
+        default: content = .text(item.text)
+        }
+        // 直接将焦点交给操作面板，不触发抽屉收起动画或唤醒原粘贴目标。
+        closing = true
+        panel?.orderOut(nil)
+        previewWindow?.close()
+        closing = false
+        onOpenActions(content)
     }
     private func paste(plainText: Bool) {
         guard let item = selectedRecord(), store.copy(item, plainText: plainText) else { return }

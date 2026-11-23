@@ -176,26 +176,50 @@
   window.OpenAllPages.clipboard=async(host,ctx)=>{
     let all=await api.history(),filtered=[],selected=new Set(),current=0,activeBoard='历史',disposed=false,filter='全部';const dragContent=new Map();const p=ctx.settings.clipboardPreferences||{};
     const shelf=h('div',{class:'clipboard-shelf'}),search=h('input',{class:'clipboard-search',placeholder:'搜索剪贴板',type:'text',autocomplete:'off','aria-label':'搜索剪贴板'}),tabs=h('div',{class:'clipboard-tabs'}),track=h('div',{class:'clip-track',role:'listbox','aria-label':'剪贴板记录','aria-multiselectable':'true'});
-    const iconResults = new Map();
+    const visibleFileIcons = new Set(), queuedFileIcons = new Set();
+    let loadingFileIcons = false;
+    function releaseFileThumbnail(slot) {
+      visibleFileIcons.delete(slot);
+      queuedFileIcons.delete(slot);
+      if (slot.classList.contains('has-thumbnail')) {
+        slot.classList.remove('has-thumbnail');
+        slot.replaceChildren(icon(slot.dataset.kind));
+      }
+    }
+    async function loadFileIcons() {
+      if (loadingFileIcons) return;
+      loadingFileIcons = true;
+      try {
+        for (const slot of queuedFileIcons) {
+          queuedFileIcons.delete(slot);
+          if (!slot.isConnected || document.hidden || disposed) continue;
+          const id = slot.dataset.fileRecord, index = Number(slot.dataset.fileIndex);
+          const value = await api.clipboardAction('fileIcon', {id, index}).catch(() => null);
+          if (!value || disposed || document.hidden || !slot.isConnected || !visibleFileIcons.has(slot)) continue;
+          slot.dataset.kind = value.kind;
+          slot.classList.toggle('has-thumbnail', !!value.thumbnail);
+          const src = value.thumbnail || value.icon;
+          slot.replaceChildren(src ? h('img', {src, alt:'', draggable:false}) : icon(value.kind));
+        }
+      } finally { loadingFileIcons = false; }
+    }
     const fileObserver = new IntersectionObserver(entries => {
       for (const {target, isIntersecting} of entries) {
-        if (!isIntersecting) continue;
-        fileObserver.unobserve(target);
-        const id = target.dataset.fileRecord, index = Number(target.dataset.fileIndex);
-        const key = id + ':' + index;
-        let request = iconResults.get(key);
-        if (!request) {
-          request = api.clipboardAction('fileIcon', {id, index}).catch(() => { iconResults.delete(key); return null; });
-          iconResults.set(key, request);
-          if (iconResults.size > 160) iconResults.delete(iconResults.keys().next().value);
+        if (isIntersecting && !document.hidden && target.isConnected) {
+          visibleFileIcons.add(target);
+          queuedFileIcons.add(target);
+        } else {
+          releaseFileThumbnail(target);
         }
-        request.then(value => {
-          if (!target.isConnected || disposed || !value) return;
-          target.dataset.kind = value.kind;
-          target.replaceChildren(value.icon ? h('img', {src:value.icon, alt:''}) : icon(value.kind));
-        });
       }
+      void loadFileIcons();
     }, {root:track});
+    function refreshFileVisibility() {
+      fileObserver.disconnect();
+      for (const slot of visibleFileIcons) releaseFileThumbnail(slot);
+      if (!document.hidden) track.querySelectorAll('.clip-file-icon').forEach(slot => fileObserver.observe(slot));
+    }
+    document.addEventListener('visibilitychange', refreshFileVisibility);
     const info = h('span', {class:'clip-count', role:'status', 'aria-atomic':'true'});
     const hint = h('div', {class:'clip-key-hints'});
     const previewButton = button('预览卡片', preview);
@@ -300,6 +324,8 @@
     }
     function paint(focus=false) {
       fileObserver.disconnect();
+      visibleFileIcons.clear();
+      queuedFileIcons.clear();
       const q=search.value.trim().toLowerCase();filtered=all.filter(r=>(activeBoard==='历史'||activeBoard==='收藏'&&(r.favorite||r.pinned)||(r.tags||[]).includes(activeBoard)||r.pinboard===activeBoard)&&(filter==='全部'||type(r)===filter||filter==='文本'&&['文本','JSON','Markdown','HTML','富文本'].includes(type(r)))&&(!q||[r.title,r.kind==='image'?'':(r.text||r.value),r.sourceName,r.ocrText,r.recognizedText,type(r),...(r.files||[])].filter(Boolean).join(' ').toLowerCase().includes(q)));
       const hadCardFocus = document.activeElement?.matches('.clip-card');
       const available=new Set(filtered.map(id));selected=new Set([...selected].filter(x=>available.has(x)));current=Math.min(current,Math.max(0,filtered.length-1));
@@ -318,7 +344,7 @@
             const name = path.split(/[\\/]/).filter(Boolean).pop() || path;
             const kind = r.fileKinds?.[index] || 'file';
             const slot = h('span', {class:'clip-file-icon', 'data-file-record':id(r), 'data-file-index':index, 'data-kind':kind, 'aria-hidden':'true'}, icon(kind));
-            fileObserver.observe(slot);
+            if (!document.hidden) fileObserver.observe(slot);
             content.append(h('span', {class:'clip-file-row', title:path}, slot,
               h('span', {class:'clip-file-name'}, markFirst(name, pattern))));
           });
@@ -360,15 +386,19 @@
       if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey&&!e.repeat)deleteCard(item).catch(error=>notify(error.message,true));}if(e.key==='Enter'){e.preventDefault();paste();}if(e.key===' '){e.preventDefault();preview();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){e.preventDefault();selected=new Set(filtered.map(id));syncSelection(true);}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){e.preventDefault();action('copy');}
     };
     window.addEventListener('keydown',keydown);const off=api.onClipboard(items=>{all=Array.isArray(items)?items:items?.items||all;if(!disposed)paint();});
+    shelf.dataset.cardFontSize = p.cardFontSize || 'large';
     showLayout(layout);boards();paint();
-    return {focus:()=>search.focus(),dispose(){disposed=true;fileObserver.disconnect();iconResults.clear();window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(prefs){
-      const next = (prefs || settings).clipboardPreferences?.shelfLayout === 'list' ? 'list' : 'cards';
+    return {focus:()=>search.focus(),dispose(){disposed=true;fileObserver.disconnect();visibleFileIcons.clear();queuedFileIcons.clear();document.removeEventListener('visibilitychange',refreshFileVisibility);window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(prefs){
+      const preferences = (prefs || settings).clipboardPreferences;
+      shelf.dataset.cardFontSize = preferences?.cardFontSize || 'large';
+      const next = preferences?.shelfLayout === 'list' ? 'list' : 'cards';
       if (!pendingLayout && layout !== next) showLayout(next);
       boards();paint();
     },refresh,paste:text=>{search.value+=text;paint();}};
   };
   window.OpenAllPages.clipboardPreview = async (host, ctx) => {
     const record = ctx.initialValue && typeof ctx.initialValue === 'object' ? ctx.initialValue : {text:ctx.initialValue};
+    const recordId = record.id || record.hash;
     const image = record.kind === 'image', files = record.kind === 'files' ? record.files || [] : null;
     const text = files ? files.join('\n') : image ? '' : record.text || record.value || '';
     const format = record.type || (image ? '图片' : files ? '文件' : record.kind === 'link' ? '链接' : '文本');
@@ -411,6 +441,13 @@
     const copyButton = button(image ? '复制图片' : files ? '复制路径' : '复制全文', async () => {
       try { await copy(); status.textContent = '已复制'; } catch (error) { warn(error); }
     });
+    const actionsButton = button('对内容操作', async () => {
+      actionsButton.disabled = true;
+      try {
+        if (!await api.clipboardAction('selection', {ids:[recordId]})) status.textContent = '无法打开此卡片的操作';
+      } catch (error) { warn(error); }
+      finally { actionsButton.disabled = false; }
+    });
     const pasteButton = button('粘贴此项', async () => {
       pasteButton.disabled = true;
       try {
@@ -421,7 +458,7 @@
     }, 'primary');
     host.append(h('section', {class:'preview-page clip-preview'},
       h('header', {class:'clip-preview-heading'}, title, source), content,
-      h('footer', {class:'clip-preview-footer'}, status, h('div', {class:'clip-preview-action'}, tools, copyButton, pasteButton))));
+      h('footer', {class:'clip-preview-footer'}, status, h('div', {class:'clip-preview-action'}, tools, actionsButton, copyButton, pasteButton))));
     let desiredContent = 325;
     if (!image) {
       content.style.flex = 'none';
@@ -432,6 +469,18 @@
     }
     const chromeHeight = innerHeight - content.offsetHeight;
     await call('fitClipboardPreview', {height:chromeHeight + desiredContent});
+    if (files?.length === 1 && recordId && content.isConnected) {
+      // 先显示可操作的路径，缩略图就绪后再展开预览。
+      api.clipboardAction('fileIcon', {id:recordId, index:0}).then(async result => {
+        if (!content.isConnected || !result?.thumbnail) return;
+        const img = h('img', {src:result.thumbnail, alt:files[0].split(/[\\/]/).pop()});
+        await img.decode();
+        if (!content.isConnected) return;
+        content.prepend(img);
+        content.classList.add('has-file-image');
+        await call('fitClipboardPreview', {height:chromeHeight + 325});
+      }).catch(() => { /* 读取或解码失败时保留原文件详情。 */ });
+    }
     return {focus:() => content.focus()};
   };
   (async()=>{if(!api)throw Error('应用桥接未加载');settings=await api.settings();applyTheme(settings);const initial=await call('context').catch(()=>null);const params=new URLSearchParams(location.search);await render(initial?.page||params.get('page')||'search',initial?.initialValue||'');window.OpenAllApp.ready=true;})();

@@ -56,6 +56,23 @@ function WriteClipboardFiles([string[]]$paths) {
  $collection.AddRange($paths)
  [Windows.Forms.Clipboard]::SetFileDropList($collection)
 }
+function Get-LocalPreviewType([string]$file) {
+ # 先确认盘符，再从根目录逐级查询。映射盘、联接点和云端占位文件都不参与预览。
+ if ($file -notmatch '^[A-Za-z]:[\\/]') {return}
+ $root=[IO.Path]::GetPathRoot($file)
+ $drive=[IO.DriveInfo]::new($root)
+ if ($drive.DriveType -notin @([IO.DriveType]::Fixed,[IO.DriveType]::Removable,[IO.DriveType]::Ram)) {return}
+ $current=$root
+ $attributes=[IO.FileAttributes]::Directory
+ foreach ($part in ($file.Substring($root.Length) -split '[\\/]')) {
+  if (-not $part) {continue}
+  $current=[IO.Path]::Combine($current,$part)
+  $attributes=[IO.File]::GetAttributes($current)
+  if (([int]$attributes -band (0x400 -bor 0x1000 -bor 0x40000 -bor 0x400000)) -ne 0) {return}
+ }
+ if (($attributes -band [IO.FileAttributes]::Directory) -ne 0) {return 'folder'}
+ return 'file'
+}
 # 独立验证只在隔离 CI 中调用，原剪贴板在 finally 中恢复。
 function TestNative {
  $original=[Windows.Forms.Clipboard]::GetDataObject();$saved=[Windows.Forms.DataObject]::new()
@@ -116,6 +133,7 @@ while ($true) {
      } finally {if($original){[Windows.Forms.Clipboard]::SetDataObject($saved,$true)}else{[Windows.Forms.Clipboard]::Clear()};$lastSequence=[OpenAllNative]::GetClipboardSequenceNumber()}
     }
     'files' { $result=[string[]][Windows.Forms.Clipboard]::GetFileDropList() }
+    'localPreviewType' { $result=Get-LocalPreviewType $payload.path }
     'writeFiles' { WriteClipboardFiles $payload.files;$result=$true }
     'quit' { Emit @{id=$request.id;result=$true};exit }
     default { throw '未知原生操作' }

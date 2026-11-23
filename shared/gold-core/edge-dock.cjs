@@ -3,7 +3,7 @@ const RAIL_HEIGHT = 68;
 const SNAP_DISTANCE = 18;
 const HOVER_DELAY = 80;
 const HIDE_DELAY = 340;
-const OPENING_HOLD = 15000;
+const OPENING_HOLD = 3000;
 const RAIL_INSET = 2;
 
 function edgeSide(bounds, area, distance = SNAP_DISTANCE) {
