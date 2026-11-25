@@ -16,7 +16,10 @@ const dateTick = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', year: 'nume
 const UNITS = { USD: '美元', EUR: '欧元', CNY: '人民币元' };
 const DAY = 86_400_000;
 const SERIES = { gold: '现货', ctf: '周大福' };
-const FORECAST_LABELS = { up: '预计涨', down: '预计跌', flat: '预计维持' };
+const DIRECTION_LABELS = { up: '涨', down: '跌', flat: '维持' };
+const FORECAST_LABELS = { up: '预计涨', down: '预计跌', flat: '预计维持', uncertain: '方向不明' };
+const DIRECTION_THRESHOLD = .60;
+const scenarioPercent = new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 1 });
 let lastSnapshot;
 let forecastInstrument = 'gold';
 let preferredPin = true;
@@ -74,6 +77,40 @@ function updateLayout(combined) {
   $('#ctf').hidden = combined;
 }
 
+function updateQuoteComparison(id, card, { quote, yesterday, previousForecast }, today) {
+  let comparison = $('.quote-comparison', card);
+  if (!comparison) {
+    comparison = element('dl', undefined, 'quote-comparison');
+    $('.quote-time', card).before(comparison);
+  }
+  const number = id === 'gold' ? amount : whole;
+  const actual = quote?.date === today ? displayValue(number, quote.price) : null;
+  comparison.replaceChildren();
+  for (const [forecast, point] of [[false, yesterday], [true, previousForecast]]) {
+    const label = forecast ? '昨日预测今价' :
+      id === 'gold' && point?.basis === '历史日线' ? '昨日收盘' : '昨日实价';
+    const row = element('div', undefined, 'quote-reference');
+    row.dataset.reference = forecast ? 'forecast' : 'yesterday';
+    const value = element('dd');
+    const hasPrice = Number.isFinite(point?.price);
+    row.append(element('dt', label), value);
+    value.append(element('span', hasPrice ? number.format(point.price) : forecast ? '暂无存档' : '暂无报价', 'reference-price'));
+    if (hasPrice) row.title = forecast ? `${point.date} 存档的今日预测价` : `${point.date} · ${point.basis}`;
+    if (hasPrice && actual !== null) {
+      const delta = actual - displayValue(number, point.price);
+      const direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+      const difference = (delta > 0 ? '+' : delta < 0 ? '−' : '') + number.format(Math.abs(delta));
+      const change = element('span', forecast ? '偏差 ' + difference : difference, 'reference-delta');
+      if (!forecast) change.dataset.direction = direction;
+      change.title = forecast ? '今日实价减预测价，按本卡币种与单位显示' : '今日实价减昨日价格，按本卡币种与单位显示';
+      value.append(change);
+    } else if (hasPrice && forecast) {
+      value.append(element('span', '实价待更新', 'reference-delta'));
+    }
+    comparison.append(row);
+  }
+}
+
 function updateQuote(id, card, item, snapshot) {
   const { quote, status, retryAt, detail, waitingForFx } = item;
   const { today, online, currency } = snapshot;
@@ -84,12 +121,14 @@ function updateQuote(id, card, item, snapshot) {
     status === 'loading' ? '正在取价' :
     status === 'retry' ? '等待重试' :
     waitingForFx ? '等待汇率' :
-    done ? (quote?.note?.includes('休市') ? '休市时段' : outOfDate ? '上次报价' : '已更新') : '等待 10 点';
+    done ? (quote?.note?.includes('休市') ? '休市时段' : outOfDate ? '上次报价' : '已更新') :
+    snapshot.slot === today ? '等待取价' : '等待 9 点';
   state.dataset.tone = !online ? 'offline' : done && !outOfDate && !waitingForFx ? 'ok' : 'pending';
   $('span', state).textContent = label;
   $('.quote-price', card).textContent = quote ? (id === 'gold' ? amount : whole).format(quote.price) : '—';
   $('.unit', card).textContent = id === 'gold' ? `${UNITS[currency]} / 克` : '元 / 克';
   updateChanges(card, item.changes);
+  updateQuoteComparison(id, card, item, today);
   updateSummary(id, card, snapshot.outlook.forecasts[id]);
   const dateLabel = quote?.quoteTime ? displayTime.format(new Date(quote.quoteTime)) : quote?.date;
   const priceTime = quote ? `${quote.note ? '最近报价' : id === 'gold' ? '行情时间' : quote.quoteTime ? '牌价时间' : '牌价日期'} ${dateLabel}` :
@@ -126,6 +165,12 @@ function element(tag, text, className) {
   return node;
 }
 
+function displayDirection(day) {
+  if (day?.closed || day?.sparse || !day?.model || !Object.hasOwn(DIRECTION_LABELS, day.direction)) return null;
+  if (!Object.keys(DIRECTION_LABELS).every(key => Number.isFinite(day.probabilities?.[key]))) return null;
+  return day.probabilities[day.direction] >= DIRECTION_THRESHOLD ? day.direction : 'uncertain';
+}
+
 function updateSummary(id, card, outlook) {
   let summary = $('.week-summary', card);
   if (!summary) {
@@ -142,15 +187,18 @@ function updateSummary(id, card, outlook) {
   }
   const days = outlook?.days.filter(({ mid }) => Number.isFinite(mid)) ?? [];
   const last = days.at(-1);
+  const direction = displayDirection(last);
+  const label = FORECAST_LABELS[direction] ?? (last ? '方向暂缺' : '待生成');
+  const confidence = direction && direction !== 'uncertain' ? scenarioPercent.format(last.probabilities[direction]) : '';
   $('.week-label', summary).textContent = last ? last.date.slice(5).replace('-', '/') + ' 展望' : '3 日展望';
-  $('.week-direction', summary).textContent = last ? FORECAST_LABELS[last.direction] : '待生成';
-  $('.week-confidence', summary).textContent = last ? `方向概率 ${last.confidence}%` : '';
-  $('.week-confidence', summary).hidden = !last;
-  summary.dataset.direction = last?.direction ?? '';
+  $('.week-direction', summary).textContent = label;
+  $('.week-confidence', summary).textContent = confidence ? '方向概率 ' + confidence : '';
+  $('.week-confidence', summary).hidden = !confidence;
+  summary.dataset.direction = direction ?? '';
   summary.setAttribute('aria-label', last ?
-    `查看三日展望，${last.date} ${FORECAST_LABELS[last.direction]}，方向概率 ${last.confidence}%` : '查看三日展望');
+    `查看三日展望，${last.date} ${label}` : '查看三日展望');
   summary.title = last ?
-    `截至 ${last.date} · ${FORECAST_LABELS[last.direction]} · 方向概率 ${last.confidence}%（未校准），不是价格命中率` :
+    `${last.date} · ${label}${confidence ? ' · 方向概率 ' + confidence + '（未校准）' : ''}` :
     '打开三日展望';
 }
 
@@ -209,7 +257,7 @@ function render(snapshot) {
   $('b', network).textContent = snapshot.online ? '网络可用' : '等待网络恢复';
   const retryAt = Math.min(...Object.values(instruments).map((item) => item.retryAt ?? Infinity));
   $('#next').textContent = !snapshot.online ? '恢复联网后自动补拉' :
-    Number.isFinite(retryAt) ? `下次重试 ${displayTime.format(new Date(retryAt))}` : '每日 10:00 取价';
+    Number.isFinite(retryAt) ? `下次重试 ${displayTime.format(new Date(retryAt))}` : '每日 09:00 开始取价';
 
   const leftUnit = currency === 'CNY' ? '元/克' : `${UNITS[currency]}/克`;
   const gold = { id: 'gold', rows: instruments.gold.history, unit: leftUnit };
@@ -319,8 +367,7 @@ function renderForecastDays(data, today, number, unit, todayQuote) {
     dateCell.append(toggle);
     const hasPrice = Number.isFinite(day.mid);
     const price = element('td', undefined, 'forecast-price');
-    const direction = !day.closed && !day.sparse && day.model && Number.isFinite(day.confidence) &&
-      Object.hasOwn(FORECAST_LABELS, day.direction) ? day.direction : null;
+    const direction = displayDirection(day);
     const label = hasPrice ? number.format(day.mid) : (day.closed ? '休市' : '暂无');
     if (direction) {
       const reading = element('span', undefined, 'forecast-reading');
@@ -366,15 +413,14 @@ function renderForecastDays(data, today, number, unit, todayQuote) {
     detail.hidden = expandedDate !== date;
     const cell = element('td'), panel = element('div', undefined, 'day-reading');
     cell.colSpan = 3;
-    if (day.model && Number.isFinite(day.confidence)) {
+    if (direction) {
       const headline = element('div', undefined, 'day-direction');
-      headline.dataset.direction = day.direction;
-      const chance = element('span', '概率 ', 'chance');
-      chance.setAttribute('aria-label', '方向概率 ' + day.confidence + '%，未校准');
-      chance.append(element('strong', day.confidence + '%'), '（未校准）');
-      if (Number.isFinite(day.sample)) chance.append(' · ' + day.sample + ' 个历史情景');
-      headline.append(element('b', FORECAST_LABELS[day.direction] || '方向待定'), chance);
-      panel.append(headline);
+      headline.dataset.direction = direction;
+      headline.append(element('b', FORECAST_LABELS[direction]));
+      if (Number.isFinite(day.sample)) headline.append(element('span', day.sample + ' 个历史情景', 'chance'));
+      const probabilityText = Object.entries(DIRECTION_LABELS).map(([key, label]) =>
+        label + ' ' + scenarioPercent.format(day.probabilities[key])).join(' · ');
+      panel.append(headline, element('p', probabilityText + '（未校准）', 'direction-probabilities'));
       const evidence = element('p', day.model);
       panel.append(evidence);
       if (day.pointMethod === 'persistence') panel.append(element('p', '此档参考价沿用基准牌价。'));
@@ -476,8 +522,8 @@ function renderOutlook() {
   renderForecastDays(data, today, number, unit, quote?.date === today ? quote.price : null);
 
   const counts = Object.entries(verification.byHorizon).filter(([days]) => Number(days) <= 3).map(([horizon, score]) => score.total ?
-    `${horizon} 日方向命中 ${score.hit}/${score.total}` : `${horizon} 日无到期样本`);
-  $('#verification-status').textContent = '北京时间 10:00–10:15';
+    `${horizon} 日模型方向命中 ${score.hit}/${score.total}` : `${horizon} 日无到期样本`);
+  $('#verification-status').textContent = '北京时间 09:00–10:15';
   const one = verification.byHorizon[1] || {};
   const priceSummary = one.priceCount && Number.isFinite(one.mape) ?
     `明日价平均误差 ${metricPercent.format(one.mape)}（${one.priceCount} 次${one.priceCount < 30 ? '，样本较少' : ''}）` : '明日价暂无到期的准时价格误差样本';
@@ -498,7 +544,12 @@ function renderOutlook() {
   const recent = verification.recent;
   const comparison = $('#verification-recent');
   comparison.hidden = !recent;
-  comparison.textContent = recent ? `${recent.origin} 预测 ${recent.target}（${recent.horizon} 日）。参考估计较基准 ${percent.format(recent.predictedReturn)}，实际 ${percent.format(recent.actualReturn)}，价格误差 ${metricPercent.format(recent.errorRate)}（${recent.onSchedule ? '准时' : '迟到'}）。` : '';
+  const predicted = recent && DIRECTION_LABELS[recent.predictedDirection];
+  const actual = recent && DIRECTION_LABELS[recent.actualDirection];
+  const directionCheck = predicted && actual ?
+    `模型判${predicted}${Number.isFinite(recent.directionProbability) ? '（' + scenarioPercent.format(recent.directionProbability) + '）' : ''}，实际${actual} ${percent.format(recent.actualReturn)}，方向${predicted === actual ? '命中' : '未命中'}。` :
+    recent ? `实际较基准 ${percent.format(recent.actualReturn)}。` : '';
+  comparison.textContent = recent ? `${recent.origin} 预测 ${recent.target}（${recent.horizon} 日）。${directionCheck}参考估计较基准 ${percent.format(recent.predictedReturn)}，价格误差 ${metricPercent.format(recent.errorRate)}（${recent.onSchedule ? '准时' : '迟到'}）。` : '';
 
   const drivers = $('#drivers');
   drivers.replaceChildren();
@@ -542,7 +593,8 @@ function renderOutlook() {
     calendar.append(line);
   }
   $('#model-note').textContent = data ?
-    '模型 ' + (data.version || verification.version || '—') + '。涨跌相对基准价，±0.2% 以内为维持。方向概率未校准，不是价格命中率。' +
+    '模型 ' + (data.version || verification.version || '—') + '。涨跌相对基准价，±0.2% 以内为维持。最高方向概率低于 ' +
+      scenarioPercent.format(DIRECTION_THRESHOLD) + ' 时显示「方向不明」。方向概率未经实盘校准。' +
       (hasJoint ? '周大福每日参考价结合近期牌价涨跌与基准日前的国际现货收盘走势，按各日期分别估算。' :
         hasFixed ? '此档周大福参考价沿用发行时的基准牌价，方向与区间按期限估计。' : hasSessionMedian ? '标注同交易跨度的参考价按历史交易日估算，方向概率单独计算。' : '参考估计来自历史情景。') +
       '各行情景区间采用相同刻度。实线标示当日参考价，虚线标示刻度内的今日实价。区间覆盖率用到期记录验证。市场因素和日历用于解读行情。' +

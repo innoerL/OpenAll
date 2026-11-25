@@ -536,8 +536,10 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
                 try await tool.execute("""
                 const button=document.querySelector('.forecast-day-toggle'), detail=document.getElementById(button.getAttribute('aria-controls'));
                 const day=(await openallGold.read()).outlook.forecasts.ctf.days[0];
+                const format=new Intl.NumberFormat('zh-CN', {style:'percent', maximumFractionDigits:1});
                 return button.getAttribute('aria-expanded')==='true' && detail?.matches('.forecast-detail') &&
-                  detail.getClientRects().length>0 && detail.innerText.includes(day.confidence+'%') && detail.innerText.includes('未校准');
+                  detail.getClientRects().length>0 && Object.values(day.probabilities).every(value => detail.innerText.includes(format.format(value))) &&
+                  detail.innerText.includes('未校准');
                 """) as? Bool == true
             }
             try check(true, "按日期查看对应的方向概率与校准状态")

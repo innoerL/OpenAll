@@ -1,9 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { summarizeChecks } = require('../forecast-verification.cjs');
+const { onSchedule, summarizeChecks } = require('../forecast-verification.cjs');
+const { Scheduler } = require('../scheduler.cjs');
+const { GRAMS_PER_TROY_OUNCE } = require('../currency.cjs');
 const { Store } = require('../store.cjs');
 const { MODEL_VERSION, modelVersionFor, classifyReturn, dateAfter } = require('../outlook.cjs');
-const { scheduledAt } = require('../time.cjs');
+const { quoteStartAt, scheduledAt } = require('../time.cjs');
 
 const probabilities = { up: .6, down: .2, flat: .2 };
 const estimate = extra => ({ direction: 'up', probabilities, confidence: 60, ...extra });
@@ -22,6 +24,52 @@ function archive(store, options = {}) {
       originPrice, JSON.stringify(estimate({ date: target, mid, low, high })), scheduledAt(target) + targetDelay,
       targetPrice, classifyReturn(Math.log(targetPrice / originPrice)));
 }
+
+test('早间有效报价计入准时样本，沿用 10:15 作为截止时间', () => {
+  const date = '2026-11-20', first = quoteStartAt(date), last = scheduledAt(date) + 15 * 60_000;
+  assert.equal(onSchedule(date, first - 1), false);
+  assert.equal(onSchedule(date, first), true);
+  assert.equal(onSchedule(date, first + 30 * 60_000), true);
+  assert.equal(onSchedule(date, last), true);
+  assert.equal(onSchedule(date, last + 1), false);
+});
+
+test('行情在今价到达前读取昨日预测存档和昨日实价，现货沿用原基准的汇率换算', context => {
+  const store = new Store(':memory:');
+  context.after(() => store.close());
+  const yesterday = '2026-11-19', today = '2026-11-20', now = quoteStartAt(today);
+  store.setSetting('currency', 'CNY');
+  store.saveHistory('fx', today, [
+    { ...quote('2026-11-18', 7), currency: 'CNY' },
+    { ...quote(yesterday, 7.2), currency: 'CNY' },
+  ]);
+  store.saveHistory('gold', yesterday, [quote(yesterday, 99 * GRAMS_PER_TROY_OUNCE)]);
+  store.saveQuote('gold', yesterday, quote(yesterday, 100 * GRAMS_PER_TROY_OUNCE), quoteStartAt(yesterday));
+  store.saveQuote('ctf', yesterday, quote(yesterday, 1000), quoteStartAt(yesterday));
+  for (const [instrument, mid] of [['gold', 102 * GRAMS_PER_TROY_OUNCE], ['ctf', 1020]]) {
+    const saved = store.latestQuote(instrument);
+    const forecast = { anchor: { date: yesterday, price: saved.price, fromQuote: true },
+      days: [estimate({ date: today, mid, low: mid * .98, high: mid * 1.02 })] };
+    store.issueForecast(instrument, yesterday, saved, forecast, quoteStartAt(yesterday) + 500);
+  }
+  archive(store, { origin: '2026-11-18', horizon: 2, mid: 900 });
+  const scheduler = new Scheduler({ store, sources: {}, online: () => true, publish() {}, clock: () => now });
+  let { gold, ctf } = scheduler.snapshot().instruments;
+  close(gold.previousForecast.price, 714);
+  close(gold.yesterday.price, 700);
+  assert.equal(ctf.previousForecast.price, 1020);
+  assert.equal(ctf.quote.date, yesterday);
+  assert.equal(ctf.yesterday.price, 1000);
+
+  store.saveQuote('gold', today, quote(today, 104 * GRAMS_PER_TROY_OUNCE), now);
+  store.saveQuote('ctf', today, quote(today, 1030), now);
+  ({ gold, ctf } = scheduler.snapshot().instruments);
+  close(gold.quote.price, 748.8);
+  close(gold.previousForecast.price, 714);
+  assert.equal(ctf.quote.price, 1030);
+  assert.equal(ctf.previousForecast.price, 1020);
+  assert.equal(store.forecastStats('ctf').byHorizon[1].total, 1);
+});
 
 test('价格误差、MAPE、不变价基线与区间覆盖使用各自的到期实际价格', () => {
   const result = summarizeChecks([
@@ -111,6 +159,9 @@ test('首次预测与首次结算保持不变，同日新计算及后续报价�
   close(result.byHorizon[1].mape, 7 / 110);
   close(result.recent.predictedReturn, .03);
   close(result.recent.actualReturn, .1);
+  assert.equal(result.recent.predictedDirection, 'up');
+  assert.equal(result.recent.actualDirection, 'up');
+  assert.equal(result.recent.directionProbability, .6);
 });
 
 test('升级当天分别保存两个周大福模型的发行时间和原价，重复刷新读取本版存档', context => {

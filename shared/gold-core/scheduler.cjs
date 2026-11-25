@@ -1,4 +1,4 @@
-const { dateAt, dateBeforeYear, latestSlot, scheduledAt, DAY, HALF_HOUR } = require('./time.cjs');
+const { dateAt, dateBeforeYear, latestSlot, scheduledAt, quoteStartAt, quoteRetryAt, DAY, HALF_HOUR } = require('./time.cjs');
 const { isConnectionError, marketIsClosed } = require('./sources.cjs');
 const { convertGold, earlier } = require('./currency.cjs');
 const { getChanges } = require('./changes.cjs');
@@ -21,18 +21,19 @@ class Scheduler {
   snapshot() {
     const now = this.clock();
     const today = dateAt(now);
+    const yesterday = earlier(today, 1);
     const slot = latestSlot(now);
     const since = dateBeforeYear(today);
     const instruments = {};
     const prior = {};
     const currency = this.store.getSetting('currency') ?? 'USD';
     for (const instrument of INSTRUMENTS) {
-      const job = this.store.job('quote', instrument, slot);
+      const job = slot === today ? this.store.job('quote', instrument, slot) : null;
       const saved = this.store.latestQuote(instrument);
       const quote = instrument === 'ctf' && saved?.slot === slot &&
         ['上海有色网', '搜金价'].includes(saved.source) ? null : saved;
       const history = this.store.history(instrument, since, today);
-      prior[instrument] = quote ? this.store.priorQuotes(instrument, quote.date) : [];
+      prior[instrument] = this.store.priorQuotes(instrument, today);
       if (instrument === 'ctf' && quote?.date === today) {
         const point = { date: today, price: quote.price, source: quote.source };
         if (history.at(-1)?.date === today) history[history.length - 1] = point;
@@ -40,6 +41,7 @@ class Scheduler {
       }
       instruments[instrument] = {
         quote: quote ?? null,
+        previousForecast: this.store.forecastPriceForDate(instrument, yesterday, today),
         history,
         status: this.running.has(`quote:${instrument}`) ? 'loading' : job?.status ?? 'pending',
         retryAt: job?.retryAt ?? null,
@@ -53,6 +55,7 @@ class Scheduler {
     const rates = currency === 'USD' ? [] : this.store.history(`fx:${currency}`, earlier(since, 10), today);
     prior.gold = prior.gold.map((point) => convertGold(point, [], currency, rates).quote).filter(Boolean);
     Object.assign(gold, convertGold(gold.quote, gold.history, currency, rates));
+    gold.previousForecast = convertGold(gold.previousForecast, [], currency, rates).quote;
     const goldForecast = outlook.forecasts.gold;
     if (goldForecast) {
       const { anchor, days } = goldForecast;
@@ -68,8 +71,12 @@ class Scheduler {
     for (const id of INSTRUMENTS) {
       const item = instruments[id];
       item.changes = getChanges(item.quote, item.history, prior[id]);
+      const yesterdayQuote = prior[id].findLast(({ date }) => date === yesterday);
+      const yesterdayHistory = item.history.findLast(({ date }) => date === yesterday);
+      item.yesterday = yesterdayQuote ? { ...yesterdayQuote, basis: '已保存报价' } :
+        yesterdayHistory ? { ...yesterdayHistory, basis: '历史日线' } : null;
     }
-    return { today, slot, since, currency, online: this.online(), nextDailyAt: scheduledAt(dateAt(scheduledAt(slot) + DAY)), instruments, outlook };
+    return { today, slot, since, currency, online: this.online(), nextDailyAt: quoteStartAt(dateAt(quoteStartAt(slot) + DAY)), instruments, outlook };
   }
 
   outlook(instruments, today, now) {
@@ -127,7 +134,7 @@ class Scheduler {
     const force = ['startup', 'resume', 'reconnect'].includes(reason);
     const operations = INSTRUMENTS.flatMap((instrument) => {
       const history = this.run('history', instrument, today, now, force);
-      return quoteSlot >= this.firstSlot ?
+      return quoteSlot === today && quoteSlot >= this.firstSlot ?
         [this.run('quote', instrument, quoteSlot, now, force), history] : [history];
     });
     if (this.sources.fx) operations.push(this.run('history', 'fx', today, now, force));
@@ -147,6 +154,10 @@ class Scheduler {
       if (this.stopped) return;
       const finished = this.clock();
       if (kind === 'quote') {
+        if (dateAt(finished) !== slot) return;
+        if (data.date !== slot && !(instrument === 'gold' && data.date < slot && marketIsClosed(now))) {
+          throw new Error('等待当日报价');
+        }
         this.store.saveQuote(instrument, slot, data, finished);
       } else if (kind === 'context') {
         this.store.saveContext(slot, data, finished, data.partial ? finished + HALF_HOUR : null);
@@ -157,7 +168,9 @@ class Scheduler {
       if (this.stopped) return;
       const detail = isConnectionError(error) ? '连接行情服务失败' :
         (error?.message?.startsWith('net::') ? '行情接口暂不可用' : (error?.message ?? '行情接口暂不可用'));
-      this.store.setJob(kind, instrument, slot, 'retry', this.clock() + HALF_HOUR, detail.slice(0, 72));
+      const finished = this.clock();
+      const retryAt = kind === 'quote' ? quoteRetryAt(slot, finished) : finished + HALF_HOUR;
+      this.store.setJob(kind, instrument, slot, 'retry', retryAt, detail.slice(0, 72));
       if (isConnectionError(error)) this.onConnectionError();
     } finally {
       this.running.delete(key);

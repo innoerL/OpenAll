@@ -183,8 +183,9 @@ module.exports = async function verifyGold(searchWindow, output) {
         const button = document.querySelectorAll('.forecast-day-toggle')[index];
         const detail = document.getElementById(button.getAttribute('aria-controls'));
         const day = (await openallGold.read()).outlook.forecasts.ctf.days[index];
+        const format = new Intl.NumberFormat('zh-CN', {style:'percent', maximumFractionDigits:1});
         return button.getAttribute('aria-expanded') === 'true' && detail?.matches('.forecast-detail') &&
-          detail.getClientRects().length > 0 && detail.innerText.includes(day.confidence + '%') &&
+          detail.getClientRects().length > 0 && Object.values(day.probabilities).every(value => detail.innerText.includes(format.format(value))) &&
           detail.innerText.includes('未校准');
       }, 0);
       await until(expandedDetails, '回车查看首日方向概率与校准说明');

@@ -12,7 +12,7 @@ const { convertGold, cutoffDate, parseFx, GRAMS_PER_TROY_OUNCE } = require('../c
 const when = (time) => Date.parse(`2026-11-20T${time}:00+08:00`);
 const quote = (date, price = 3500) => ({ date, price, quoteTime: null, source: '测试源', note: '' });
 
-function harness(context, { initial = '09:50', goldQuote, ctfQuote, connected = true, disk = false } = {}) {
+function harness(context, { initial = '08:59', goldQuote, ctfQuote, connected = true, disk = false } = {}) {
   let now = when(initial);
   let online = connected;
   const calls = { gold: 0, ctf: 0 };
@@ -44,17 +44,47 @@ function harness(context, { initial = '09:50', goldQuote, ctfQuote, connected = 
   };
 }
 
-test('北京时间整点取价，首次 10 点前启动只加载历史', async (context) => {
+test('北京时间 9 点可取价，成功后 9 点半和 10 点均不重复', async (context) => {
   const h = harness(context);
   await h.scheduler.tick('startup');
   assert.deepEqual(h.calls, { gold: 0, ctf: 0 });
-  h.go('10:00');
+  assert.equal(h.scheduler.snapshot().nextDailyAt, when('09:00'));
+  h.go('09:00');
   await h.scheduler.tick();
   assert.deepEqual(h.calls, { gold: 1, ctf: 1 });
+  h.go('09:30');
+  await h.scheduler.tick();
+  h.go('10:00');
   await h.scheduler.tick('resume');
   assert.deepEqual(h.calls, { gold: 1, ctf: 1 });
   assert.equal(scheduledAt('2026-11-20'), Date.parse('2026-11-20T02:00:00Z'));
   assert.equal(dateBeforeYear('2024-02-29'), '2023-02-28');
+});
+
+test('周大福早间缺报或只返回昨日价，按 9:30、10:00 重试并以首份有效价为准', async context => {
+  let attempts = 0;
+  const h = harness(context, {
+    initial: '09:02',
+    ctfQuote() {
+      if (++attempts === 1) return quote('2026-11-19', 1124);
+      if (attempts === 2) throw new Error('当日牌价尚未核实');
+      return quote('2026-11-20', 1132);
+    },
+  });
+  await h.scheduler.tick();
+  const status = () => h.scheduler.snapshot().instruments.ctf;
+  assert.equal(status().quote, null);
+  assert.equal(status().retryAt, when('09:30'));
+  h.go('09:29');
+  await h.scheduler.tick();
+  assert.deepEqual(h.calls, { gold: 1, ctf: 1 });
+  h.go('09:30');
+  await h.scheduler.tick();
+  assert.equal(status().retryAt, when('10:00'));
+  h.go('10:00');
+  await h.scheduler.tick();
+  assert.equal(status().quote.price, 1132);
+  assert.deepEqual(h.calls, { gold: 1, ctf: 3 });
 });
 
 test('10 点后首次启动立即补拉，成功后重启不重复', async (context) => {

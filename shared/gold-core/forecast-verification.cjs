@@ -1,11 +1,10 @@
-const { scheduledAt } = require('./time.cjs');
+const { quoteStartAt, scheduledAt } = require('./time.cjs');
 const { DIRECTIONS } = require('./outlook.cjs');
 
 const CAPTURE_WINDOW = 15 * 60_000;
 
 function onSchedule(date, fetchedAt) {
-  const delay = fetchedAt - scheduledAt(date);
-  return delay >= 0 && delay <= CAPTURE_WINDOW;
+  return fetchedAt >= quoteStartAt(date) && fetchedAt <= scheduledAt(date) + CAPTURE_WINDOW;
 }
 
 function summarizeChecks(rows) {

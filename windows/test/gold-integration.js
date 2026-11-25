@@ -41,10 +41,42 @@ async function verifyForecastMetrics(search, report) {
       await execute(gold, () => document.querySelector('#model-note').textContent.includes('国际现货收盘走势')),
     '周大福逐日估价展示对应的数据来源');
 
+    const comparison = structuredClone(original);
+    comparison.view = 'quotes';
+    comparison.combined = true;
+    const lastDate = '2026-11-19';
+    Object.assign(comparison.instruments.ctf, {
+      quote: { ...comparison.instruments.ctf.quote, date: comparison.today, price: 1103 },
+      yesterday: { date: lastDate, price: 1091, basis: '已保存报价' },
+      previousForecast: { date: lastDate, price: 1089 },
+    });
+    gold.webContents.send('openall:gold-snapshot', comparison);
+    await until(() => execute(gold, () => ['#ctf', '#summary-ctf'].every(selector => {
+      const card = document.querySelector(selector);
+      const yesterday = card.querySelector('[data-reference=yesterday]');
+      const forecast = card.querySelector('[data-reference=forecast]');
+      return yesterday?.querySelector('.reference-price').textContent === '1,091' &&
+        yesterday.querySelector('.reference-delta').textContent === '+12' &&
+        forecast?.querySelector('.reference-price').textContent === '1,089' &&
+        forecast.querySelector('.reference-delta').textContent === '偏差 +14';
+    })));
+    comparison.instruments.ctf.quote.date = lastDate;
+    gold.webContents.send('openall:gold-snapshot', comparison);
+    await until(() => execute(gold, () => {
+      const card = document.querySelector('#summary-ctf');
+      return !card.querySelector('[data-reference=yesterday] .reference-delta') &&
+        card.querySelector('[data-reference=forecast] .reference-delta').textContent === '实价待更新' &&
+        card.querySelector('[data-reference=forecast] .reference-price').textContent === '1,089';
+    }));
+    check(true, '行情与合并卡显示昨日实价、昨日预测及偏差，今价未到时保留预测价');
+
     // 只向页面发送内存快照，既不修改宿主状态，也不往预测存档写入虚构样本。
     const directions = structuredClone(original);
     const directionsDays = directions.outlook.forecasts.ctf.days;
-    for (const [index, direction] of ['up', 'down', 'flat'].entries()) directionsDays[index].direction = direction;
+    for (const [index, direction] of ['up', 'down', 'flat'].entries()) {
+      directionsDays[index].direction = direction;
+      directionsDays[index].probabilities = { up: .2, down: .2, flat: .2, [direction]: .6 };
+    }
     gold.webContents.send('openall:gold-snapshot', directions);
     await until(() => execute(gold, () => document.querySelectorAll('.forecast-trend')[2]?.dataset.direction === 'flat'));
     check(await execute(gold, () => {
@@ -61,6 +93,22 @@ async function verifyForecastMetrics(search, report) {
           icon.getBoundingClientRect().right <= icon.nextElementSibling.getBoundingClientRect().left;
       }) && rows.length === 3;
     }), '收起时每日报价前显示红涨、绿跌或灰平');
+    const weak = structuredClone(directions);
+    const weakDays = weak.outlook.forecasts.ctf.days;
+    Object.assign(weakDays[0], { direction: 'down', confidence: 47, probabilities: { up: .425, down: .471, flat: .104 } });
+    Object.assign(weakDays[1], { direction: 'down', confidence: 51, probabilities: { up: .222, down: .508, flat: .270 } });
+    Object.assign(weakDays[2], { direction: 'down', confidence: 60, probabilities: { up: .301, down: .599, flat: .100 } });
+    gold.webContents.send('openall:gold-snapshot', weak);
+    await until(() => execute(gold, () => [...document.querySelectorAll('.forecast-trend')].every(icon =>
+      icon.dataset.direction === 'uncertain' && icon.getAttribute('aria-label') === '方向不明') &&
+      document.querySelector('.ctf .week-direction').textContent === '方向不明'));
+    check(await execute(gold, () => {
+      document.querySelector('.forecast-day-toggle').click();
+      const detail = document.querySelector('.forecast-detail:not([hidden])');
+      const probabilities = detail?.querySelector('.direction-probabilities')?.textContent;
+      document.querySelector('.forecast-day-toggle').click();
+      return probabilities === '涨 42.5% · 跌 47.1% · 维持 10.4%（未校准）';
+    }), '弱信号使用独立的方向不明标记，展开仍可查看三个方向概率');
     const legacy = structuredClone(original);
     legacy.outlook.forecasts.ctf.version = '3.0.0';
     for (const day of legacy.outlook.forecasts.ctf.days) {
@@ -75,7 +123,9 @@ async function verifyForecastMetrics(search, report) {
     // 第三天的快照改变后，详情必须带出同一日期的新概率。
     const refreshed = structuredClone(original);
     const updatedDay = refreshed.outlook.forecasts.ctf.days[2];
-    updatedDay.confidence = updatedDay.confidence === 85 ? 84 : 85;
+    updatedDay.direction = 'up';
+    updatedDay.confidence = 85;
+    updatedDay.probabilities = { up: .85, down: .10, flat: .05 };
     await execute(gold, () => document.querySelectorAll('.forecast-day-toggle')[2].click());
     gold.webContents.send('openall:gold-snapshot', refreshed);
     await until(() => execute(gold, () => {
@@ -131,7 +181,7 @@ async function verifyForecastMetrics(search, report) {
 
     const partial = structuredClone(original);
     const partialDay = partial.outlook.forecasts.ctf.days[2];
-    delete partialDay.confidence;
+    delete partialDay.probabilities;
     gold.webContents.send('openall:gold-snapshot', partial);
     await until(() => execute(gold, () => {
       const button = document.querySelectorAll('.forecast-day-toggle')[2];
@@ -250,6 +300,7 @@ async function verifyForecastMetrics(search, report) {
     verification.lateByHorizon[1] = { ...verification.byHorizon[1], total: 2, hit: 1, priceCount: 2,
       mape: .08, intervalCount: 2, intervalCoverage: .5 };
     verification.recent = { origin: '2026-11-18', target: '2026-11-21', horizon: 3, onSchedule: true,
+      predictedDirection: 'down', actualDirection: 'up', directionProbability: .51,
       predictedReturn: -.01, actualReturn: .02, errorRate: .03 };
     sample.outlook.forecasts.ctf.provisional = true;
     gold.webContents.send('openall:gold-snapshot', sample);
@@ -262,8 +313,11 @@ async function verifyForecastMetrics(search, report) {
     }), '明日价百分比误差、样本量与区间覆盖优先展示，迟到样本分开统计');
     check(await execute(gold, () => document.querySelector('#forecast-meta').textContent.includes('暂估 · 尚未存档')),
       '未正式发行的展望明确标记暂估');
-    check(await execute(gold, () => document.querySelector('#verification-recent').textContent.includes('2026-11-18 预测 2026-11-21（3 日）')),
-      '验证摘要区分发行日、目标日和预测跨度');
+    check(await execute(gold, () => {
+      const recent = document.querySelector('#verification-recent').textContent;
+      return recent.includes('2026-11-18 预测 2026-11-21（3 日）') &&
+        recent.includes('模型判跌（51%），实际涨 +2.00%，方向未命中');
+    }), '到期记录保留原始模型判断，并明确标出了实际方向和未命中');
     const persisted = await execute(gold, () => openallGold.read());
     assert.deepEqual(persisted.outlook.verification, original.outlook.verification);
     gold.webContents.send('openall:gold-snapshot', original);

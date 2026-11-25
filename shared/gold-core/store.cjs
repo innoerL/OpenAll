@@ -162,6 +162,18 @@ class Store {
     };
   }
 
+  forecastPriceForDate(instrument, origin, target) {
+    const row = this.db.prepare(`
+      SELECT origin AS date, origin_fetched_at AS fetchedAt, issued_at AS issuedAt, estimate
+      FROM forecast_checks WHERE instrument = ? AND target = ? AND origin = ?
+      ORDER BY issued_at DESC, rowid DESC LIMIT 1
+    `).get(instrument, target, origin);
+    if (!row) return null;
+    const { estimate, ...forecast } = row;
+    const { mid } = JSON.parse(estimate);
+    return Number.isFinite(mid) && mid > 0 ? { ...forecast, price: mid } : null;
+  }
+
   forecastStats(instrument, version = modelVersionFor(instrument)) {
     const offsets = [...FORECAST_OFFSETS, 7];
     const rows = this.db.prepare(`
@@ -187,6 +199,9 @@ class Store {
       version, units: ({ gold: 'USD/troy-oz', ctf: 'CNY/g' })[instrument] ?? null,
       recent: recent ? {
         origin: recent.origin, target: recent.target, horizon: recent.horizon, onSchedule: recent.onSchedule,
+        predictedDirection: recent.direction,
+        directionProbability: recent.probabilities?.[recent.direction],
+        actualDirection: recent.actual,
         predictedReturn: recent.mid / recent.originPrice - 1,
         actualReturn: recent.targetPrice / recent.originPrice - 1,
         errorRate: Math.abs(recent.mid - recent.targetPrice) / recent.targetPrice,
@@ -214,7 +229,7 @@ class Store {
   priorQuotes(instrument, date) {
     return this.db.prepare(`
       SELECT date, price, fetched_at AS fetchedAt FROM quotes
-      WHERE instrument = ? AND date < ? AND source != '上海有色网' ORDER BY fetched_at DESC LIMIT 24
+      WHERE instrument = ? AND date < ? AND source NOT IN ('上海有色网', '搜金价') ORDER BY fetched_at DESC LIMIT 24
     `).all(instrument, date).reverse();
   }
 
