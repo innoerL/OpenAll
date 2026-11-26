@@ -115,6 +115,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node test/native-file-search-windows.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 剪贴板失焦与真实桌面回车
+        run: npx electron test/clipboard-desktop-windows.js
       - name: 构建 Windows x64 安装包
         run: npm run dist -- --publish never
       - name: 安装、启动、全页面截图与卸载检查
@@ -127,7 +129,7 @@ jobs:
           if (-not $file) { throw '未生成安装包' }
           $hash = (Get-FileHash -Algorithm SHA256 -Path $file.FullName).Hash.ToLowerInvariant()
           "$hash  $($file.Name)" | Set-Content -Encoding utf8 dist/SHA256SUMS.txt
-          "## Windows 云端构建通过`n已验证：完整工具功能、原生接口、大文本压力、独立窗口粘贴、安装与卸载。`n页面截图与详细检查报告见 windows-checks artifact。" >> $env:GITHUB_STEP_SUMMARY
+          "## Windows 云端构建通过`n已验证：完整工具功能、原生接口、大文本压力、独立窗口粘贴、剪贴板失焦收起、真实桌面回车与图标状态、安装与卸载。`n页面截图与详细检查报告见 windows-checks artifact。" >> $env:GITHUB_STEP_SUMMARY
       - name: 保存截图与检查报告
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

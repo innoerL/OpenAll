@@ -441,12 +441,39 @@ final class GoldToolController: NSObject, WKScriptMessageHandlerWithReply, WKNav
             _ = try await tool.execute("return await openallGold.action('pin');")
             try check(tool.boolean("pinned", default: true) != pinned && panel.level == (pinned ? .normal : .floating), "置顶偏好同步 AppKit 窗口层级")
             try await capture("gold-combined")
+            let quoteFrame = panel.frame
+            panel.setFrame(NSRect(origin: quoteFrame.origin, size: NSSize(width: 345, height: 560)), display: true)
+            _ = try await tool.execute("""
+            const state = await openallGold.read();
+            state.combined = false;
+            state.instruments.ctf.quote.date = new Date(Date.parse(state.today) - 86400000).toISOString().slice(0, 10);
+            state.instruments.ctf.status = 'pending';
+            window.__openallGoldDeliver({kind:'snapshot',value:state});
+            return true;
+            """)
+            try await tool.until("矮窗报价完整且显示昨日标记") {
+                try await tool.execute("""
+                const root = document.documentElement;
+                return Math.abs(innerWidth-345)<=1 && Math.abs(innerHeight-560)<=1 &&
+                  root.scrollHeight<=root.clientHeight+1 && root.scrollWidth<=root.clientWidth+1 &&
+                  document.querySelector('#ctf .quote-freshness').innerText==='昨日金价 · 今日数据未更新';
+                """) as? Bool == true
+            }
+            try check(true, "345×560 窗口同时显示两份独立报价、曲线与昨日提示")
+            _ = try await tool.execute("window.__openallGoldDeliver({kind:'snapshot',value:await openallGold.read()}); return true;")
+            panel.setFrame(quoteFrame, display: true)
             _ = try await tool.execute("document.querySelector('#outlook-view').click(); return true;")
             try await tool.until("三日展望页面") { try await tool.execute("return !document.querySelector('#outlook').hidden;") as? Bool == true }
             _ = try await tool.execute("document.querySelector('#forecast-ctf').click(); return true;")
             try check(try await tool.execute("return document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 3 && !!document.querySelector('#verification-note').textContent;") as? Bool == true,
                 "三日表格与实际报价验证展示")
-            try check(try await tool.execute("return ['#market-breakdown > summary','#events','#calendar'].every(selector=>document.querySelector(selector).textContent.trim().length>0 && document.querySelector(selector).getClientRects().length>0);") as? Bool == true, "市场因素入口、近期国际事件与未来三日财经日历直接可见")
+            try check(try await tool.execute("""
+            return ['#drivers','#events','#calendar'].every(selector => {
+              const content = document.querySelector(selector), details = content.closest('details');
+              const summary = details.querySelector('summary');
+              return content.children.length > 0 && !details.open && summary.getBoundingClientRect().height > 0;
+            });
+            """) as? Bool == true, "市场因素、国际事件与财经日历有可展开的入口")
             let checkPrices = """
             const state = await openallGold.read();
             const quote = state.instruments.ctf.quote;

@@ -11,12 +11,12 @@ const settingsFile = path.join(process.env.OPENALL_TEST_USER_DATA, 'settings.jso
 fsSync.writeFileSync(settingsFile, JSON.stringify({clipboardPreferences:{retentionDays:90}}));
 require('../src/main');
 
-setTimeout(() => { console.error('文件剪贴板集成回归超时'); app.exit(1); }, 45000).unref();
+setTimeout(() => { console.error('文件剪贴板集成回归超时'); app.exit(1); }, 120000).unref();
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const execute = (win, fn, ...args) => win.webContents.executeJavaScript(`(${fn})(...${JSON.stringify(args)})`);
-async function until(fn) {
+async function until(fn, timeout = 10000) {
   const start = Date.now();
-  while (Date.now() - start < 10000) {
+  while (Date.now() - start < timeout) {
     const value = await fn();
     if (value) return value;
     await delay(25);
@@ -67,7 +67,9 @@ async function checkPreviewActions(shelf, page, photo, files, filesId) {
     }, id));
     shelf.webContents.sendInputEvent({type:'keyDown', keyCode:'Space'});
     shelf.webContents.sendInputEvent({type:'keyUp', keyCode:'Space'});
-    return page('clipboardPreview');
+    const preview = await page('clipboardPreview');
+    await until(() => preview.isFocused());
+    return preview;
   }
   async function click(win, selector, label) {
     assert.ok(await execute(win, (selector, label) => {
@@ -110,7 +112,7 @@ async function checkPreviewActions(shelf, page, photo, files, filesId) {
     selection.close();
   }
 
-  const preview = await openPreview(textId);
+  let preview = await openPreview(textId);
   await click(preview, footer, '复制全文');
   await until(() => execute(preview, text => openall.readText().then(copied => copied === text), text));
   await click(preview, footer, '用工具打开 ▾');
@@ -118,8 +120,10 @@ async function checkPreviewActions(shelf, page, photo, files, filesId) {
   const editor = await page('json');
   assert.ok(await execute(editor, text => OpenAllApp.controller.getText() === text, text));
   await execute(editor, () => OpenAllApp.controller.setText(''));
-  preview.focus();
-  await until(() => preview.isFocused());
+  preview.close();
+  editor.show(); editor.focus();
+  await until(() => editor.isFocused());
+  preview = await openPreview(textId);
   await click(preview, footer, '粘贴此项');
   await until(() => preview.isDestroyed() || !preview.isVisible());
   await until(() => execute(editor, text => OpenAllApp.controller.getText() === text, text));
@@ -129,7 +133,7 @@ app.whenReady().then(async () => {
   const page = name => until(async () => {
     const win = BrowserWindow.getAllWindows().find(item => item.webContents.getURL().endsWith('?page=' + name));
     return win && await execute(win, () => !!window.OpenAllApp?.ready).catch(() => false) && win;
-  });
+  }, name === 'search' ? 25000 : 10000);
   const search = await page('search');
   const legacy = await execute(search, async () => (await openall.settings()).clipboardPreferences);
   assert.equal(legacy.cardFontSize, 'large');
@@ -137,8 +141,70 @@ app.whenReady().then(async () => {
   await execute(search, () => openall.windowAction('showClipboard'));
   let shelf = await page('clipboard');
   if (process.platform === 'darwin') app.focus({steal:true});
+  assert.ok(await execute(shelf, () => document.activeElement.matches('.clipboard-search') &&
+    !document.querySelector('.clip-card')), '空历史打开时焦点落在搜索框');
+  await execute(search, () => openall.windowAction('smokeFixture', {
+    clipboard:['唤出焦点验证旧卡片', '唤出焦点验证新卡片'].map(text => ({kind:'text', text, value:text})),
+  }));
+  shelf.destroy();
+  await execute(search, () => openall.windowAction('showClipboard'));
+  shelf = await page('clipboard');
+  if (process.platform === 'darwin') app.focus({steal:true});
+  const press = key => execute(shelf, key => document.activeElement.dispatchEvent(
+    new KeyboardEvent('keydown', {key, bubbles:true, cancelable:true}),
+  ), key);
+  const firstHasFocus = text => execute(shelf, text => {
+    const track = document.querySelector('.clip-track'), first = track.querySelector('.clip-card');
+    return first?.matches('[aria-selected=true]') && document.activeElement === first &&
+      first.querySelector('.clip-content').textContent === text && !track.scrollLeft && !track.scrollTop &&
+      track.querySelectorAll('.clip-card[aria-selected=true]').length === 1;
+  }, text);
+  await until(() => firstHasFocus('唤出焦点验证新卡片'));
+  await press('ArrowRight');
+  await until(() => execute(shelf, () => document.activeElement === document.querySelectorAll('.clip-card')[1]));
+  await press('Escape');
+  await until(() => !shelf.isVisible());
+  await execute(search, () => openall.windowAction('smokeFixture', {
+    clipboard:[{kind:'text', text:'窗口隐藏时新复制的卡片', value:'窗口隐藏时新复制的卡片'}],
+  }));
+  await execute(search, () => openall.windowAction('showClipboard'));
+  await until(() => firstHasFocus('窗口隐藏时新复制的卡片'));
+  await press('z');
+  await until(() => execute(shelf, () => document.activeElement.matches('.clipboard-search') &&
+    document.activeElement.value.toLowerCase() === 'z' && !document.querySelector('.clip-card')));
+  await press('Escape');
+  await until(() => !shelf.isVisible());
+  // 刻意让旧记录排在首位，验证默认选中与实际显示位置一致。
+  const reversed = (await execute(search, () => openall.history())).reverse();
+  shelf.webContents.send('clipboard-changed', reversed);
+  await execute(search, () => openall.windowAction('showClipboard'));
+  await until(() => firstHasFocus(reversed[0].text));
+  assert.equal(await execute(shelf, () => document.querySelector('.clipboard-search').value), '');
+  await execute(shelf, () => openall.clipboardAction('setLayout', {layout:'list'}));
+  await until(() => execute(shelf, () => document.querySelector('.clipboard-shelf').dataset.layout === 'list'));
+  await press('ArrowDown');
+  await until(() => execute(shelf, () => document.activeElement === document.querySelectorAll('.clip-card')[1]));
+  await press('Escape');
+  await until(() => !shelf.isVisible());
+  await execute(search, () => openall.windowAction('showClipboard'));
+  await until(() => firstHasFocus(reversed[0].text));
+  const outside = new BrowserWindow({show:false});
+  await outside.loadURL('about:blank');
+  outside.show(); outside.focus();
+  await until(() => outside.isFocused() && !shelf.isVisible());
+  await execute(search, () => openall.windowAction('showClipboard'));
+  await until(() => firstHasFocus(reversed[0].text));
+  await press('Enter');
+  await until(() => !shelf.isVisible());
+  assert.equal(await execute(shelf, () => openall.readText()), reversed[0].text, '无粘贴目标时回车只复制');
+  outside.close();
+  await execute(search, () => openall.windowAction('showClipboard'));
+  await execute(shelf, () => openall.clipboardAction('clear', {includeFavorites:true}));
+  console.log('剪贴板唤出回归通过：首卡、首行、直接搜索、失焦收起、无目标回车复制后可再次唤出');
+  if (process.platform === 'darwin') app.focus({steal:true});
   shelf.focus();
   await until(() => BrowserWindow.getFocusedWindow() === shelf);
+
   const root = app.getPath('userData'), archive = path.join(root, '备份 #1.zip'), folder = path.join(root, '资料夹');
   const missing = path.join(root, '已删除.exe'), other = path.join(root, '第四项.txt');
   await fs.writeFile(archive, 'zip');

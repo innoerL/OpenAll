@@ -61,10 +61,12 @@ function updateEdgeMotion(side, collapsed) {
 }
 
 function updateView(view) {
+  const switched = $(`#${view}`)?.hidden;
   for (const id of ['quotes', 'outlook']) {
     $(`#${id}`).hidden = view !== id;
     $(`#${id}-view`).setAttribute('aria-pressed', view === id);
   }
+  if (switched) window.scrollTo(0, 0);
 }
 
 function updateLayout(combined) {
@@ -87,6 +89,7 @@ function updateQuoteComparison(id, card, { quote, yesterday, previousForecast },
   const actual = quote?.date === today ? displayValue(number, quote.price) : null;
   comparison.replaceChildren();
   for (const [forecast, point] of [[false, yesterday], [true, previousForecast]]) {
+    if (!forecast && actual === null && point && point.date === quote?.date && point.price === quote.price) continue;
     const label = forecast ? '昨日预测今价' :
       id === 'gold' && point?.basis === '历史日线' ? '昨日收盘' : '昨日实价';
     const row = element('div', undefined, 'quote-reference');
@@ -111,23 +114,36 @@ function updateQuoteComparison(id, card, { quote, yesterday, previousForecast },
   }
 }
 
+function staleQuoteLabel(quote, today) {
+  if (!quote?.date || quote.date === today) return '';
+  const yesterday = new Date(Date.parse(today) - DAY).toISOString().slice(0, 10);
+  return quote.date === yesterday ? '昨日金价' : `${quote.date.slice(5).replace('-', '/')} 报价`;
+}
+
 function updateQuote(id, card, item, snapshot) {
   const { quote, status, retryAt, detail, waitingForFx } = item;
   const { today, online, currency } = snapshot;
   const done = status === 'done';
   const state = $('.state', card);
-  const outOfDate = quote && quote.date !== today;
+  const stale = staleQuoteLabel(quote, today);
   const label = !online ? '等待联网' :
     status === 'loading' ? '正在取价' :
     status === 'retry' ? '等待重试' :
     waitingForFx ? '等待汇率' :
-    done ? (quote?.note?.includes('休市') ? '休市时段' : outOfDate ? '上次报价' : '已更新') :
+    done ? (quote?.note?.includes('休市') ? '休市时段' : stale ? '上次报价' : '已更新') :
     snapshot.slot === today ? '等待取价' : '等待 9 点';
-  state.dataset.tone = !online ? 'offline' : done && !outOfDate && !waitingForFx ? 'ok' : 'pending';
+  state.dataset.tone = !online ? 'offline' : done && !stale && !waitingForFx ? 'ok' : 'pending';
   $('span', state).textContent = label;
   $('.quote-price', card).textContent = quote ? (id === 'gold' ? amount : whole).format(quote.price) : '—';
   $('.unit', card).textContent = id === 'gold' ? `${UNITS[currency]} / 克` : '元 / 克';
-  updateChanges(card, item.changes);
+  let freshness = $('.quote-freshness', card);
+  if (!freshness) {
+    freshness = element('p', undefined, 'quote-freshness');
+    $('.price-line', card).after(freshness);
+  }
+  freshness.hidden = !stale;
+  freshness.textContent = stale ? stale + ' · 今日数据未更新' : '';
+  updateChanges(card, item.changes, Boolean(stale));
   updateQuoteComparison(id, card, item, today);
   updateSummary(id, card, snapshot.outlook.forecasts[id]);
   const dateLabel = quote?.quoteTime ? displayTime.format(new Date(quote.quoteTime)) : quote?.date;
@@ -202,12 +218,13 @@ function updateSummary(id, card, outlook) {
     '打开三日展望';
 }
 
-function updateChanges(card, { daily, weekly } = {}) {
+function updateChanges(card, { daily, weekly } = {}, stale = false) {
   let strip = $('.changes', card);
   if (!strip) {
     strip = element('span', undefined, 'changes');
     $('.price-line', card).append(strip);
   }
+  strip.hidden = stale;
   strip.replaceChildren();
   for (const [label, data] of [['较昨日', daily], ['较一周前', weekly]]) {
     const period = data && !data.exact ? `较 ${data.date.slice(5).replace('-', '/')}` : label;
@@ -224,6 +241,29 @@ function updateChanges(card, { daily, weekly } = {}) {
 
 const cards = { gold: $('#gold'), ctf: $('#ctf'), combined: $('#combined') };
 const charts = Object.fromEntries(Object.entries(cards).map(([id, card]) => [id, new window.OpenAllGoldChart(card)]));
+const pageContent = $('main');
+const quotes = $('#quotes');
+let fitFrame = 0;
+
+function fitQuoteCharts() {
+  if (fitFrame) return;
+  fitFrame = requestAnimationFrame(() => {
+    fitFrame = 0;
+    if (quotes.hidden) return;
+    const plots = Object.values(cards).filter(card => !card.hidden).map(card => $('.plot', card));
+    const plotted = plots.reduce((sum, plot) => sum + plot.getBoundingClientRect().height, 0);
+    const rows = new Set(plots.map(plot => plot.parentElement.getBoundingClientRect().top)).size;
+    // 图表优先让出高度，报价、对比和底部操作按实际换行后的高度保留。
+    const contentBottom = pageContent.getBoundingClientRect().bottom + window.scrollY;
+    const spare = document.documentElement.clientHeight - contentBottom;
+    const height = `${Math.floor(plotted / plots.length + spare / rows)}px`;
+    if (quotes.style.getPropertyValue('--plot-height') !== height) quotes.style.setProperty('--plot-height', height);
+  });
+}
+
+const quoteLayout = new ResizeObserver(fitQuoteCharts);
+quoteLayout.observe(pageContent);
+window.addEventListener('resize', fitQuoteCharts);
 
 function updateChart(id, series, snapshot, caption, dualAxis = false) {
   const card = cards[id];
@@ -271,6 +311,7 @@ function render(snapshot) {
     updateQuote(id, $(`#summary-${id}`), instruments[id], snapshot);
   }
   groupQuoteStatus();
+  fitQuoteCharts();
   const valid = row => Number.isFinite(row.price) && row.price > 0 && row.date >= snapshot.since && row.date <= snapshot.today;
   const retailPrices = new Map(ctf.rows.filter(valid).map(row => [row.date, row.price]));
   const base = gold.rows.filter(row => valid(row) && retailPrices.has(row.date))
@@ -516,6 +557,11 @@ function renderOutlook() {
     }
   } else {
     meta.append(element('span', isCTF ? '等待足够的预测数据' : '等待足够的最新历史报价或参考汇率'));
+  }
+  const stale = staleQuoteLabel(quote, today);
+  if (stale) {
+    const notice = isCTF ? stale + ' · 今日数据未更新' : '今日数据未更新';
+    meta.append(element('span', notice, 'forecast-freshness'));
   }
   $('#forecast-table').hidden = !data;
   $('#method-details').hidden = !data;

@@ -70,6 +70,52 @@ async function verifyForecastMetrics(search, report) {
     }));
     check(true, '行情与合并卡显示昨日实价、昨日预测及偏差，今价未到时保留预测价');
 
+    const fullSize = gold.getContentSize();
+    const fitsWindow = () => execute(gold, () => {
+      const root = document.documentElement;
+      return root.scrollHeight <= root.clientHeight + 1 && root.scrollWidth <= root.clientWidth + 1 &&
+        document.querySelector('#edge-setting').getBoundingClientRect().bottom <= innerHeight;
+    });
+    try {
+      gold.setContentSize(345, 560);
+      await until(() => execute(gold, () => Math.abs(innerWidth - 345) <= 1 && Math.abs(innerHeight - 560) <= 1));
+      comparison.instruments.gold.quote.date = '2026-11-18';
+      comparison.instruments.gold.status = 'retry';
+      comparison.instruments.ctf.status = 'pending';
+      for (const combined of [true, false]) {
+        comparison.combined = combined;
+        gold.webContents.send('openall:gold-snapshot', comparison);
+        await until(() => execute(gold, expected => {
+          const ctf = document.querySelector(expected ? '#summary-ctf' : '#ctf');
+          const goldCard = document.querySelector(expected ? '#summary-gold' : '#gold');
+          return document.querySelector('#combined').hidden !== expected &&
+            ctf.querySelector('.quote-freshness').innerText === '昨日金价 · 今日数据未更新' &&
+            goldCard.querySelector('.quote-freshness').innerText === '11/18 报价 · 今日数据未更新' &&
+            ctf.querySelector('.changes').hidden;
+        }, combined));
+        await until(fitsWindow);
+      }
+      check(true, '矮窄窗口的合并与分开行情一屏可见，昨日及更早报价按实际日期标记');
+      comparison.view = 'outlook';
+      gold.webContents.send('openall:gold-snapshot', comparison);
+      await until(() => execute(gold, () => !document.querySelector('#outlook').hidden &&
+        document.querySelector('.forecast-freshness')?.innerText === '昨日金价 · 今日数据未更新'));
+      await until(fitsWindow);
+      check(await execute(gold, () => ['#events', '#calendar'].every(selector => {
+        const details = document.querySelector(selector).closest('details');
+        if (details.open) return false;
+        details.querySelector('summary').click();
+        const opened = details.open;
+        details.querySelector('summary').click();
+        return opened;
+      })), '矮窄窗口三日展望一屏完整，国际事件和财经日历均可就地展开');
+    } finally {
+      gold.setContentSize(...fullSize);
+      gold.webContents.send('openall:gold-snapshot', original);
+    }
+    await until(() => execute(gold, () => !document.querySelector('#outlook').hidden &&
+      !document.querySelector('.forecast-freshness') && document.querySelector('#ctf .quote-freshness').hidden));
+
     // 只向页面发送内存快照，既不修改宿主状态，也不往预测存档写入虚构样本。
     const directions = structuredClone(original);
     const directionsDays = directions.outlook.forecasts.ctf.days;

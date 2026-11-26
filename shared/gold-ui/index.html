@@ -88,7 +88,8 @@
       <p id="combined-axis-note" hidden>曲线高度分别对应左右轴的价格，涨跌幅见上方报价。</p>
     </section>
 
-</div>
+  </div>
+  <div class="quote-footer">
     <footer><span id="network" class="online"><i></i><b>读取状态</b></span><span id="next">每日 09:00 开始取价</span></footer>
     <details id="quote-sources" class="quote-sources">
       <summary>数据来源</summary>
@@ -96,6 +97,7 @@
         <dt>周大福</dt><dd><button data-source="ctf" id="source-ctf">报价 周大福官方商城</button><button data-source="ctfHistory">挂牌价 搜金价</button></dd>
         <dt id="fx-source-label" hidden>参考汇率</dt><dd id="fx-source" hidden><button data-source="fx">Frankfurter / ECB</button></dd></dl>
     </details>
+  </div>
   </div>
   <section id="outlook" class="quote-card outlook" aria-labelledby="forecast-title" hidden>
     <div class="outlook-heading"><h2 id="forecast-title">国际现货基准价</h2><nav class="view-switch" aria-label="展望品种"><button id="forecast-gold" aria-pressed="true">国际现货</button><button id="forecast-ctf" aria-pressed="false">周大福</button></nav></div>
@@ -123,13 +125,21 @@
         <p id="verification-recent" class="outlook-meta" hidden></p>
       </div>
     </details>
-    <details id="market-breakdown" class="outlook-block forecast-disclosure"><summary>市场因素</summary><div class="market-reading"><span id="market-status"></span><div id="drivers"></div></div></details>
-    <section class="outlook-block"><div class="outlook-heading"><h3>近期国际事件</h3><button class="text-button" data-source="news">联合国新闻 ↗</button></div><p id="event-note" class="outlook-meta"></p><ul id="events"></ul></section>
-    <section class="outlook-block"><div class="outlook-heading"><h3>未来 7 日财经日历</h3><span id="calendar-status"></span></div><ul id="calendar"></ul></section>
-    <details id="method-details" class="outlook-block forecast-disclosure">
-      <summary>预测方法与区间</summary>
-      <p id="model-note" class="model-note"></p>
-    </details>
+    <div class="outlook-more">
+      <details id="market-breakdown" class="outlook-block forecast-disclosure"><summary>市场因素</summary><div class="market-reading"><span id="market-status"></span><div id="drivers"></div></div></details>
+      <details class="outlook-block forecast-disclosure">
+        <summary>近期国际事件</summary>
+        <div class="market-reading"><div class="outlook-heading"><p id="event-note" class="outlook-meta"></p><button class="text-button" data-source="news">联合国新闻 ↗</button></div><ul id="events"></ul></div>
+      </details>
+      <details class="outlook-block forecast-disclosure">
+        <summary>未来 7 日财经日历</summary>
+        <div class="market-reading"><p id="calendar-status" class="outlook-meta"></p><ul id="calendar"></ul></div>
+      </details>
+      <details id="method-details" class="outlook-block forecast-disclosure">
+        <summary>预测方法与区间</summary>
+        <p id="model-note" class="model-note"></p>
+      </details>
+    </div>
   </section>
   <div class="edge-setting"><button id="edge-setting" aria-pressed="true" title="拖到屏幕左右边缘后收起，悬停展开">贴边收起</button></div>
 </main>

@@ -48,8 +48,34 @@ function changedClipboard(){broadcast('clipboard-changed',clips.list());broadcas
 function windowFor(event){return BrowserWindow.fromWebContents(event.sender);}
 function currentContext(win){return windowContexts.get(win?.id)||{};}
 function windowState(win){return {maximized:win.isMaximized(),resizable:win.isResizable()};}
-function canReceivePaste(page){return page !== 'clipboardPreview' && !transient.has(page);}
-function rememberTarget(){const focused=BrowserWindow.getFocusedWindow();const ctx=currentContext(focused);if(focused&&canReceivePaste(ctx.page)){pasteTarget={windowId:focused.id};return;}if(native.foreground.pid&&native.foreground.pid!==process.pid){lastExternal=native.foreground;pasteTarget={...lastExternal};}}
+function canReceivePaste(page){return !!page && !['clipboardPreview','gold','gold-rail'].includes(page) && !transient.has(page);}
+function externalPasteTarget(foreground) {
+ return foreground?.pid && foreground.pid !== process.pid && foreground.pid !== native.child?.pid &&
+  foreground.handle && foreground.handle !== '0' && !foreground.shellSurface ? foreground : null;
+}
+function rememberTarget(){
+ const focused=BrowserWindow.getFocusedWindow();
+ if(focused && canReceivePaste(currentContext(focused).page)) pasteTarget={windowId:focused.id};
+ else if(!focused) pasteTarget=externalPasteTarget(native.foreground);
+}
+async function clipboardDestination() {
+ const focused = BrowserWindow.getFocusedWindow();
+ const context = currentContext(focused);
+ if (focused) {
+  if (canReceivePaste(context.page)) return {windowId:focused.id};
+  return ['search','clipboard','clipboardPreview'].includes(context.page) ? context.pasteDestination ?? null : null;
+ }
+ if (!native.ready || testMode) return null;
+ let timer;
+ try {
+  const foreground = await Promise.race([
+   native.request('foreground'),
+   new Promise(resolve => { timer = setTimeout(() => resolve(null), 240); }),
+  ]);
+  return externalPasteTarget(foreground);
+ } catch { return null; }
+ finally { clearTimeout(timer); }
+}
 const clipboardShelfHeight = 300;
 function dimensions(page){const sizes={search:[720,76],clipboard:[screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea.width,clipboardShelfHeight],stack:[340,174],clipboardPreview:[700,270],translate:[580,320],selection:[640,510],json:[960,600],comparison:[1040,600],configFormat:[960,420],sqlFormat:[960,420],markdown:[980,540],manual:[980,540],unicode:[800,380],id:[660,520],image:[900,540],converter:[980,610],settings:[930,560],configDiff:[1000,680],sqlRestore:[1000,530],logTimeline:[1000,680],explain:[1000,680]};return sizes[page]||[980,540];}
 function position(win,page){const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;const [width,height]=win.getSize();if(page==='clipboard')win.setBounds({x:area.x,y:area.y+area.height-height,width:area.width,height});else if(page==='stack')win.setPosition(area.x+area.width-width-24,area.y+24);else if(page==='search')win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+Math.max(80,area.height*.22)));else win.setPosition(Math.round(area.x+(area.width-width)/2),Math.round(area.y+(area.height-height)/2));}
@@ -68,13 +94,24 @@ async function getGoldService(){
 }
 async function createWindow(rawPage,initialValue,options={}){
  let page=normalizePage(rawPage);if(['permissions','diagnostics','snippets','linkAliases','commandAliases'].includes(page)){initialValue=page;page='settings';}
+ const destination = page==='clipboard' ? await clipboardDestination() : options.pasteDestination;
+ if(page==='clipboard')await captureWrites;
  const gold=page==='gold'?await getGoldService():null;
  const existing=windows.get(page);
  if(existing&&!existing.isDestroyed()){
-  if(initialValue!==undefined&&initialValue!==''){windowContexts.set(existing.id,{page,initialValue});existing.webContents.send('navigate',page,initialValue);}
-  else if(transient.has(page))existing.webContents.send('navigate',page,initialValue);
+  if(initialValue!==undefined&&initialValue!==''){windowContexts.set(existing.id,{page,initialValue,pasteDestination:destination});existing.webContents.send('navigate',page,initialValue);}
+  else if(transient.has(page)&&page!=='clipboard')existing.webContents.send('navigate',page,initialValue);
+  if(page==='clipboard'||page==='search')currentContext(existing).pasteDestination=destination;
   if(page==='search'){existing.setSize(720,76);position(existing,page);}if(page==='clipboard')position(existing,page);
-  if(!options.hidden){if(gold)await goldWindowController.show();else {existing.show();existing.focus();}}return existing;
+  if(!options.hidden){
+   if(gold)await goldWindowController.show();
+   else {
+    existing.show();
+    existing.focus();
+    if(page==='clipboard'&&(initialValue===undefined||initialValue===''))existing.webContents.send('navigate',page,initialValue);
+   }
+  }
+  return existing;
  }
  if(gold)gold.update('view','quotes');
  const [width,defaultHeight]=dimensions(page),isTransient=transient.has(page);
@@ -85,13 +122,16 @@ async function createWindow(rawPage,initialValue,options={}){
    skipTaskbar:isTransient,alwaysOnTop:gold?gold.snapshot().pinned:isTransient,resizable:!isTransient,hasShadow:true,icon:path.join(__dirname,'../assets/icon.png'),
    webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:!!gold,backgroundThrottling:false,additionalArguments:gold?['--openall-page=gold']:[]}});
  if(['configDiff','explain','logTimeline','sqlRestore'].includes(page))win.on('will-resize',()=>{win._manualReportHeight=true;});
- windows.set(page,win);windowContexts.set(win.id,{page,initialValue:initialValue??''});
+ windows.set(page,win);windowContexts.set(win.id,{page,initialValue:initialValue??'',pasteDestination:destination});
  win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
  win.webContents.on('will-navigate',(event,url)=>{if(gold||!url.startsWith('file://'))event.preventDefault();});
  win.on('focus',()=>{if(canReceivePaste(page))pasteTarget={windowId:win.id};});
  const updateWindowState=()=>{if(!win.webContents.isDestroyed())win.webContents.send('window-state',windowState(win));};
  win.on('maximize',updateWindowState);win.on('unmaximize',updateWindowState);
- win.on('blur',()=>{if(page==='search'&&!win._pinned&&!smokeMode)win.hide();});
+ win.on('blur',()=>{
+  const dismiss = page==='clipboard' || (page==='search' && !win._pinned);
+  if(dismiss && !smokeMode && win.isVisible())win.hide();
+ });
  win.on('close',event=>{if(!app.isQuitting&&isTransient){event.preventDefault();win.hide();}});
  win.on('closed',()=>{if(windows.get(page)===win)windows.delete(page);windowContexts.delete(win.id);});
  if(gold){
@@ -102,7 +142,11 @@ async function createWindow(rawPage,initialValue,options={}){
  catch(error){win.destroy();throw error;}
  if(!options.hidden){if(gold)await goldWindowController.show();else {win.show();win.focus();}}return win;
 }
-async function showPage(page='search',initialValue){rememberTarget();return createWindow(page,initialValue);}
+async function showPage(page='search',initialValue){
+ const destination = normalizePage(page)==='search' ? await clipboardDestination() : undefined;
+ if(normalizePage(page)!=='clipboard')rememberTarget();
+ return createWindow(page,initialValue,{pasteDestination:destination});
+}
 async function togglePage(page){const existing=windows.get(page);if(existing?.isVisible()){existing.hide();return;}await showPage(page);}
 function applyShortcuts(next,{force=false}={}){
  if(testMode&&force)shortcutTestRegistration=true;
@@ -188,20 +232,23 @@ async function writeRecord(item,plain=false){
  lastContentHash=crypto.createHash('sha256').update(kind+':'+value).digest('hex');
  return record;
 }
-async function pasteRecord(item,plain){
+async function pasteRecord(item,plain,target=pasteTarget,preview=null){
  const kind=typeof item==='string'?clips.records.find(row=>row.id===item)?.kind:item?.kind;
  plain??=kind!=='files'&&settings.clipboardPreferences.plainTextByDefault;
  const record=await writeRecord(item,plain);if(!record)return false;
- const target=pasteTarget;windows.get('clipboard')?.hide();windows.get('search')?.hide();
+ windows.get('clipboard')?.hide();windows.get('search')?.hide();
+ if(preview&&!preview.isDestroyed())preview.hide();
  if(target?.windowId){const win=BrowserWindow.fromId(target.windowId);if(win&&!win.isDestroyed()){
   win.show();win.focus();
   if(record.kind==='image')win.webContents.send('paste-image',{dataUrl:'data:image/png;base64,'+record.value});
   else win.webContents.send('paste-content',{text:record.text??record.value??'',html:plain?'':record.html||'',files:record.files||[]});
   return true;
  }}
- if(testMode)return true;
- if(!target?.handle||target.handle==='0')return false;
- await new Promise(resolve=>setTimeout(resolve,120));return native.request('paste',{handle:target.handle});
+ // 已写入剪贴板，无可用目标时保留内容并结束。原生助手只向仍在前台的有效控件发送粘贴。
+ if(!testMode&&target?.handle&&native.ready) {
+  await native.request('paste',{handle:target.handle,pid:target.pid,kind:plain&&record.kind==='files'?'text':record.kind}).catch(() => false);
+ }
+ return true;
 }
 function registerStackPaste(){if(testMode||shortcutRecording.active)return;try{globalShortcut.unregister('Control+V');globalShortcut.register('Control+V',async()=>{if(shortcutRecording.active)return;rememberTarget();globalShortcut.unregister('Control+V');try{await stackAction('next');}catch(error){notifyError(error);}setTimeout(()=>{if(clips.stack.active)registerStackPaste();},250);});}catch(error){notifyError(error);}}
 async function stackAction(action,payload={}){
@@ -256,7 +303,7 @@ async function windowAction(event,action,payload={}){
   return true;
  }
  case 'resize':{const width=Math.min(1800,Math.max(ctx.page==='stack'?340:480,Number(payload.width)||960)),height=Math.min(1200,Math.max(ctx.page==='search'?76:ctx.page==='stack'?174:ctx.page==='selection'?180:300,Number(payload.height)||640));if(ctx.page==='selection'){win.setMinimumSize(480,180);win.setMaximumSize(1800,1200);}win.setSize(width,height);if(ctx.page==='stack')position(win,'stack');return true;}
- case 'showClipboard':rememberTarget();await createWindow('clipboard');return true;case 'showSearch':return !!await showPage('search');case 'openSettings':await createWindow('settings',payload);return true;
+ case 'showClipboard':await createWindow('clipboard');return true;case 'showSearch':return !!await showPage('search');case 'openSettings':await createWindow('settings',payload);return true;
  case 'checkUpdates':return updater.check(settings.updateFeedURL);case 'installUpdate':return updater.install();case 'rollbackUpdate':return updater.rollback();case 'updateStatus':return updater.status();
  case 'searchRules':{
    const rules=Object.entries(ranking.rules).map(([key,rule])=>({key,...rule}));
@@ -298,13 +345,14 @@ async function clipboardAction(event,action,payload={}){
    return settings.clipboardPreferences.shelfLayout;
  }
  const ids=payload.ids||[payload.id||payload.hash].filter(Boolean),selected=ids.length?clips.records.filter(x=>ids.includes(x.id)||ids.includes(x.hash)):[];
+ const destination=currentContext(windowFor(event)).pasteDestination ?? null;
  switch(action){case 'read':return clips.full(ids[0]);case 'delete':{const removable=selected.filter(x=>!x.favorite&&!x.tags?.length).map(x=>x.id);const list=await clips.delete(removable);changedClipboard();return list;}case 'clear':{const list=await clips.delete(clips.records.filter(x=>payload.includeFavorites||!x.favorite).map(x=>x.id));changedClipboard();return list;}
  case 'favorite':clips.change(ids,x=>{x.favorite=payload.value??!x.favorite;if(x.favorite&&!x.tags.includes('收藏'))x.tags.push('收藏');if(!x.favorite)x.tags=x.tags.filter(t=>t!=='收藏');});changedClipboard();return clips.list();
  case 'newTag':case 'renameTag':case 'deleteTag':case 'tagColor':{const pref=settings.clipboardPreferences,tag=String(payload.tag||'').trim(),name=String(payload.name||payload.tag||'').trim();if(action!=='deleteTag'&&(!name||name.length>30))throw Error('标签名称须为 1 至 30 个字');if(action==='newTag'){if(!pref.pinboards.includes(name))pref.pinboards.push(name);pref.pinboardColors[name]=payload.color||'blue';}else if(action==='renameTag'){if(pref.pinboards.includes(name)&&name!==tag)throw Error('标签已存在');pref.pinboards=pref.pinboards.map(x=>x===tag?name:x);pref.pinboardColors[name]=pref.pinboardColors[tag]||'blue';delete pref.pinboardColors[tag];clips.change(clips.records.map(x=>x.id),x=>{x.tags=x.tags.map(t=>t===tag?name:t);});}else if(action==='deleteTag'){pref.pinboards=pref.pinboards.filter(x=>x!==tag);delete pref.pinboardColors[tag];clips.change(clips.records.map(x=>x.id),x=>{x.tags=x.tags.filter(t=>t!==tag);x.favorite=x.tags.length>0;});}else pref.pinboardColors[tag]=String(payload.color||'blue');await store.write('settings',settings);broadcast('settings-changed',settings);changedClipboard();return settings;}
  case 'tag':clips.change(ids,x=>{x.tags=payload.remove?x.tags.filter(t=>t!==payload.tag):[...new Set([...x.tags,String(payload.tag)])];x.favorite=x.tags.length>0;});changedClipboard();return clips.list();
- case 'copy':case 'paste':{let record;if(selected.length===1)record=await clips.full(selected[0].id);else if(selected.length>1){const all=await Promise.all(selected.map(x=>clips.full(x.id)));if(all.every(x=>x.kind==='files')){const files=[...new Set(all.flatMap(x=>x.files||[]))];record={kind:'files',files,text:files.join('\n'),value:files.join('\n')};}else{const text=all.map(x=>x.text||x.value).join(payload.separator??'\n');record={kind:'text',text,value:text};}}if(!record)return false;if(action==='paste'&&settings.clipboardPreferences.directPaste)return pasteRecord(record,payload.plain?true:undefined);await writeRecord(record,!!payload.plain);return true;}
+ case 'copy':case 'paste':{let record;if(selected.length===1)record=await clips.full(selected[0].id);else if(selected.length>1){const all=await Promise.all(selected.map(x=>clips.full(x.id)));if(all.every(x=>x.kind==='files')){const files=[...new Set(all.flatMap(x=>x.files||[]))];record={kind:'files',files,text:files.join('\n'),value:files.join('\n')};}else{const text=all.map(x=>x.text||x.value).join(payload.separator??'\n');record={kind:'text',text,value:text};}}if(!record)return false;if(action==='paste'&&settings.clipboardPreferences.directPaste)return pasteRecord(record,payload.plain?true:undefined,destination);await writeRecord(record,!!payload.plain);return true;}
  case 'merge':{const records=await Promise.all(selected.map(x=>clips.full(x.id)));if(records.length<2||records.some(x=>x.kind==='image'))throw Error('请选择至少两条文本记录');const text=records.map(x=>x.text??x.value??'').join(payload.separator??'\n');const record=await clips.add({kind:'text',text,value:text,sourceName:'OpenAll',sourceIcon:await fileIcon(process.execPath,true)});if(!record)throw Error('合并内容超过剪贴板单条大小限制');changedClipboard();return record;}
- case 'editPaste':{const text=String(payload.text??'');if(Buffer.byteLength(text)>settings.clipboardPreferences.maxItemBytes)throw Error('文本超过剪贴板单条大小限制');return pasteRecord({kind:'text',text,value:text},true);}
+ case 'editPaste':{const text=String(payload.text??'');if(Buffer.byteLength(text)>settings.clipboardPreferences.maxItemBytes)throw Error('文本超过剪贴板单条大小限制');return pasteRecord({kind:'text',text,value:text},true,destination);}
  case 'selection':{
   const sender = windowFor(event);
   const context = currentContext(sender);
@@ -323,11 +371,11 @@ async function clipboardAction(event,action,payload={}){
   return true;
  }
  case 'drag':case 'startDrag':{const records=await Promise.all(selected.map(x=>clips.full(x.id)));const files=[];for(const record of records){if(record.kind==='files')files.push(...record.files);else if(record.kind==='image'){const file=path.join(clips.directory,record.hash+'.png');if(!fs.existsSync(file))await fsp.writeFile(file,Buffer.from(record.value,'base64'));files.push(file);}}if(!files.length)return false;const icon=nativeImage.createFromPath(path.join(__dirname,'../assets/icon.png')).resize({width:32,height:32});event.sender.startDrag({files:[...new Set(files)],icon});return true;}
- case 'preview':{const record=await clips.full(ids[0]);if(record)await createWindow('clipboardPreview',record);return !!record;}
+ case 'preview':{const record=await clips.full(ids[0]);if(record)await createWindow('clipboardPreview',record,{pasteDestination:destination});return !!record;}
  case 'pastePreview':{
-  const context=currentContext(windowFor(event));
+  const preview=windowFor(event),context=currentContext(preview);
   if(context.page!=='clipboardPreview'||!context.initialValue?.kind)return false;
-  return pasteRecord(context.initialValue);
+  return pasteRecord(context.initialValue,undefined,destination,preview);
  }
  case 'compare':{if(selected.length!==2)throw Error('请选择两条文本卡片');const values=await Promise.all(selected.map(x=>clips.full(x.id)));if(values.some(x=>x.kind==='image'||x.kind==='files'))throw Error('请选择两条文本卡片');await createWindow('comparison',{left:values[0].text||values[0].value,right:values[1].text||values[1].value});return true;}
  case 'snippet':{const record=await clips.full(ids[0]);if(!record||!record.text)throw Error('此卡片没有文本');const item=snippetStore.save({keyword:'clip'+Date.now().toString(36),name:record.title.slice(0,32),body:record.text});updateSearch();return item;}

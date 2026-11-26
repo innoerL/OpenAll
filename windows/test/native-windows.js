@@ -8,7 +8,7 @@ const {NativeBridge,recognizeImage}=require('../src/native-services');
  bridge.on('boot',stage=>{report.stages.push(stage);console.log(`Windows helper boot: ${stage.stage} ${stage.elapsedMS} ms`);});
  try{
   bridge.start();report.ready=await bridge.waitUntilReady();console.log(`Windows helper ready: ${report.ready.elapsedMS} ms`);
-  const result=await bridge.request('selfTest');for(const key of['paste','selection','files','image']){assert.equal(result[key],true);report.checks.push(key);console.log(`PASS Windows ${key}`);}
+  const result=await bridge.request('selfTest');for(const key of['paste','pasteTargetGuard','selection','files','image']){assert.equal(result[key],true);report.checks.push(key);console.log(`PASS Windows ${key}`);}
   assert.equal(result.inputSize,process.arch==='x64'?40:28);const ocr=await recognizeImage(Buffer.from(result.ocrImage,'base64'));assert.match(ocr.text,/OPENALL/i);assert.match(ocr.text,/12345/);report.checks.push('ocr');report.passed=true;console.log('PASS Windows OCR: '+ocr.text.replace(/\s+/g,' '));
  }catch(error){report.error=error.stack;throw error;}
  finally{report.startup=bridge.startup;report.stderr=bridge.error;bridge.stop();fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,JSON.stringify(report,null,2));console.log('原生验证报告：'+output);}

@@ -257,7 +257,12 @@ module.exports = async function verifyGold(searchWindow, output) {
       gold.setContentSize(...normalSize);
     }
     check(await execute(gold, () => document.querySelector('#forecast-ctf').getAttribute('aria-pressed') === 'true' && document.querySelectorAll('#forecast-rows .forecast-day-toggle').length === 3), '两品种三日展望切换');
-    check(await execute(gold, () => !!document.querySelector('#verification-note').textContent && document.querySelector('#drivers').children.length > 0 && document.querySelector('#events').children.length > 0 && document.querySelector('#calendar').children.length > 0 && ['#market-breakdown > summary','#events','#calendar'].every(selector => document.querySelector(selector).getClientRects().length > 0)), '报价验证与市场因素可展开，国际事件与财经日历可直接阅读');
+    check(await execute(gold, () => !!document.querySelector('#verification-note').textContent &&
+      ['#drivers', '#events', '#calendar'].every(selector => {
+        const content = document.querySelector(selector), details = content.closest('details');
+        return content.children.length > 0 && !details.open &&
+          details.querySelector('summary').getBoundingClientRect().height > 0;
+      })), '报价验证、市场因素、国际事件与财经日历可展开');
     check(await execute(gold, () => ['gold', 'goldHistory', 'ctf', 'ctfHistory', 'fx', 'news'].every(key => !!document.querySelector('[data-source="' + key + '"]'))), '报价与新闻来源链接保留');
     await execute(gold, () => { window.__goldDocument = document.documentElement; window.__goldForecast = document.querySelector('#forecast-ctf'); });
     await execute(searchWindow, () => openall.saveSettings({ theme: 'custom', backgroundHex: '#203448', accentHex: '#f5ad52' }));

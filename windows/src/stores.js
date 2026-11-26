@@ -138,9 +138,12 @@ class ClipboardStore {
   }
   cleanup() {
     const now=Date.now(),p=this.preferences(),before=this.records;
-    this.records=this.records.filter(x=>x.favorite||(now-x.time)<p.retentionDays*86400000);
-    const saved=this.records.filter(x=>x.favorite),regular=this.records.filter(x=>!x.favorite).slice(0,p.maxItems);
-    this.records=[...saved,...regular].sort((a,b)=>b.time-a.time);
+    const maxItems = Math.trunc(p.maxItems);
+    let regularCount = 0;
+    // 同一毫秒的记录沿用插入顺序，收藏状态不改变最近复制的顺序。
+    this.records = before.filter(record => record.favorite ||
+      ((now - record.time) < p.retentionDays * 86400000 && regularCount++ < maxItems))
+      .sort((a, b) => b.time - a.time);
     const kept=new Set(this.records.map(x=>x.id));for(const record of before)if(!kept.has(record.id)&&record.contentFile)fsp.unlink(path.join(this.directory,path.basename(record.contentFile))).catch(()=>{});this.stack.ids=this.stack.ids.filter(id=>kept.has(id));
     this.store.write('clipboard',this.records);
   }

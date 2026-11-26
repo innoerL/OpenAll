@@ -322,6 +322,26 @@
       }
       finishSelection(focus);
     }
+    function focusFirstCard() {
+      const boardChanged = activeBoard !== '历史';
+      const resetFilters = boardChanged || search.value !== '' || filter !== '全部';
+      current = 0;
+      selected.clear();
+      if (resetFilters) {
+        activeBoard = '历史';
+        search.value = '';
+        filter = '全部';
+        select.value = filter;
+        if (boardChanged) boards();
+        paint(true);
+      } else {
+        syncSelection(true);
+      }
+      track.scrollTo(0, 0);
+      window.removeEventListener('focus', focusAfterOpening);
+      if (!document.hasFocus()) window.addEventListener('focus', focusAfterOpening, {once:true});
+    }
+    function focusAfterOpening() { finishSelection(true); }
     function paint(focus=false) {
       fileObserver.disconnect();
       visibleFileIcons.clear();
@@ -378,7 +398,20 @@
       if(r.kind==='files')rows.push({label:'指定应用打开…',action:()=>api.fileAction('openWith',{path:r.files?.[0]})},{label:'在文件夹中显示',action:()=>api.fileAction('reveal',{path:r.files?.[0]})});rows.push(null,{label:'删除未固定记录',danger:true,disabled:[...selected].every(key=>all.find(x=>id(x)===key)?.favorite),action:remove});menu(rows,anchor);
     }
     search.addEventListener('input',()=>{current=0;selected.clear();paint();});search.addEventListener('keydown',e=>{if(!e.isComposing&&e.key==='ArrowDown'&&filtered.length){e.preventDefault();track.children[current]?.focus();}});select.addEventListener('change',()=>{filter=select.value;current=0;selected.clear();paint();});
-    const keydown=e=>{if(e.defaultPrevented||e.isComposing||!e.target.matches?.('.clip-card')||document.querySelector('dialog[open],.context-menu'))return;
+    const keydown=e=>{if(e.defaultPrevented||!e.target.matches?.('.clip-card')||document.querySelector('dialog[open],.context-menu'))return;
+      const typing = !e.ctrlKey && !e.metaKey && !e.altKey;
+      if (typing && (e.isComposing || e.key === 'Process' || e.key === 'Dead')) {
+        search.focus();
+        return;
+      }
+      if (e.isComposing) return;
+      if (typing && e.key !== ' ' && [...e.key].length === 1) {
+        e.preventDefault();
+        search.focus();
+        search.setRangeText(e.key, 0, search.value.length, 'end');
+        search.dispatchEvent(new Event('input'));
+        return;
+      }
       const item = filtered[Number(e.target.dataset.index)];
       if (!item) return;
       const step = {ArrowLeft:-1, ArrowRight:1, ...(layout === 'list' ? {ArrowUp:-1, ArrowDown:1} : {})}[e.key];
@@ -388,7 +421,7 @@
     window.addEventListener('keydown',keydown);const off=api.onClipboard(items=>{all=Array.isArray(items)?items:items?.items||all;if(!disposed)paint();});
     shelf.dataset.cardFontSize = p.cardFontSize || 'large';
     showLayout(layout);boards();paint();
-    return {focus:()=>search.focus(),dispose(){disposed=true;fileObserver.disconnect();visibleFileIcons.clear();queuedFileIcons.clear();document.removeEventListener('visibilitychange',refreshFileVisibility);window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(prefs){
+    return {focus:focusFirstCard,dispose(){disposed=true;fileObserver.disconnect();visibleFileIcons.clear();queuedFileIcons.clear();document.removeEventListener('visibilitychange',refreshFileVisibility);window.removeEventListener('focus',focusAfterOpening);window.removeEventListener('keydown',keydown);off?.();},getItems:()=>filtered,getSelected:()=>[...selected],select(ids){selected=new Set(ids);paint();},settingsChanged(prefs){
       const preferences = (prefs || settings).clipboardPreferences;
       shelf.dataset.cardFontSize = preferences?.cardFontSize || 'large';
       const next = preferences?.shelfLayout === 'list' ? 'list' : 'cards';
