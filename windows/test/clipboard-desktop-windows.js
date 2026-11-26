@@ -76,14 +76,24 @@ app.whenReady().then(async () => {
       return first === document.activeElement && first.getAttribute('aria-selected') === 'true';
     }));
     // 从前台触发实际 Enter 路径，写回系统剪贴板并检查桌面图标窗口。
-    clipboard.clear();
-    shelf.webContents.sendInputEvent({type:'keyDown', keyCode:'Enter'});
-    shelf.webContents.sendInputEvent({type:'keyUp', keyCode:'Enter'});
-    await until('桌面回车后抽屉收起', () => !shelf.isVisible());
-    assert.equal(clipboard.readText(), marker);
-    await until('回车后前台仍为桌面', desktopFocused);
-    const after = await desktopState();
-    assert.deepEqual(after, before, '桌面图标窗口仍是同一个可见窗口');
+    const request = NativeBridge.prototype.request;
+    const pasteRequests = [];
+    NativeBridge.prototype.request = function (action, ...args) {
+      if (action === 'paste') pasteRequests.push(args[0]);
+      return request.call(this, action, ...args);
+    };
+    try {
+      clipboard.clear();
+      shelf.webContents.sendInputEvent({type:'keyDown', keyCode:'Enter'});
+      shelf.webContents.sendInputEvent({type:'keyUp', keyCode:'Enter'});
+      await until('桌面回车后抽屉收起', () => !shelf.isVisible());
+      assert.equal(clipboard.readText(), marker);
+      const after = await desktopState();
+      assert.deepEqual(after, before, '桌面图标窗口仍是同一个可见窗口');
+      assert.equal(pasteRequests.length, 0, '桌面回车没有发送系统粘贴请求');
+    } finally {
+      NativeBridge.prototype.request = request;
+    }
     await openClipboard();
     await until('回车之后可以再次唤出抽屉', () => shelf.isVisible() && shelf.isFocused());
     console.log('PASS Windows 真实桌面回车仅复制、桌面图标视图保持可见、无需重启可再次唤出');
