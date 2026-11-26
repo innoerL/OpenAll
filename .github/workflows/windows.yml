@@ -60,6 +60,10 @@ jobs:
           cache-dependency-path: windows/package-lock.json
       - name: 安装锁定依赖
         run: npm ci --no-audit --no-fund
+      - name: Windows 原生接口与粘贴目标验证
+        run: node test/native-windows.js
+      - name: 剪贴板失焦与真实桌面回车
+        run: npx electron test/clipboard-desktop-windows.js
       - name: 校验离线编辑器构建产物
         run: |
           npm --prefix ../macos/comparison-editor ci --ignore-scripts --no-audit --no-fund
@@ -111,12 +115,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx electron test/clipboard-files-electron.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node test/native-windows.js
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node test/native-file-search-windows.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: 剪贴板失焦与真实桌面回车
-        run: npx electron test/clipboard-desktop-windows.js
       - name: 构建 Windows x64 安装包
         run: npm run dist -- --publish never
       - name: 安装、启动、全页面截图与卸载检查
