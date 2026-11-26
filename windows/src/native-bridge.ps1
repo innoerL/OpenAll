@@ -89,8 +89,8 @@ public static class OpenAllNative {
   return inputProbe.Wait(350) && inputProbe.Result;
  }
  static bool ModifiersReleased() {
-  return ((GetAsyncKeyState(17) | GetAsyncKeyState(18) | GetAsyncKeyState(16) |
-    GetAsyncKeyState(91) | GetAsyncKeyState(92)) & 0x8000) == 0;
+  return GetAsyncKeyState(17) >= 0 && GetAsyncKeyState(18) >= 0 && GetAsyncKeyState(16) >= 0 &&
+    GetAsyncKeyState(91) >= 0 && GetAsyncKeyState(92) >= 0;
  }
  public static bool PasteIfFocused(IntPtr h, uint pid, string kind) {
   if (IsShellSurface(h) || !IsWindowVisible(h) || !IsWindowEnabled(h) || ProcessId(h) != pid) return false;
